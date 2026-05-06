@@ -281,11 +281,14 @@ class CapabilitiesFetcher:
         base_name = model_name.split(':')[0]
         
         # Extract and normalize all relevant fields
+        # Note: 'size' field may not be in /api/show response, it's in /api/tags
+        # We store size=0 if not present, and size_gb will be calculated from /api/tags later
+        raw_size = metadata.get('size', 0)
         cached_entry = {
             'name': model_name,
             'base_name': base_name,
-            'size': metadata.get('size', 0),
-            'size_gb': round(metadata.get('size', 0) / (1024**3), 1) if metadata.get('size', 0) > 0 else "N/A",
+            'size': raw_size,
+            'size_gb': round(raw_size / (1024**3), 1) if raw_size > 0 else "N/A",
             'params': self._extract_params(metadata),
             'total_params': self._extract_total_params(metadata),
             'active_params': self._extract_active_params(metadata),

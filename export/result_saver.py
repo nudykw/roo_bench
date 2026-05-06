@@ -161,6 +161,82 @@ class ResultSaver:
             print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
 
 
+def load_results_from_file(file_path: str) -> tuple:
+    """Load benchmark results from a saved JSON or CSV file.
+
+    Args:
+        file_path: Path to the saved results file
+
+    Returns:
+        tuple: (all_results dict, test_models list) compatible with AIAnalyzer
+    """
+    import csv
+    
+    if not os.path.exists(file_path):
+        print(get_text("analyze_file_not_found", file_path=file_path))
+        return None, None
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    all_results = {}
+    test_models = []
+    model_data_map = {}
+    
+    try:
+        if ext == '.json':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        elif ext == '.csv':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                data = list(reader)
+        else:
+            print(get_text("analyze_file_unknown_format", ext=ext))
+            return None, None
+        
+        if not data:
+            print(get_text("analyze_file_empty"))
+            return None, None
+        
+        # Group by model_name and build compatible structures
+        for row in data:
+            model_name = row.get('model_name', 'unknown')
+            
+            # Build model info (first occurrence creates the model entry)
+            if model_name not in model_data_map:
+                model_data_map[model_name] = {
+                    'name': model_name,
+                    'params': row.get('params', 'N/A'),
+                    'quant': row.get('quant', 'N/A'),
+                    'size_gb': float(row.get('size_gb', 0)) if row.get('size_gb', '0') != 'N/A' else 'N/A',
+                    'max_ctx': int(row.get('max_ctx', 131072)) if row.get('max_ctx', '0') != 'N/A' else 131072,
+                    'vision': row.get('vision', '❓'),
+                    'tools': row.get('tools', '❓'),
+                    'thinking': row.get('thinking', '❌'),
+                }
+            
+            # Build results per model
+            if model_name not in all_results:
+                all_results[model_name] = []
+            
+            all_results[model_name].append({
+                'ctx': int(row.get('ctx', 0)),
+                'ctx_str': row.get('ctx_str', f"{int(row.get('ctx', 0)) // 1024}K"),
+                'avg_tps': float(row.get('avg_tps', 0)),
+                'min_tps': float(row.get('min_tps', 0)),
+                'max_tps': float(row.get('max_tps', 0)),
+                'std_dev': float(row.get('std_dev', 0)),
+                'vram': int(row.get('vram', 0)) if row.get('vram', '0') != 'None' else None,
+                'vram_str': row.get('vram_str', None),
+            })
+        
+        test_models = list(model_data_map.values())
+        return all_results, test_models
+        
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(get_text("analyze_file_parse_error", error=str(e)))
+        return None, None
+
+
 def save_results(results: dict, output_file: str, output_format: str,
                  model_names: list, test_models: list):
     """Convenience function to save results.

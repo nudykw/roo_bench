@@ -71,6 +71,10 @@ def parse_args():
                         help='Force update capabilities cache from Ollama API')
     parser.add_argument('--no-interactive', action='store_true',
                         help='Disable interactive post-benchmark prompts')
+    parser.add_argument('--analyze-file', type=str, metavar='FILE',
+                        help=get_text('cli_analyze_file'))
+    parser.add_argument('--analysis-model', type=str, default=None,
+                        help=get_text('cli_analysis_model'))
     return parser.parse_args()
 
 

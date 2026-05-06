@@ -143,11 +143,12 @@ class AIAnalyzer:
         required_ctx = max(8192, ((prompt_tokens_estimate + 1023) // 1024) * 1024)
         
         # Print debug info about the request
-        print(f"\n   📊 Debug info:")
+        print(f"\n   \U0001f4ca Debug info:")
         print(f"      Model: {model_name}")
         print(f"      Prompt size: {prompt_chars} chars (~{prompt_tokens_estimate} tokens)")
         print(f"      num_ctx: {required_ctx}")
-        print(f"      num_predict: 4096")
+        print(f"      num_predict: unlimited (-1)")
+        print(f"      thinking: disabled")
 
         # Try using /api/chat endpoint first (better for complex prompts)
         try:
@@ -156,7 +157,7 @@ class AIAnalyzer:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a concise performance analysis assistant. Provide brief, structured recommendations. Use bullet points and keep responses under 1500 tokens. Be direct and avoid lengthy introductions."
+                        "content": "You are a concise performance analysis assistant. Provide brief, structured recommendations. Use bullet points. Be direct and avoid lengthy introductions."
                     },
                     {
                         "role": "user",
@@ -165,14 +166,14 @@ class AIAnalyzer:
                 ],
                 "stream": False,
                 "options": {
-                    "num_predict": 4096,
+                    "num_predict": -1,
                     "temperature": 0.7,
                     "num_ctx": required_ctx,
                     "repeat_penalty": 1.1
                 }
             }
 
-            print(f"   📤 Sending request to /api/chat...")
+            print(f"   \U0001f4e4 Sending request to /api/chat...")
             response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
@@ -187,16 +188,16 @@ class AIAnalyzer:
                     return response_text
                 
                 # If chat endpoint returns empty, show debug info
-                print(f"   ⚠️  Chat endpoint returned empty response.")
-                print(f"   🔍 Debug: Full response keys: {list(data.keys())}")
-                print(f"   🔍 Debug: 'done' field: {data.get('done', 'N/A')}")
-                print(f"   🔍 Debug: 'done_reason' field: {data.get('done_reason', 'N/A')}")
-                print(f"   🔍 Debug: prompt_eval_count: {data.get('prompt_eval_count', 'N/A')}")
-                print(f"   🔍 Debug: eval_count: {data.get('eval_count', 'N/A')}")
-                print(f"   🔍 Debug: Full response: {json.dumps(data, indent=2)[:800]}")
-                print(f"   🔄 Trying generate endpoint...")
+                print(f"   \u26a0\ufe0f  Chat endpoint returned empty response.")
+                print(f"   \U0001f50d Debug: Full response keys: {list(data.keys())}")
+                print(f"   \U0001f50d Debug: 'done' field: {data.get('done', 'N/A')}")
+                print(f"   \U0001f50d Debug: 'done_reason' field: {data.get('done_reason', 'N/A')}")
+                print(f"   \U0001f50d Debug: prompt_eval_count: {data.get('prompt_eval_count', 'N/A')}")
+                print(f"   \U0001f50d Debug: eval_count: {data.get('eval_count', 'N/A')}")
+                print(f"   \U0001f50d Debug: Full response: {json.dumps(data, indent=2)[:800]}")
+                print(f"   \U0001f504 Trying generate endpoint...")
         except Exception as e:
-            print(f"   ⚠️  Chat endpoint failed: {e}, trying generate endpoint...")
+            print(f"   \u26a0\ufe0f  Chat endpoint failed: {e}, trying generate endpoint...")
 
         # Fallback to /api/generate endpoint
         payload = {
@@ -204,7 +205,7 @@ class AIAnalyzer:
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 4096,
+                "num_predict": -1,
                 "temperature": 0.7,
                 "num_ctx": required_ctx,
                 "repeat_penalty": 1.1
@@ -212,7 +213,7 @@ class AIAnalyzer:
         }
 
         try:
-            print(f"   📤 Sending request to /api/generate...")
+            print(f"   \U0001f4e4 Sending request to /api/generate...")
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
@@ -227,13 +228,13 @@ class AIAnalyzer:
                     return response_text
                 
                 # If still empty, show debug info
-                print(f"   ⚠️  Generate endpoint also returned empty response.")
-                print(f"   🔍 Debug: Full response keys: {list(data.keys())}")
-                print(f"   🔍 Debug: 'done' field: {data.get('done', 'N/A')}")
-                print(f"   🔍 Debug: 'done_reason' field: {data.get('done_reason', 'N/A')}")
-                print(f"   🔍 Debug: prompt_eval_count: {data.get('prompt_eval_count', 'N/A')}")
-                print(f"   🔍 Debug: eval_count: {data.get('eval_count', 'N/A')}")
-                print(f"   🔍 Debug: Full response: {json.dumps(data, indent=2)[:800]}")
+                print(f"   \u26a0\ufe0f  Generate endpoint also returned empty response.")
+                print(f"   \U0001f50d Debug: Full response keys: {list(data.keys())}")
+                print(f"   \U0001f50d Debug: 'done' field: {data.get('done', 'N/A')}")
+                print(f"   \U0001f50d Debug: 'done_reason' field: {data.get('done_reason', 'N/A')}")
+                print(f"   \U0001f50d Debug: prompt_eval_count: {data.get('prompt_eval_count', 'N/A')}")
+                print(f"   \U0001f50d Debug: eval_count: {data.get('eval_count', 'N/A')}")
+                print(f"   \U0001f50d Debug: Full response: {json.dumps(data, indent=2)[:800]}")
                 return response_text
             else:
                 error_msg = response.json().get("error", f"HTTP {response.status_code}")
@@ -274,19 +275,29 @@ class AIAnalyzer:
         use_model = model_name or "llama3.2"
         logger.debug("using model: %s", use_model)
 
+        # Use /api/chat with system prompt to disable thinking mode
         payload = {
             "model": use_model,
-            "prompt": prompt,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a translator. Translate the following text. Output ONLY the translated text without any additional commentary, thinking, or explanations."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
             "stream": False,
             "options": {
-                "num_predict": 2000
+                "thinking": False  # Disable reasoning mode to prevent token waste
             }
         }
 
         try:
-            logger.debug("Sending translation request to %s/api/generate...", self.base_url)
+            logger.debug("Sending translation request to %s/api/chat...", self.base_url)
             response = requests.post(
-                f"{self.base_url}/api/generate",
+                f"{self.base_url}/api/chat",
                 json=payload,
                 headers=self.headers,
                 timeout=self.timeout
@@ -302,7 +313,15 @@ class AIAnalyzer:
                 logger.debug("response 'total_duration': %s", data.get('total_duration'))
                 logger.debug("response 'eval_count': %s", data.get('eval_count'))
                 
-                translated = data.get("response", "").strip()
+                # /api/chat returns response in message.content, /api/generate in response
+                if "message" in data:
+                    translated = data["message"].get("content", "").strip()
+                    # Fallback: if content is empty, try reading from thinking
+                    if not translated:
+                        translated = data["message"].get("thinking", "").strip()
+                else:
+                    translated = data.get("response", "").strip()
+                
                 logger.debug("translated text length: %d chars", len(translated))
                 
                 if translated:
@@ -332,6 +351,132 @@ class AIAnalyzer:
             logger.debug("exception str: %s", str(e))
             return None
 
+    def analyze_from_file(self, file_path: str, model_name: str, target_lang: str = 'en') -> bool:
+        """Analyze benchmark results from a saved file.
+
+        Args:
+            file_path: Path to the saved results JSON/CSV file
+            model_name: Name of the Ollama model to use for analysis
+            target_lang: Target language code for translation ('en' or 'ua')
+
+        Returns:
+            bool: True if analysis was successful, False otherwise
+        """
+        from export.result_saver import load_results_from_file
+        
+        print(f"\n   \U0001f4da Loading results from: {file_path}")
+        all_results, test_models = load_results_from_file(file_path)
+        
+        if all_results is None or test_models is None:
+            return False
+        
+        print(f"   \u2705 Loaded {len(test_models)} models with results")
+        
+        # Get available models and let user select
+        models = self.get_available_models()
+        if not models:
+            print(get_text("no_models_for_analysis"))
+            return False
+        
+        # Show model list
+        print("\n" + "=" * 60)
+        print(get_text("ask_select_model"))
+        print("=" * 60)
+        for i, model in enumerate(models, 1):
+            name = model.get('name', 'unknown')
+            size = model.get('size', 0) / (1024**3)
+            details = model.get('details', {})
+            param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
+            print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
+        print(f"  0. Cancel")
+        print("=" * 60)
+        
+        # Get user selection
+        try:
+            selection = input("> ").strip()
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(models):
+                print("Cancelled.")
+                return False
+            selected_model = models[idx]
+        except ValueError:
+            # Try matching by name
+            name_match = next((m for m in models if model_name in m.get('name', '')), None)
+            if name_match:
+                selected_model = name_match
+            else:
+                print(f"Model '{model_name}' not found.")
+                return False
+        
+        actual_model_name = selected_model.get('name', 'unknown')
+        print(f"   \U0001f4e4 Using model: {actual_model_name}")
+        
+        # Check if model is already loaded in VRAM
+        try:
+            running_models = self.get_available_models()
+            model_already_loaded = any(actual_model_name in m.get('name', '') for m in running_models)
+            if model_already_loaded:
+                print(f"   ✅ Model '{actual_model_name}' is already loaded in VRAM")
+            else:
+                print(f"   ℹ️  Model '{actual_model_name}' is not loaded - will be loaded on first request")
+        except Exception as e:
+            logger.debug("Could not check model availability: %s", e)
+        
+        try:
+            print(f"   \U0001f4a1 Sending analysis request...")
+            response = self.analyze(actual_model_name, all_results, test_models)
+            
+            if not response:
+                print("\n\u26a0\ufe0f  Model returned an empty response.")
+                return False
+            
+            print("\n" + "=" * 60)
+            print(get_text("analysis_response", model_name=actual_model_name))
+            print("=" * 60)
+            print(response)
+            
+            # Translate if needed (BEFORE unloading to avoid model reload)
+            if target_lang != 'en':
+                print(f"\n" + "=" * 60)
+                print(get_text("analysis_translated"))
+                print("=" * 60)
+                
+                # Check if model is still loaded
+                try:
+                    running_models = self.get_available_models()
+                    model_still_loaded = any(actual_model_name in m.get('name', '') for m in running_models)
+                    if model_still_loaded:
+                        print(f"   ✅ Model '{actual_model_name}' is still loaded - translating without reload")
+                    else:
+                        print(f"   ⚠️  Model '{actual_model_name}' is NOT loaded - will be reloaded for translation")
+                except Exception as e:
+                    logger.debug("Could not check model availability: %s", e)
+                
+                print(f"   🌐 Starting translation...")
+                translated = self.translate(response, target_lang, actual_model_name)
+                if translated:
+                    print(translated)
+                    print(f"   ✅ Translation completed")
+                else:
+                    print(get_text("translation_unavailable"))
+            
+            # Unload model after analysis and translation are complete
+            print(f"\n   🤹 Unloading model '{actual_model_name}' from VRAM...")
+            try:
+                from system.restart_manager import restart_ollama, RestartMethod
+                print("   🔄 Executing Ollama restart to free VRAM...")
+                restart_ollama(method=RestartMethod.MANUAL, no_restart=False)
+                print(f"   ✅ Model '{actual_model_name}' unloaded successfully")
+            except Exception as e:
+                print(f"   ⚠️  Warning: Could not unload model: {e}")
+                print(f"   💡 Tip: Run 'ollama stop {actual_model_name}' manually to free VRAM.")
+            
+            return True
+            
+        except Exception as e:
+            print(get_text("analysis_error", error=str(e)))
+            return False
+
 
 def prompt_user(question: str) -> bool:
     """Ask yes/no question, return True if user agrees.
@@ -345,9 +490,9 @@ def prompt_user(question: str) -> bool:
     while True:
         try:
             response = input(f"\n{question} (y/n): ").strip().lower()
-            if response in ('y', 'yes', 'так', 'т', 'да', 'д'):
+            if response in ('y', 'yes', '\u0442\u0430\u043a', '\u0442', '\u0434\u0430', '\u0434'):
                 return True
-            elif response in ('n', 'no', 'н', 'ні', 'не', 'нет', 'н'):
+            elif response in ('n', 'no', '\u043d', '\u043d\u0456', '\u043d\u0435', '\u043d\u0435\u0442', '\u043d'):
                 return False
         except (EOFError, KeyboardInterrupt):
             return False
@@ -450,46 +595,34 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
 
     model_name = selected_model.get('name', 'unknown')
     print(get_text("analysis_sending", model_name=model_name))
-
-    # Restart Ollama before analysis to clear model from memory (same as benchmark)
-    print("   🔄 Restarting Ollama before analysis...")
+    
+    # Check if model is already loaded
     try:
-        from system.restart_manager import restart_ollama, RestartMethod
-        
-        # Convert string method to RestartMethod enum
-        method_map = {
-            'systemctl': RestartMethod.SYSTEMCTL,
-            'docker': RestartMethod.DOCKER,
-            'kill_start': RestartMethod.KILL_START,
-            'manual': RestartMethod.MANUAL,
-            'ssh': RestartMethod.SSH
-        }
-        restart_method_enum = method_map.get(restart_method, RestartMethod.MANUAL)
-        
-        restart_ollama(
-            method=restart_method_enum,
-            no_restart=no_restart,
-            ssh_client=ssh_client
-        )
+        running_models = analyzer.get_available_models()
+        model_already_loaded = any(model_name in m.get('name', '') for m in running_models)
+        if model_already_loaded:
+            print(f"   ✅ Model '{model_name}' is already loaded in VRAM")
+        else:
+            print(f"   ℹ️  Model '{model_name}' is not loaded - will be loaded on first request")
     except Exception as e:
-        print(f"   ⚠️  Warning: Could not restart Ollama: {e}")
-
+        logger.debug("Could not check model availability: %s", e)
+    
     try:
         response = analyzer.analyze(model_name, all_results, test_models)
 
         if not response:
-            print("\n⚠️  Model returned an empty response.")
-            print("\n🔍 Possible causes:")
+            print("\n\u26a0\ufe0f  Model returned an empty response.")
+            print("\n\U0001f50d Possible causes:")
             print("  1. Prompt is too large for the model's context window")
             print("  2. The model doesn't support the /api/chat or /api/generate format")
             print("  3. The model encountered an internal error (check Ollama logs)")
             print("  4. The model's num_ctx setting is too small")
-            print("\n💡 Troubleshooting steps:")
+            print("\n\U0001f4a1 Troubleshooting steps:")
             print("  - Check Ollama logs: journalctl -u ollama --follow")
             print("  - Try a larger model (e.g., qwen2.5:32b or larger)")
             print("  - Try reducing the benchmark results (fewer models/tests)")
             print("  - Ensure the model supports the chat format (use models with 'chat' in name)")
-            print("\n📋 You can also try running the analysis with --no-interactive flag")
+            print("\n\U0001f4cb You can also try running the analysis with --no-interactive flag")
             print("   and specify an output file to skip this step.")
             return
 
@@ -500,11 +633,6 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
 
         # Translate if needed (BEFORE unload to avoid model reload)
         if current_lang != 'en':
-            print(f"\n" + "=" * 60)
-            print(get_text("analysis_raw_response"))
-            print("=" * 60)
-            print(response)
-
             print(f"\n" + "=" * 60)
             print(get_text("analysis_translated"))
             print("=" * 60)
@@ -523,8 +651,8 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
             else:
                 print(get_text("translation_unavailable"))
         
-        # Unload model from VRAM after analysis and translation are complete
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        # Unload model after analysis and translation are complete
+        print(f"\n   \U0001f939 Unloading model '{model_name}' from VRAM...")
         try:
             from system.restart_manager import restart_ollama, RestartMethod
             
@@ -538,13 +666,15 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
             }
             restart_method_enum = method_map.get(restart_method, RestartMethod.MANUAL)
             
+            print("   \U0001f504 Executing Ollama restart to free VRAM...")
             restart_ollama(
                 method=restart_method_enum,
                 no_restart=no_restart,
                 ssh_client=ssh_client
             )
+            print(f"   \u2705 Model '{model_name}' unloaded successfully")
         except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
-            print(f"   💡 Tip: Run 'ollama restart' to free VRAM.")
+            print(f"   \u26a0\ufe0f  Warning: Could not unload model: {e}")
+            print(f"   \U0001f4a1 Tip: Run 'ollama stop {model_name}' manually to free VRAM.")
     except Exception as e:
         print(get_text("analysis_error", error=str(e)))

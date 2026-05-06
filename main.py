@@ -98,7 +98,13 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         
         if cached and use_cache:
             # Use cached data
-            m["size_gb"] = cached.get('size_gb', m.get("size", 0) / (1024**3))
+            cached_size_gb = cached.get('size_gb')
+            # If cached size_gb is "N/A", try to get it from /api/tags response (m["size"])
+            if cached_size_gb == "N/A":
+                size_bytes = m.get("size", 0)
+                m["size_gb"] = round(size_bytes / (1024**3), 1) if size_bytes > 0 else "N/A"
+            else:
+                m["size_gb"] = cached_size_gb
             m["params"] = cached.get('params', 'N/A')
             m["quant"] = cached.get('quant', 'N/A')
             m["max_ctx"] = cached.get('max_ctx', 131072)
@@ -488,6 +494,9 @@ def _main_impl():
             model_name = m["name"]
             try:
                 model_info = ollama_client.get_model_info(model_name)
+                # Add size from /api/tags response (it's not in /api/show)
+                if m.get("size", 0) > 0:
+                    model_info["size"] = m["size"]
                 fetcher.add_model_metadata(model_name, model_info)
                 
                 # Extract capabilities from model_info
@@ -513,6 +522,32 @@ def _main_impl():
         fetcher.save_model_cache()
         print(get_text("cache_update_complete", count=updated))
         return
+
+    # Handle --analyze-file flag (analyze saved benchmark results)
+    analyze_file = getattr(args, 'analyze_file', None)
+    if analyze_file:
+        config = get_ollama_config(args)
+        
+        from export.ai_analyzer import AIAnalyzer
+        analyzer = AIAnalyzer(
+            base_url=config.base_url,
+            headers=config.get_headers(),
+            timeout=config.timeout
+        )
+        
+        # Get model name for analysis (default to first available or prompt)
+        model_name = getattr(args, 'analysis_model', None)
+        if not model_name:
+            # Try to get from args or use default
+            model_name = "qwen3.6:35b"  # default model for analysis
+        
+        success = analyzer.analyze_from_file(
+            file_path=analyze_file,
+            model_name=model_name,
+            target_lang=args.lang
+        )
+        
+        sys.exit(0 if success else 1)
 
     # Initialize Ollama configuration
     config = get_ollama_config(args)

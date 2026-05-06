@@ -123,6 +123,13 @@ TRANSLATIONS = {
         "cache_fetching": "📡 Fetching model metadata from Ollama...",
         "cache_update_start": "Updating full model metadata cache...",
         "cache_update_complete": "✅ Cache update complete! Updated {count} models.",
+        "analyze_file_not_found": "❌ File not found: {file_path}",
+        "analyze_file_unknown_format": "❌ Unknown file format: {ext}. Use .json or .csv",
+        "analyze_file_empty": "❌ File is empty.",
+        "analyze_file_parse_error": "❌ Error parsing file: {error}",
+        "analysis_model_not_found": "❌ Model '{model_name}' not found in available models.",
+        "cli_analyze_file": "Analyze benchmark results from a saved JSON/CSV file",
+        "cli_analysis_model": "Model name to use for analysis (used with --analyze-file)",
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
@@ -242,6 +249,13 @@ TRANSLATIONS = {
         "cache_fetching": "📡 Отримання метаданих моделей з Ollama...",
         "cache_update_start": "Оновлення повного кешу метаданих моделей...",
         "cache_update_complete": "✅ Кеш оновлено! Оновлено {count} моделей.",
+        "analyze_file_not_found": "❌ Файл не знайдено: {file_path}",
+        "analyze_file_unknown_format": "❌ Невідомий формат файлу: {ext}. Використовуйте .json або .csv",
+        "analyze_file_empty": "❌ Файл порожній.",
+        "analyze_file_parse_error": "❌ Помилка парсингу файлу: {error}",
+        "analysis_model_not_found": "❌ Модель '{model_name}' не знайдено в доступних моделях.",
+        "cli_analyze_file": "Аналізувати результати бенчмарку з збереженого JSON/CSV файлу",
+        "cli_analysis_model": "Назва моделі для аналізу (використовується з --analyze-file)",
     }
 }
 
