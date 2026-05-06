@@ -8,7 +8,6 @@ from config import OllamaConfig
 from cli import parse_args, get_context_sizes
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
 from api.ollama_client import OllamaClient
-from api.capabilities_fetcher import CapabilitiesFetcher
 from system.restart_manager import restart_ollama, RestartMethod
 from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
@@ -56,19 +55,19 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         timeout=config.timeout
     )
 
-    # Fetch models
+    # Fetch models (capabilities are already extracted from model_info)
     models = ollama_client.get_models()
 
     if not models:
         return
 
-    # Fetch capabilities for all models
-    capabilities_fetcher = CapabilitiesFetcher()
+    # Capabilities are already in models from Ollama API
+    # Convert boolean capabilities to display format
     for m in models:
-        vision, tools, thinking = capabilities_fetcher.get_capabilities(m["name"])
-        m["vision"] = vision
-        m["tools"] = tools
-        m["thinking"] = thinking
+        caps = m.get("capabilities", {})
+        m["vision"] = "✅" if caps.get("vision", False) else "❌"
+        m["tools"] = "✅" if caps.get("tools", False) else "❌"
+        m["thinking"] = "✅" if caps.get("thinking", False) else "❌"
 
     # Apply capabilities filter if specified
     if args.capabilities:
