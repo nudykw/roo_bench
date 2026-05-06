@@ -470,6 +470,11 @@ class CapabilitiesFetcher:
         basename = model_info.get('general.basename', '').lower()
         combined = f"{architecture} {basename}".lower()
         
+        # Check if architecture name ends with 'moe' (e.g., qwen35moe)
+        # This is the primary indicator of MoE architecture from Ollama API
+        if architecture.endswith('moe'):
+            return {'is_moe': True, 'architecture': architecture}
+        
         # Known MoE architectures
         moe_architectures = ['mixtral', 'qwen2.5-moe', 'deepseek-v3', 'deepseek-v2', 'jamba']
         for arch in moe_architectures:
