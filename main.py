@@ -9,6 +9,7 @@ from cli import parse_args, get_context_sizes
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
 from api.ollama_client import OllamaClient
 from system.restart_manager import restart_ollama, RestartMethod
+from system.ssh_client import SSHClient
 from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
 from benchmark.results import calculate_statistics, format_result_row, format_recommendations
@@ -48,15 +49,20 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
     print(get_text("scanning_models"))
 
+    # Create centralized SSH client
+    ssh_client = SSHClient(
+        host=getattr(args, 'ssh_host', None),
+        user=getattr(args, 'ssh_user', None),
+        port=getattr(args, 'ssh_port', 22),
+        key_path=getattr(args, 'ssh_key', None)
+    )
+
     # Initialize Ollama client
     ollama_client = OllamaClient(
         base_url=config.base_url,
         headers=config.get_headers(),
         timeout=config.timeout,
-        ssh_host=getattr(args, 'ssh_host', None),
-        ssh_user=getattr(args, 'ssh_user', None),
-        ssh_port=getattr(args, 'ssh_port', 22),
-        ssh_key=getattr(args, 'ssh_key', None)
+        ssh_client=ssh_client
     )
 
     # Fetch models (capabilities are already extracted from model_info)
@@ -164,10 +170,7 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         num_runs=args.num_runs,
         restart_method=args.restart_method,
         no_restart=args.no_restart,
-        ssh_host=getattr(args, 'ssh_host', None),
-        ssh_user=getattr(args, 'ssh_user', None),
-        ssh_port=getattr(args, 'ssh_port', 22),
-        ssh_key=getattr(args, 'ssh_key', None)
+        ssh_client=ssh_client
     )
 
     # Run benchmarks for each model

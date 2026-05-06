@@ -2,69 +2,30 @@
 
 import json
 import math
-import subprocess
 import threading
 import requests
 from system.gpu_monitor import get_vram_usage
 from i18n import get_text
-
-
-def get_vram_usage_via_ssh(ssh_host: str, ssh_user: str, ssh_port: int = 22, ssh_key: str = None) -> int | None:
-    """Get VRAM usage from remote machine via SSH.
-
-    Args:
-        ssh_host: Remote SSH host
-        ssh_user: Remote SSH user
-        ssh_port: Remote SSH port
-        ssh_key: Path to SSH private key
-
-    Returns:
-        int or None: VRAM usage in bytes, or None if unavailable
-    """
-    ssh_key_arg = f"-i {ssh_key}" if ssh_key else ""
-    cmd = f'ssh -t -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p {ssh_port} {ssh_key_arg} {ssh_host} "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader" 2>/dev/null'
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            # nvidia-smi returns value in MiB, convert to bytes
-            return int(result.stdout.strip()) * 1024 * 1024
-    except Exception:
-        pass
-    
-    return None
+from system.ssh_client import SSHClient
 
 
 class OllamaClient:
     """Client for communicating with Ollama API."""
 
     def __init__(self, base_url: str, headers: dict = None, timeout: int = 300,
-                 ssh_host: str = None, ssh_user: str = None,
-                 ssh_port: int = 22, ssh_key: str = None):
+                 ssh_client: SSHClient = None):
         """Initialize Ollama client.
 
         Args:
             base_url: Ollama API base URL
             headers: HTTP headers (e.g., authentication)
             timeout: Request timeout in seconds
-            ssh_host: SSH host for remote VRAM monitoring
-            ssh_user: SSH user for remote VRAM monitoring
-            ssh_port: SSH port for remote VRAM monitoring
-            ssh_key: Path to SSH private key for remote VRAM monitoring
+            ssh_client: SSHClient instance for remote VRAM monitoring
         """
         self.base_url = base_url
         self.headers = headers or {}
         self.timeout = timeout
-        self.ssh_host = ssh_host
-        self.ssh_user = ssh_user
-        self.ssh_port = ssh_port
-        self.ssh_key = ssh_key
+        self.ssh_client = ssh_client
 
     @staticmethod
     def get_capabilities_from_model_info(model_info: dict) -> dict:
@@ -230,22 +191,14 @@ class OllamaClient:
             vram_samples = []
 
             # Determine which VRAM monitoring function to use
-            # SSH host can be in format "user@host" or just "host"
-            use_ssh = bool(self.ssh_host)
-            
-            # Extract user from ssh_host if not provided separately
-            ssh_user = self.ssh_user
-            if not ssh_user and self.ssh_host and '@' in self.ssh_host:
-                ssh_user = self.ssh_host.split('@')[0]
-            
-            vram_args = (self.ssh_host, ssh_user, self.ssh_port, self.ssh_key)
+            use_ssh = self.ssh_client is not None and self.ssh_client.is_configured
 
             def monitor_vram():
                 """Monitor VRAM during generation and collect samples."""
                 nonlocal max_vram
                 while not stop_monitoring.is_set():
                     if use_ssh:
-                        v = get_vram_usage_via_ssh(*vram_args)
+                        v = self.ssh_client.get_vram_usage()
                     else:
                         v = get_vram_usage()
                     if v is not None:

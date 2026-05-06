@@ -2,6 +2,7 @@
 
 from api.ollama_client import OllamaClient
 from system.restart_manager import restart_ollama, RestartMethod
+from system.ssh_client import SSHClient
 from benchmark.results import calculate_statistics
 from i18n import get_text
 
@@ -11,8 +12,7 @@ class BenchmarkRunner:
 
     def __init__(self, ollama_client: OllamaClient, context_sizes: list, num_runs: int = 3,
                  restart_method: str = 'systemctl', no_restart: bool = False,
-                 ssh_host: str = None, ssh_user: str = None,
-                 ssh_port: int = 22, ssh_key: str = None):
+                 ssh_client: SSHClient = None):
         """Initialize benchmark runner.
 
         Args:
@@ -21,19 +21,13 @@ class BenchmarkRunner:
             num_runs: Number of runs per configuration
             restart_method: Ollama restart method
             no_restart: If True, restart is not performed
-            ssh_host: SSH host (for SSH method)
-            ssh_user: SSH user (for SSH method)
-            ssh_port: SSH port (for SSH method)
-            ssh_key: Path to SSH private key (for SSH method)
+            ssh_client: SSHClient instance for remote operations
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
         self.num_runs = num_runs
         self.no_restart = no_restart
-        self.ssh_host = ssh_host
-        self.ssh_user = ssh_user
-        self.ssh_port = ssh_port
-        self.ssh_key = ssh_key
+        self.ssh_client = ssh_client
         
         # Map string method to RestartMethod enum
         method_map = {
@@ -95,10 +89,7 @@ class BenchmarkRunner:
             restart_ollama(
                 self.restart_method,
                 self.no_restart,
-                ssh_host=self.ssh_host,
-                ssh_user=self.ssh_user,
-                ssh_port=self.ssh_port,
-                ssh_key=self.ssh_key
+                ssh_client=self.ssh_client
             )
 
             # Display current num_ctx after restart
