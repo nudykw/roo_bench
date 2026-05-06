@@ -203,64 +203,96 @@ def get_models():
         print(get_text("error_ollama_connection", error=str(e)))
         return[]
 
-def run_benchmark(model_name, context_size):
-    """Запуск бенчмарка для модели.
+import math
+
+def run_benchmark(model_name, context_size, num_runs=3):
+    """Run benchmark for a model with multiple runs for averaging.
     
     Args:
-        model_name: Имя модели
-        context_size: Размер контекста
+        model_name: Model name
+        context_size: Context size
+        num_runs: Number of runs for averaging (default: 3)
         
     Returns:
-        tuple: (tps, vram, error)
-            tps: токлов в секунду (float)
-            vram: использование VRAM в байтах (int или None если GPU недоступен)
-            error: сообщение об ошибке (str или None)
+        tuple: (avg_tps, vram, tps_list, error)
+            avg_tps: Average TPS (float)
+            vram: VRAM usage in bytes (int or None if GPU unavailable)
+            tps_list: List of results for each run (list of dict)
+            error: Error message (str or None)
     """
     prompt = "Write a comprehensive Python script that implements a multithreaded web server. Explain every line in extreme detail."
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "num_predict": 100,
-            "num_ctx": context_size
-        }
-    }
-
-    vram_before = get_vram_usage()
-    response = None
     
-    try:
-        response = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=300)
+    tps_list = []
+    vram = None
+    error = None
+    
+    for run_num in range(num_runs):
+        payload = {
+            "model": model_name,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "num_predict": 100,
+                "num_ctx": context_size
+            }
+        }
+
+        response = None
         
-        if response.status_code != 200:
-            try:
-                err_msg = response.json().get("error", f"HTTP {response.status_code}")
-            except:
-                err_msg = f"HTTP {response.status_code}: {response.text[:100]}"
-            return 0, None, get_text("error_ollama_api", error_msg=err_msg)
-            
         try:
-            data = response.json()
-        except Exception as json_err:
-            raw_text = response.text[:200].replace('\n', ' ')
-            return 0, None, get_text("error_parsing_response", json_err=json_err, raw_text=raw_text)
+            response = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=300)
             
-        vram_after = get_vram_usage()
-        total_duration = data.get("total_duration", 0) / 1e9
-        eval_count = data.get("eval_count", 0)
-        tps = eval_count / total_duration if total_duration > 0 else 0
-        return tps, vram_after, None
+            if response.status_code != 200:
+                try:
+                    err_msg = response.json().get("error", f"HTTP {response.status_code}")
+                except:
+                    err_msg = f"HTTP {response.status_code}: {response.text[:100]}"
+                error = get_text("error_ollama_api", error_msg=err_msg)
+                break
+                
+            try:
+                data = response.json()
+            except Exception as json_err:
+                raw_text = response.text[:200].replace('\n', ' ')
+                error = get_text("error_parsing_response", json_err=json_err, raw_text=raw_text)
+                break
+                
+            vram_after = get_vram_usage()
+            total_duration = data.get("total_duration", 0) / 1e9
+            eval_count = data.get("eval_count", 0)
+            tps = eval_count / total_duration if total_duration > 0 else 0
+            tps_list.append({"run": run_num + 1, "tps": tps, "vram": vram_after})
+            
+        except requests.exceptions.Timeout:
+            error = get_text("error_timeout")
+            break
+        except requests.exceptions.ConnectionError:
+            error = get_text("error_crash")
+            break
+        except Exception as e:
+            err_details = get_text("error_unknown", error_details=str(e))
+            if response is not None:
+                err_details += f" | Сырой ответ: {response.text[:200]}"
+            error = err_details
+            break
+    
+    # Вычисляем среднее TPS
+    if tps_list:
+        avg_tps = sum(r['tps'] for r in tps_list) / len(tps_list)
+        # Вычисляем стандартное отклонение
+        if len(tps_list) > 1:
+            mean = avg_tps
+            variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+            std_dev = math.sqrt(variance)
+        else:
+            std_dev = 0.0
         
-    except requests.exceptions.Timeout:
-        return 0, None, get_text("error_timeout")
-    except requests.exceptions.ConnectionError:
-        return 0, None, get_text("error_crash")
-    except Exception as e:
-        err_details = get_text("error_unknown", error_details=str(e))
-        if response is not None:
-            err_details += f" | Сырой ответ: {response.text[:200]}"
-        return 0, None, err_details
+        # Возвращаем VRAM из последнего успешного запуска
+        vram = tps_list[-1]['vram'] if tps_list else None
+        
+        return avg_tps, vram, tps_list, None
+    else:
+        return 0.0, None, [], error
 
 def get_top_options(runs, min_tps):
     valid = [r for r in runs if r['tps'] >= min_tps]
@@ -282,7 +314,7 @@ def main():
     parser.add_argument('--lang', type=str, choices=get_available_languages(), default=_current_language, help=get_text("cli_lang"))
     parser.add_argument('--restart-method', type=str, default='systemctl', choices=['systemctl', 'docker', 'kill_start', 'manual'], help=get_text("cli_restart_method"))
     parser.add_argument('--no-restart', action='store_true', help=get_text("cli_no_restart"))
-    parser.add_argument('--num-runs', type=int, default=1, help=get_text("cli_num_runs"))
+    parser.add_argument('--num-runs', type=int, default=3, help=get_text("cli_num_runs"))
     parser.add_argument('--context-sizes', type=str, help=get_text("cli_context_sizes"))
     parser.add_argument('--context-sizes-auto', action='store_true', help=get_text("cli_context_sizes_auto"))
     parser.add_argument('--output', type=str, help=get_text("cli_output"))
@@ -397,26 +429,44 @@ def main():
             restart_ollama(args.restart_method, args.no_restart)
             
             print(get_text("warming_up", ctx=ctx))
-            tps, vram, error_msg = run_benchmark(model_name, ctx)
+            avg_tps, vram, tps_list, error_msg = run_benchmark(model_name, ctx, args.num_runs)
             
-            if tps == 0:
+            if error_msg:
                 print(get_text("benchmark_failed", error_msg=error_msg))
                 print(get_text("stopping_tests", model_name=model_name))
-                break 
+                break
                 
-            if tps > 15 and vram < 23500:
-                status = "⚡ FLYING (GPU)"
-                print(get_text("speed_status_gpu", tps=tps, vram=vram))
-            elif tps < 8:
-                status = "🐌 SLOW (RAM/CPU)"
-                print(get_text("speed_status_ram", tps=tps, vram=vram))
-            else:
-                status = "✅ NORMAL"
-                print(get_text("speed_status_normal", tps=tps, vram=vram))
+            # Показываем результаты каждого запуска
+            print(get_text("benchmark_runs_header"))
+            for run in tps_list:
+                run_num = run['run']
+                tps = run['tps']
+                vram_run = run['vram']
+                if vram_run:
+                    vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
+                else:
+                    vram_str = "N/A"
+                print(f"   Запуск {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
             
+            # Показываем сводку
+            print(get_text("benchmark_summary"))
+            print(f"   Среднее: {avg_tps:.2f} TPS")
+            print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
+            print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
+            
+            # Вычисляем std dev
+            mean = avg_tps
+            variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+            std_dev = math.sqrt(variance)
+            print(f"   Std Dev: {std_dev:.2f} TPS")
+            
+            # Сохраняем усреднённые результаты
             results[model_name].append({
                 "ctx": ctx,
-                "tps": tps,
+                "avg_tps": avg_tps,
+                "min_tps": min(r['tps'] for r in tps_list),
+                "max_tps": max(r['tps'] for r in tps_list),
+                "std_dev": std_dev,
                 "vram": vram
             })
 
@@ -428,22 +478,29 @@ def main():
         if not runs:
             print(get_text("no_successful_runs", model_name=model_name))
             continue
+        
+        # Вывод результатов для каждой модели
+        print("\n" + "="*60)
+        print(get_text("results_header", model_name=model_name))
+        print("="*60)
+        
+        for run in runs:
+            ctx = run['ctx']
+            ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
+            avg_tps = run['avg_tps']
+            min_tps = run['min_tps']
+            max_tps = run['max_tps']
+            std_dev = run['std_dev']
+            vram = run['vram']
+            vram_str = f"{vram / 1024 / 1024:.1f} MiB" if vram else "N/A"
             
-        print(get_text("architect_mode"))
-        arch_options = get_top_options(runs, min_tps=1.5)
-        for i, opt in enumerate(arch_options, 1):
-            print(get_text("variant", i=i, ctx=opt['ctx'], tps=opt['tps']))
-
-        print(get_text("code_mode"))
-        code_options = get_top_options(runs, min_tps=12.0)
-        for i, opt in enumerate(code_options, 1):
-            warn = " (⚠️ Below recommended speed)" if opt['tps'] < 12.0 else ""
-            print(get_text("variant", i=i, ctx=opt['ctx'], tps=opt['tps']) + warn)
-
-        print(get_text("debug_mode"))
-        debug_options = get_top_options(runs, min_tps=7.0)
-        for i, opt in enumerate(debug_options, 1):
-            print(get_text("variant", i=i, ctx=opt['ctx'], tps=opt['tps']))
+            print(get_text("result_row",
+                ctx=ctx_str,
+                avg_tps=avg_tps,
+                min_tps=min_tps,
+                max_tps=max_tps,
+                std_dev=std_dev,
+                vram=vram_str))
 
 if __name__ == "__main__":
     main()
