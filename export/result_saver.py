@@ -2,6 +2,7 @@
 
 import json
 import csv
+import os
 from datetime import datetime
 from i18n import get_text, _current_language
 
@@ -98,6 +99,24 @@ class ResultSaver:
             export_data: List of result dictionaries
         """
         try:
+            # Check if file exists and ask for confirmation
+            if os.path.exists(self.output_file):
+                file_size = os.path.getsize(self.output_file)
+                print(get_text("output_file_exists",
+                              output_file=self.output_file,
+                              file_size=f"{file_size / 1024:.1f} KB"))
+                while True:
+                    try:
+                        response = input(get_text("ask_overwrite") + " (y/n): ").strip().lower()
+                        if response in ('y', 'yes', 'так', 'т', 'да', 'д'):
+                            break
+                        elif response in ('n', 'no', 'н', 'ні', 'не', 'нет', 'н'):
+                            print(get_text("save_cancelled"))
+                            return
+                    except (EOFError, KeyboardInterrupt):
+                        print(get_text("save_cancelled"))
+                        return
+
             with open(self.output_file, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             print(get_text("output_json", output_file=self.output_file))
@@ -111,6 +130,24 @@ class ResultSaver:
             export_data: List of result dictionaries
         """
         try:
+            # Check if file exists and ask for confirmation
+            if os.path.exists(self.output_file):
+                file_size = os.path.getsize(self.output_file)
+                print(get_text("output_file_exists",
+                              output_file=self.output_file,
+                              file_size=f"{file_size / 1024:.1f} KB"))
+                while True:
+                    try:
+                        response = input(get_text("ask_overwrite") + " (y/n): ").strip().lower()
+                        if response in ('y', 'yes', 'так', 'т', 'да', 'д'):
+                            break
+                        elif response in ('n', 'no', 'н', 'ні', 'не', 'нет', 'н'):
+                            print(get_text("save_cancelled"))
+                            return
+                    except (EOFError, KeyboardInterrupt):
+                        print(get_text("save_cancelled"))
+                        return
+
             fieldnames = ['model_name', 'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
                          'std_dev', 'vram', 'vram_str', 'params', 'quant', 'size_gb',
                          'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp']

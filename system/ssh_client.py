@@ -124,6 +124,9 @@ class SSHClient:
         Returns:
             VRAM usage in bytes, or None if unavailable
         """
+        if not self.is_configured:
+            return None
+            
         cmd = self.build_command(
             "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader"
         )
@@ -135,10 +138,21 @@ class SSHClient:
                 timeout=timeout
             )
             if result.returncode == 0 and result.stdout.strip():
+                output = result.stdout.strip()
                 # nvidia-smi returns value in MiB, convert to bytes
-                return int(result.stdout.strip()) * 1024 * 1024
+                try:
+                    vram_mib = int(output)
+                    return vram_mib * 1024 * 1024
+                except ValueError:
+                    return None
+            else:
+                # Log error output for debugging
+                if result.stderr:
+                    pass  # print(f"DEBUG: SSH VRAM error: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            pass  # print("DEBUG: SSH VRAM timeout")
         except Exception:
-            pass
+            pass  # print(f"DEBUG: SSH VRAM exception")
         return None
 
     def restart_ollama(self, timeout: int = 30) -> bool:

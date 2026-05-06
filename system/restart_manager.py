@@ -19,7 +19,7 @@ class RestartMethod(Enum):
 class RestartManager:
     """Manages Ollama service restart operations."""
 
-    def __init__(self, method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: bool = False,
+    def __init__(self, method: RestartMethod = RestartMethod.MANUAL, no_restart: bool = False,
                  ssh_client: SSHClient = None):
         """Initialize restart manager.
 
@@ -55,42 +55,44 @@ class RestartManager:
                 time.sleep(4)
                 return
 
-            if self.method == RestartMethod.SYSTEMCTL:
-                cmd = ['sudo', 'systemctl', 'restart', 'ollama']
-            elif self.method == RestartMethod.DOCKER:
-                cmd = ['docker', 'restart', 'ollama']
-            elif self.method == RestartMethod.KILL_START:
-                subprocess.run(['sudo', 'systemctl', 'stop', 'ollama'], check=False)
-                time.sleep(1)
-                cmd = ['sudo', 'systemctl', 'start', 'ollama']
-            elif self.method == RestartMethod.MANUAL:
-                cmd = ['ollama', 'restart']
-            else:
-                print(get_text("error_unknown_restart_method", method=self.method.value))
-                return
+            # All local methods use 'ollama restart' to avoid sudo
+            # This works because Ollama runs as a user service for local sessions
+            cmd = ['ollama', 'restart']
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if result.returncode != 0:
-                print(get_text("error_restart_command", cmd=' '.join(cmd), stderr=result.stderr))
+                # Fallback: try systemctl --user (user-level service)
+                try:
+                    result = subprocess.run(
+                        ['systemctl', '--user', 'restart', 'ollama'],
+                        capture_output=True, text=True, timeout=60
+                    )
+                except subprocess.TimeoutExpired:
+                    print(get_text("error_restart_timeout"))
+                    return
+                except FileNotFoundError:
+                    pass
+                
+                if result.returncode != 0:
+                    print(get_text("error_restart_command", cmd=' '.join(cmd), stderr=result.stderr or "systemctl --user also failed"))
+                    print(f"   💡 Tip: You can restart Ollama manually by running: ollama restart")
+                else:
+                    print(get_text("restart_success"))
             else:
                 print(get_text("restart_success"))
 
             time.sleep(4)
-        except FileNotFoundError:
-            fallback_cmd = (
-                ['ollama', 'restart'] if self.method == RestartMethod.MANUAL
-                else ['systemctl', 'restart', 'ollama']
-            )
-            print(get_text("error_restart_command_not_found", cmd=' '.join(fallback_cmd)))
-        except PermissionError:
-            print(get_text("error_restart_permission"))
         except subprocess.TimeoutExpired:
             print(get_text("error_restart_timeout"))
+        except FileNotFoundError:
+            print(get_text("error_restart_command_not_found", cmd='ollama restart'))
+        except PermissionError:
+            print(get_text("error_restart_permission"))
         except Exception as e:
             print(get_text("error_restart_unknown", error=str(e)))
 
 
-def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: bool = False,
+def restart_ollama(method: RestartMethod = RestartMethod.MANUAL, no_restart: bool = False,
                    ssh_client: SSHClient = None,
                    # Deprecated parameters for backward compatibility
                    ssh_host: str = None, ssh_user: str = None,

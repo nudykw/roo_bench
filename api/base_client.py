@@ -164,13 +164,13 @@ class BaseApiClient(ABC):
             }
 
             response = None
-            max_vram = 0
+            max_vram_ref = [0]  # Use list for mutable reference in thread
             stop_monitoring = threading.Event()
             vram_samples = []
 
             try:
                 # Start VRAM monitoring thread
-                monitor_thread = threading.Thread(target=self._monitor_vram, args=(stop_monitoring, [max_vram], vram_samples), daemon=True)
+                monitor_thread = threading.Thread(target=self._monitor_vram, args=(stop_monitoring, max_vram_ref, vram_samples), daemon=True)
                 monitor_thread.start()
 
                 try:
@@ -241,7 +241,7 @@ class BaseApiClient(ABC):
                             pass
 
                 # Use max VRAM observed during generation
-                vram_during = max_vram if vram_samples else None
+                vram_during = max_vram_ref[0] if vram_samples else None
                 tps_list.append({"run": run_num + 1, "tps": tps, "vram": vram_during})
 
             except KeyboardInterrupt:
@@ -260,8 +260,6 @@ class BaseApiClient(ABC):
             except Exception as e:
                 stop_monitoring.set()
                 err_details = get_text("error_unknown", error_details=str(e))
-                if response is not None:
-                    err_details += f" | Raw response: {response.text[:200]}"
                 error = err_details
                 break
 
@@ -398,6 +396,19 @@ class BaseApiClient(ABC):
                 # Fallback to n_ctx (some Ollama versions)
                 return model.get('n_ctx', 0)
         return 0
+
+    def _get_vram_fallback(self, model_name: str) -> Optional[int]:
+        """Get VRAM usage from Ollama API /api/ps endpoint as fallback.
+        
+        This is used when direct GPU monitoring is not available.
+        
+        Args:
+            model_name: Model name to get VRAM for
+
+        Returns:
+            Optional[int]: VRAM usage in bytes, or None if unavailable
+        """
+        return self.get_vram_from_api(model_name)
 
     def verify_num_ctx(self, model_name: str, expected_ctx: int) -> tuple:
         """Verify that the model's num_ctx matches the expected value.
@@ -584,3 +595,162 @@ class BaseApiClient(ABC):
                         pass
 
         return -1
+
+    def unload_model(self, model_name: str) -> bool:
+        """Unload a model from VRAM to free memory.
+        
+        Uses the Ollama API to check if the model is loaded and then
+        restarts Ollama to free all VRAM.
+        
+        Args:
+            model_name: Name of the model to unload
+            
+        Returns:
+            bool: True if unloading was successful, False otherwise
+        """
+        import subprocess
+        import time
+        
+        try:
+            # Check if model is currently loaded
+            ps_response = requests.get(
+                f"{self.base_url}/api/ps",
+                headers=self.headers,
+                timeout=10
+            )
+            
+            model_is_loaded = False
+            loaded_model_info = None
+            if ps_response.status_code == 200:
+                ps_data = ps_response.json()
+                models = []
+                if isinstance(ps_data, dict) and 'models' in ps_data:
+                    models = ps_data['models']
+                elif isinstance(ps_data, list):
+                    models = ps_data
+                
+                # Check if our model is running
+                for m in models:
+                    if model_name in m.get('name', ''):
+                        model_is_loaded = True
+                        loaded_model_info = m
+                        break
+            
+            if model_is_loaded:
+                # Model is loaded, need to restart Ollama to free VRAM
+                vram_size = loaded_model_info.get('size', 0) / 1024**3 if loaded_model_info else 0
+                print(f"   📋 Model '{model_name}' is loaded in VRAM ({vram_size:.1f} GB)")
+                
+                # Determine restart method based on SSH client availability
+                if self.ssh_client and self.ssh_client.is_configured:
+                    print(f"   🔄 Restarting Ollama via SSH...")
+                    try:
+                        exec_result = self.ssh_client.execute("sudo systemctl restart ollama", timeout=60)
+                        if exec_result.returncode == 0:
+                            print(f"   ⏳ Waiting for Ollama to start...")
+                            time.sleep(5)
+                            # Verify model is unloaded
+                            verify_response = requests.get(
+                                f"{self.base_url}/api/ps",
+                                headers=self.headers,
+                                timeout=10
+                            )
+                            if verify_response.status_code == 200:
+                                verify_data = verify_response.json()
+                                verify_models = verify_data.get('models', []) if isinstance(verify_data, dict) else []
+                                still_loaded = any(model_name in m.get('name', '') for m in verify_models)
+                                if still_loaded:
+                                    print(f"   ⚠️  Model '{model_name}' is STILL loaded after restart!")
+                                    return False
+                                else:
+                                    print(f"   ✅ Verified: Model '{model_name}' is unloaded from VRAM.")
+                                    return True
+                            return True
+                        else:
+                            print(f"   ⚠️  SSH restart failed: {exec_result.stderr}")
+                    except Exception as ssh_err:
+                        print(f"   ⚠️  SSH restart error: {ssh_err}")
+                else:
+                    print(f"   🔄 Restarting Ollama via systemctl...")
+                    result = subprocess.run(
+                        ['sudo', 'systemctl', 'restart', 'ollama'],
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+                    if result.returncode == 0:
+                        print(f"   ⏳ Waiting for Ollama to start...")
+                        time.sleep(5)
+                        # Verify model is unloaded
+                        verify_response = requests.get(
+                            f"{self.base_url}/api/ps",
+                            headers=self.headers,
+                            timeout=10
+                        )
+                        if verify_response.status_code == 200:
+                            verify_data = verify_response.json()
+                            verify_models = verify_data.get('models', []) if isinstance(verify_data, dict) else []
+                            still_loaded = any(model_name in m.get('name', '') for m in verify_models)
+                            if still_loaded:
+                                print(f"   ⚠️  Model '{model_name}' is STILL loaded after restart!")
+                                return False
+                            else:
+                                print(f"   ✅ Verified: Model '{model_name}' is unloaded from VRAM.")
+                                return True
+                        return True
+                    else:
+                        print(f"   ⚠️  systemctl restart failed: {result.stderr}")
+            
+            else:
+                print(f"   ✅ Model '{model_name}' is not currently loaded in VRAM.")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"   ⚠️  Error unloading model: {e}")
+            # Fallback: try direct systemctl restart
+            try:
+                print(f"   🔄 Trying direct systemctl restart...")
+                result = subprocess.run(
+                    ['sudo', 'systemctl', 'restart', 'ollama'],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    time.sleep(5)
+                    print(f"   🧹 Ollama restarted via fallback, VRAM freed.")
+                    return True
+            except Exception:
+                pass
+            
+            print(f"   ⚠️  Could not unload model '{model_name}' automatically.")
+            print(f"   💡 Tip: Run 'sudo systemctl restart ollama' to free VRAM.")
+            return False
+
+    def unload_all_models(self) -> bool:
+        """Unload all models from VRAM by restarting Ollama.
+        
+        Returns:
+            bool: True if restart was successful, False otherwise
+        """
+        try:
+            print(f"   🧹 Unloading all models from VRAM...")
+            from system.restart_manager import restart_ollama, RestartMethod
+            
+            # Determine restart method based on SSH client availability
+            if hasattr(self, 'ssh_client') and self.ssh_client and self.ssh_client.is_configured:
+                restart_method = RestartMethod.SSH
+            else:
+                restart_method = RestartMethod.MANUAL
+            
+            restart_ollama(
+                method=restart_method,
+                no_restart=False,
+                ssh_client=getattr(self, 'ssh_client', None)
+            )
+            return True
+        except Exception as e:
+            print(f"   ⚠️  Error unloading all models: {e}")
+            return False

@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument('--lang', type=str, choices=get_available_languages(),
                         default=_current_language if _current_language else "en",
                         help=get_text("cli_lang"))
-    parser.add_argument('--restart-method', type=str, default='systemctl',
+    parser.add_argument('--restart-method', type=str, default='manual',
                         choices=['systemctl', 'docker', 'kill_start', 'manual', 'ssh'],
                         help=get_text("cli_restart_method"))
     parser.add_argument('--ssh-host', type=str, help='SSH host for remote restart')
@@ -69,6 +69,8 @@ def parse_args():
     parser.add_argument('--config', type=str, help='Path to configuration file')
     parser.add_argument('--update-cache', action='store_true',
                         help='Force update capabilities cache from Ollama API')
+    parser.add_argument('--no-interactive', action='store_true',
+                        help='Disable interactive post-benchmark prompts')
     return parser.parse_args()
 
 

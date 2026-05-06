@@ -10,7 +10,7 @@ class BenchmarkRunner:
     """Orchestrates benchmark execution for models."""
 
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
-                 restart_method: str = 'systemctl', no_restart: bool = False):
+                 restart_method: str = 'manual', no_restart: bool = False):
         """Initialize benchmark runner.
 
         Args:
@@ -34,7 +34,7 @@ class BenchmarkRunner:
             'manual': RestartMethod.MANUAL,
             'ssh': RestartMethod.SSH
         }
-        self.restart_method = method_map.get(restart_method, RestartMethod.SYSTEMCTL)
+        self.restart_method = method_map.get(restart_method, RestartMethod.MANUAL)
 
     def filter_contexts(self, max_ctx: int) -> list:
         """Filter context sizes based on model's maximum context.
@@ -154,5 +154,12 @@ class BenchmarkRunner:
                 "std_dev": std_dev,
                 "vram": vram
             })
+
+        # Unload model from VRAM after all context tests are done
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        try:
+            self.ollama_client.unload_model(model_name)
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
 
         return model_name, results, None

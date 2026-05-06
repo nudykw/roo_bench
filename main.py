@@ -92,6 +92,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         param_size = details.get("parameter_size", "N/A") if details else "N/A"
         m["params"] = param_size
         
+        # Add quantization format from model details
+        quant = (details.get("quantization_format") or "N/A") if details else "N/A"
+        m["quant"] = quant
+        
         # Add max_ctx and capabilities from model info
         try:
             model_info = ollama_client.get_model_info(m["name"])
@@ -333,7 +337,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     print(f"    {model_name} ({params}, {size_gb} GB)")
                     print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
 
-    # Save results to file
+    # Save results to file (if --output flag specified)
     if hasattr(args, 'output') and hasattr(args, 'output_format'):
         save_results(
             all_results,
@@ -342,6 +346,64 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             [m['name'] for m in test_models],
             test_models
         )
+    
+    # Post-benchmark interactive workflow (save + AI analysis)
+    _post_benchmark_workflow(args, all_results, test_models, config)
+
+
+def _post_benchmark_workflow(args, all_results, test_models, config):
+    """Handle post-benchmark save and analysis prompts.
+    
+    Args:
+        args: Parsed command-line arguments
+        all_results: Dictionary of results per model
+        test_models: List of model objects
+        config: OllamaConfig object
+    """
+    from i18n import get_text
+    from export.ai_analyzer import (
+        save_results_interactive,
+        analyze_results_interactive,
+        AIAnalyzer,
+        prompt_user
+    )
+    
+    # Skip if --no-interactive flag is set
+    if getattr(args, 'no_interactive', False):
+        return
+    
+    # Only prompt if no output file was specified
+    if not hasattr(args, 'output') or not args.output:
+        # Step 1: Ask to save results
+        saved_file = save_results_interactive(
+            all_results, test_models,
+            config.base_url, config.get_headers()
+        )
+        
+        # Step 2: Ask for AI analysis
+        if prompt_user(get_text("ask_analyze_ai")):
+            analyzer = AIAnalyzer(
+                base_url=config.base_url,
+                headers=config.get_headers(),
+                timeout=config.timeout
+            )
+            # Get restart params from args (same as benchmark)
+            from api.factory import ApiClientFactory
+            ollama_client = ApiClientFactory.create_client(
+                base_url=config.base_url,
+                headers=config.get_headers(),
+                timeout=config.timeout,
+                ssh_host=getattr(args, 'ssh_host', None),
+                ssh_user=getattr(args, 'ssh_user', None),
+                ssh_port=getattr(args, 'ssh_port', 22),
+                ssh_key=getattr(args, 'ssh_key', None)
+            )
+            analyze_results_interactive(
+                analyzer, all_results, test_models, args.lang,
+                restart_method=getattr(args, 'restart_method', 'manual'),
+                no_restart=False,
+                ssh_client=ollama_client.ssh_client
+            )
 
 
 def main():

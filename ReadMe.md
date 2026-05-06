@@ -14,6 +14,7 @@
   - [Overview](#overview)
   - [Installation](#installation)
   - [Usage](#usage)
+  - [Post-Benchmark AI Analysis](#post-benchmark-ai-analysis)
   - [Updating Capabilities Cache](#updating-capabilities-cache)
   - [Configuration](#configuration)
   - [Architecture](#architecture)
@@ -24,6 +25,7 @@
   - [Огляд](#огляд)
   - [Встановлення](#встановлення)
   - [Використання](#використання)
+  - [AI аналіз після бенчмарку](#ai-аналіз-після-бенчмарку)
   - [Оновлення кешу можливостей](#оновлення-кешу-можливостей)
   - [Конфігурація](#конфігурація)
   - [Архітектура](#архітектура)
@@ -46,6 +48,7 @@ Roo Bench is a professional benchmarking tool designed to analyze Ollama models'
 - **Flexible Restart Methods** — systemctl, docker, or custom commands
 - **Multiple Benchmark Runs** — Average, min/max statistics
 - **Remote Ollama Support** — Connect to Ollama servers on the local network
+- **Post-Benchmark AI Analysis** — Get AI-powered recommendations for Roo Code modes
 
 ### Installation
 
@@ -152,6 +155,54 @@ The project uses a modular architecture. You can run it in two ways:
   --output-format json
 ```
 
+#### Post-Benchmark AI Analysis
+
+After completing the benchmark, if you didn't specify `--output`, Roo Bench will offer you to:
+
+1. **Save results** to a JSON file with a custom filename
+2. **Send results for AI analysis** — select an Ollama-connected model to analyze your benchmark results
+
+The AI model will provide recommendations for the three main Roo Code modes:
+
+- **🏗️ Architect Mode** — Models that handle large contexts (65K+) well
+- **💻 Code Mode** — Models with high TPS for code generation (16K-64K)
+- **🐛 Debug Mode** — Balanced models for debugging tasks (<16K)
+
+The analysis response can be automatically translated to your selected language (Ukrainian).
+
+**Example workflow:**
+```
+=== RECOMMENDATIONS FOR ROO CODE SETUP (TOP 3 OPTIONS) ===
+...
+
+Would you like to save the results to a file? (y/n): y
+Enter filename (default: benchmark_results.json): my_benchmark.json
+Results saved to my_benchmark.json (JSON)
+
+Would you like to send results for AI analysis? (y/n): y
+
+Select a model for analysis (number or name):
+  1. llama3.2 (3.0B, 1.8 GB)
+  2. qwen2.5 (7B, 4.1 GB)
+  3. mistral (7B, 3.9 GB)
+  0. Cancel
+> 2
+
+Sending request to qwen2.5...
+
+=== AI ANALYSIS FROM qwen2.5 ===
+Based on your benchmark results, here are my recommendations...
+
+=== TRANSLATED RESPONSE ===
+На основі ваших результатів бенчмарку, ось мої рекомендації...
+```
+
+**Disable interactive prompts:**
+```bash
+# Skip all post-benchmark prompts
+./venv/bin/python roo_bench.py --no-interactive
+```
+
 #### Updating Capabilities Cache
 
 Roo Bench automatically caches model capabilities (vision, tools, thinking) in `data/capabilities_cache.json`. You can force an update:
@@ -190,6 +241,7 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--ollama-timeout` | Connection timeout in seconds | `300` |
 | `--config` | Path to configuration file | `config.json` |
 | `--update-cache` | Force update capabilities cache from Ollama API | False |
+| `--no-interactive` | Disable interactive post-benchmark prompts | False |
 
 #### Environment Variables
 
@@ -323,7 +375,11 @@ roo_bench/
 │
 └── export/
     ├── __init__.py
-    └── result_saver.py        # JSON/CSV export
+    ├── result_saver.py        # JSON/CSV export
+    └── ai_analyzer.py         # AI-powered analysis
+│
+└── prompts/
+    └── analysis_prompt.json   # AI analysis prompt templates
 ```
 
 **Module Dependencies:**
@@ -511,6 +567,54 @@ chmod +x roo_bench.py
   --output-format json
 ```
 
+#### AI аналіз після бенчмарку
+
+Після завершення бенчмарку, якщо ви не вказали `--output`, Roo Bench запропонує вам:
+
+1. **Зберегти результати** у JSON файл з власною назвою
+2. **Надіслати результати для AI аналізу** — обрати модель підключену до Ollama для аналізу ваших результатів
+
+AI модель надасть рекомендації для трьох основних режимів Roo Code:
+
+- **🏗️ Режим Architect** — Моделі, що добре працюють з великим контекстом (65K+)
+- **💻 Режим Code** — Моделі з високим TPS для генерації коду (16K-64K)
+- **🐛 Режим Debug** — Збалансовані моделі для задач відлагодження (<16K)
+
+Відповідь AI може бути автоматично перекладена на обрану мову (українську).
+
+**Приклад роботи:**
+```
+=== РЕКОМЕНДАЦІЇ ДЛЯ НАЛАШТУВАННЯ ROO CODE (ТОП-3 ВАРІАНТИ) ===
+...
+
+Бажаєте зберегти результати у файл? (y/n): y
+Введіть ім'я файлу (за замовчуванням: benchmark_results.json): my_benchmark.json
+Результати збережено до my_benchmark.json (JSON)
+
+Бажаєте надіслати результати для AI аналізу? (y/n): y
+
+Оберіть модель для аналізу (номер або назва):
+  1. llama3.2 (3.0B, 1.8 GB)
+  2. qwen2.5 (7B, 4.1 GB)
+  3. mistral (7B, 3.9 GB)
+  0. Скасувати
+> 2
+
+Відправка запиту до qwen2.5...
+
+=== AI АНАЛІЗ ВІД qwen2.5 ===
+На основі ваших результатів бенчмарку, ось мої рекомендації...
+
+=== ПЕРЕКЛАДЕНИЙ ВІДПОВІДЬ ===
+Based on your benchmark results, here are my recommendations...
+```
+
+**Вимкнути інтерактивні підказки:**
+```bash
+# Пропустити всі інтерактивні підказки після бенчмарку
+./venv/bin/python roo_bench.py --no-interactive
+```
+
 #### Оновлення кешу можливостей
 
 Roo Bench автоматично кешує можливості моделей (візіон, інструменти, thinking) у `data/capabilities_cache.json`. Ви можете примусово оновити кеш:
@@ -549,6 +653,7 @@ Roo Bench автоматично кешує можливості моделей 
 | `--ollama-timeout` | Час очікування підключення (сек) | `300` |
 | `--config` | Шлях до файлу конфігурації | `config.json` |
 | `--update-cache` | Примусово оновити кеш можливостей з Ollama API | False |
+| `--no-interactive` | Вимкнути інтерактивні підказки після бенчмарку | False |
 
 #### Налаштування віддаленого сервера Ollama
 
@@ -682,7 +787,11 @@ roo_bench/
 │
 └── export/
     ├── __init__.py
-    └── result_saver.py        # Експорт JSON/CSV
+    ├── result_saver.py        # Експорт JSON/CSV
+    └── ai_analyzer.py         # AI аналіз
+│
+└── prompts/
+    └── analysis_prompt.json   # Шаблони AI промтів
 ```
 
 **Залежності модулів:**
