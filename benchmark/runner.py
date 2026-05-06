@@ -2,7 +2,7 @@
 
 from api.ollama_client import OllamaClient
 from api.capabilities_fetcher import CapabilitiesFetcher
-from system.restart_manager import restart_ollama
+from system.restart_manager import restart_ollama, RestartMethod
 from benchmark.results import calculate_statistics
 from i18n import get_text
 
@@ -10,18 +10,42 @@ from i18n import get_text
 class BenchmarkRunner:
     """Orchestrates benchmark execution for models."""
 
-    def __init__(self, ollama_client: OllamaClient, context_sizes: list, num_runs: int = 3):
+    def __init__(self, ollama_client: OllamaClient, context_sizes: list, num_runs: int = 3,
+                 restart_method: str = 'systemctl', no_restart: bool = False,
+                 ssh_host: str = None, ssh_user: str = None,
+                 ssh_port: int = 22, ssh_key: str = None):
         """Initialize benchmark runner.
 
         Args:
             ollama_client: OllamaClient instance
             context_sizes: List of context sizes to test
             num_runs: Number of runs per configuration
+            restart_method: Ollama restart method
+            no_restart: If True, restart is not performed
+            ssh_host: SSH host (for SSH method)
+            ssh_user: SSH user (for SSH method)
+            ssh_port: SSH port (for SSH method)
+            ssh_key: Path to SSH private key (for SSH method)
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
         self.num_runs = num_runs
         self.capabilities_fetcher = CapabilitiesFetcher()
+        self.no_restart = no_restart
+        self.ssh_host = ssh_host
+        self.ssh_user = ssh_user
+        self.ssh_port = ssh_port
+        self.ssh_key = ssh_key
+        
+        # Map string method to RestartMethod enum
+        method_map = {
+            'systemctl': RestartMethod.SYSTEMCTL,
+            'docker': RestartMethod.DOCKER,
+            'kill_start': RestartMethod.KILL_START,
+            'manual': RestartMethod.MANUAL,
+            'ssh': RestartMethod.SSH
+        }
+        self.restart_method = method_map.get(restart_method, RestartMethod.SYSTEMCTL)
 
     def filter_contexts(self, max_ctx: int) -> list:
         """Filter context sizes based on model's maximum context.
@@ -70,7 +94,21 @@ class BenchmarkRunner:
             return model_name, results, None
 
         for ctx in valid_contexts:
-            restart_ollama(None, getattr(self, 'no_restart', False))
+            restart_ollama(
+                self.restart_method,
+                self.no_restart,
+                ssh_host=self.ssh_host,
+                ssh_user=self.ssh_user,
+                ssh_port=self.ssh_port,
+                ssh_key=self.ssh_key
+            )
+
+            # Display current num_ctx after restart
+            try:
+                current_num_ctx = self.ollama_client.get_current_num_ctx(model_name)
+                print(get_text("current_num_ctx", num_ctx=current_num_ctx))
+            except Exception:
+                pass
 
             print(get_text("warming_up", ctx=ctx))
             avg_tps, vram, tps_list, error_msg = self.ollama_client.run_generation(

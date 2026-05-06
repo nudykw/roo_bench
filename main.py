@@ -149,7 +149,13 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     benchmark_runner = BenchmarkRunner(
         ollama_client=ollama_client,
         context_sizes=context_sizes,
-        num_runs=args.num_runs
+        num_runs=args.num_runs,
+        restart_method=args.restart_method,
+        no_restart=args.no_restart,
+        ssh_host=getattr(args, 'ssh_host', None),
+        ssh_user=getattr(args, 'ssh_user', None),
+        ssh_port=getattr(args, 'ssh_port', 22),
+        ssh_key=getattr(args, 'ssh_key', None)
     )
 
     # Run benchmarks for each model

@@ -20,8 +20,12 @@ def parse_args():
                         default=_current_language if _current_language else "en",
                         help=get_text("cli_lang"))
     parser.add_argument('--restart-method', type=str, default='systemctl',
-                        choices=['systemctl', 'docker', 'kill_start', 'manual'],
+                        choices=['systemctl', 'docker', 'kill_start', 'manual', 'ssh'],
                         help=get_text("cli_restart_method"))
+    parser.add_argument('--ssh-host', type=str, help='SSH host for remote restart')
+    parser.add_argument('--ssh-user', type=str, help='SSH user for remote restart')
+    parser.add_argument('--ssh-port', type=int, default=22, help='SSH port for remote restart')
+    parser.add_argument('--ssh-key', type=str, help='Path to SSH private key')
     parser.add_argument('--no-restart', action='store_true', help=get_text("cli_no_restart"))
     parser.add_argument('--num-runs', type=int, default=3, help=get_text("cli_num_runs"))
     parser.add_argument('--context-sizes', type=str, help=get_text("cli_context_sizes"))

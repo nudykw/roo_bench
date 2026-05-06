@@ -240,3 +240,62 @@ class OllamaClient:
             return avg_tps, vram, tps_list, None
         else:
             return 0.0, None, [], error
+
+    def get_model_info(self, model_name: str) -> dict:
+        """Get model information including current default parameters.
+        
+        Args:
+            model_name: Model name
+            
+        Returns:
+            dict: Model information with parameters (including num_ctx, num_predict, etc.)
+        """
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/show",
+                json={"name": model_name},
+                timeout=self.timeout
+            )
+            if response.status_code == 200:
+                return response.json()
+            return {}
+        except Exception as e:
+            print(f"⚠️  Error getting model info for {model_name}: {e}")
+            return {}
+
+    def get_current_num_ctx(self, model_name: str) -> int:
+        """Get the current default num_ctx for a model.
+        
+        Args:
+            model_name: Model name
+            
+        Returns:
+            int: Current num_ctx value (default: 2048)
+        """
+        model_info = self.get_model_info(model_name)
+        if not model_info:
+            return 2048
+        
+        # Look for num_ctx in model_info
+        # It can be in 'parameters' field or as 'tokenizer.llama.num_ctx' in model_info
+        parameters = model_info.get("parameters", "")
+        if parameters:
+            # Parse parameters string like "num_ctx:2048\nnum_predict:100"
+            for line in parameters.split('\n'):
+                line = line.strip()
+                if line.startswith('num_ctx:'):
+                    try:
+                        return int(line.split(':')[1].strip())
+                    except (ValueError, IndexError):
+                        pass
+        
+        # Also check model_info keys
+        model_info_dict = model_info.get("model_info", {})
+        for key, val in model_info_dict.items():
+            if 'num_ctx' in key.lower() or 'context_length' in key.lower():
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+        
+        return 2048  # Ollama default
