@@ -3,11 +3,21 @@ import subprocess
 import time
 import urllib.parse
 import argparse
+from enum import Enum
 from bs4 import BeautifulSoup
 from i18n import get_text, set_language, get_available_languages
 
 OLLAMA_URL = "http://localhost:11434"
 CONTEXT_SIZES = [8192, 16384, 32768, 65536, 131072, 262144]
+
+
+class RestartMethod(Enum):
+    """Методы перезапуска Ollama"""
+    SYSTEMCTL = "systemctl"
+    DOCKER = "docker"
+    KILL_START = "kill_start"
+    MANUAL = "manual"
+
 
 def get_vram_usage():
     try:
@@ -18,10 +28,48 @@ def get_vram_usage():
     except Exception:
         return 0
 
-def restart_ollama():
+def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: bool = False):
+    """Перезапуск Ollama с указанным методом.
+    
+    Args:
+        method: Метод перезапуска (SYSTEMCTL, DOCKER, KILL_START, MANUAL)
+        no_restart: Если True, перезапуск не выполняется
+    """
+    if no_restart:
+        print(get_text("restart_ollama_disabled"))
+        return
+    
     print(get_text("restart_ollama"))
-    subprocess.run(['sudo', 'systemctl', 'restart', 'ollama'])
-    time.sleep(4)
+    
+    try:
+        if method == RestartMethod.SYSTEMCTL:
+            cmd = ['sudo', 'systemctl', 'restart', 'ollama']
+        elif method == RestartMethod.DOCKER:
+            cmd = ['docker', 'restart', 'ollama']
+        elif method == RestartMethod.KILL_START:
+            subprocess.run(['sudo', 'systemctl', 'stop', 'ollama'], check=False)
+            time.sleep(1)
+            cmd = ['sudo', 'systemctl', 'start', 'ollama']
+        elif method == RestartMethod.MANUAL:
+            cmd = ['ollama', 'restart']
+        else:
+            print(get_text("error_unknown_restart_method", method=method.value))
+            return
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(get_text("error_restart_command", cmd=' '.join(cmd), stderr=result.stderr))
+        else:
+            print(get_text("restart_success"))
+        
+        time.sleep(4)
+    except FileNotFoundError:
+        fallback_cmd = ['ollama', 'restart'] if method == RestartMethod.MANUAL else ['systemctl', 'restart', 'ollama']
+        print(get_text("error_restart_command_not_found", cmd=' '.join(fallback_cmd)))
+    except PermissionError:
+        print(get_text("error_restart_permission"))
+    except Exception as e:
+        print(get_text("error_restart_unknown", error=str(e)))
 
 def get_capabilities_from_ollama_site(model_name):
     base_name = model_name.split(':')[0]
@@ -270,7 +318,7 @@ def main():
             continue
 
         for ctx in valid_contexts:
-            restart_ollama()
+            restart_ollama(args.restart_method, args.no_restart)
             
             print(get_text("warming_up", ctx=ctx))
             tps, vram, error_msg = run_benchmark(model_name, ctx)
