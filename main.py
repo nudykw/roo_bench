@@ -196,6 +196,15 @@ def run_benchmark_workflow(config: OllamaConfig, args):
 
 def main():
     """Main entry point function."""
+    try:
+        _main_impl()
+    except KeyboardInterrupt:
+        from i18n import get_text
+        print("\n" + get_text("benchmark_interrupted"))
+
+
+def _main_impl():
+    """Main implementation separated for clean exception handling."""
     # Parse arguments
     args = parse_args()
 
