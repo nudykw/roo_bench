@@ -10,6 +10,40 @@ from i18n import get_text, set_language, get_available_languages
 OLLAMA_URL = "http://localhost:11434"
 CONTEXT_SIZES = [8192, 16384, 32768, 65536, 131072, 262144]
 
+def get_context_sizes(args):
+    """Получение списка контекстов из аргументов CLI.
+    
+    Args:
+        args: Пarsed arguments from argparse
+        
+    Returns:
+        list: Список размеров контекста
+    """
+    # Если указан --context-sizes-auto, генерируем геометрическую прогрессию
+    if args.context_sizes_auto:
+        sizes = []
+        current = 8192
+        while current <= 262144:
+            sizes.append(current)
+            current *= 2
+        return sizes
+    
+    # Если указан --context-sizes, парсим из строки
+    if args.context_sizes:
+        try:
+            sizes = [int(x.strip()) for x in args.context_sizes.split(',')]
+            if all(s > 0 for s in sizes):
+                return sorted(sizes)
+            else:
+                print(get_text("error_invalid_context_size", sizes=args.context_sizes))
+                return CONTEXT_SIZES
+        except ValueError:
+            print(get_text("error_invalid_context_size", sizes=args.context_sizes))
+            return CONTEXT_SIZES
+    
+    # Иначе используем дефолтные
+    return CONTEXT_SIZES
+
 
 class RestartMethod(Enum):
     """Методы перезапуска Ollama"""
@@ -536,6 +570,9 @@ def main():
 
     results = {}
 
+    # Получаем список контекстов из аргументов
+    context_sizes = get_context_sizes(args)
+    
     for m in test_models:
         model_name = m["name"]
         max_ctx = m["max_ctx"]
@@ -546,9 +583,9 @@ def main():
         results[model_name] = []
         
         # Фильтруем контексты: берем только те, что МЕНЬШЕ ИЛИ РАВНЫ максимальному
-        valid_contexts = [c for c in CONTEXT_SIZES if c <= max_ctx]
+        valid_contexts = [c for c in context_sizes if c <= max_ctx]
         
-        # Если модель поддерживает какой-то "нестандартный" макс. контекст (например 128000), 
+        # Если модель поддерживает какой-то "нестандартный" макс. контекст (например 128000),
         # которого нет в нашем списке, но он меньше 256K, можем добавить его для теста
         if max_ctx not in valid_contexts and max_ctx > 0 and max_ctx <= 262144:
             valid_contexts.append(max_ctx)
