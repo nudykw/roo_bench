@@ -8,7 +8,7 @@ from i18n import set_language
 from config import OllamaConfig
 from cli import parse_args, get_context_sizes
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
-from api.client_factory import ApiClientFactory
+from api.factory import ApiClientFactory
 from system.restart_manager import restart_ollama, RestartMethod
 from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
@@ -280,7 +280,7 @@ def _main_impl():
     # Handle --update-cache flag
     if getattr(args, 'update_cache', False):
         from api.capabilities_fetcher import CapabilitiesFetcher
-        from api.client_factory import ApiClientFactory
+        from api.factory import ApiClientFactory
         
         config = get_ollama_config(args)
         print("Updating capabilities cache...")

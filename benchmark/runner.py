@@ -1,6 +1,6 @@
 """Core benchmark execution orchestration."""
 
-from api.client_factory import BaseApiClient
+from api.base_client import BaseApiClient
 from system.restart_manager import restart_ollama, RestartMethod
 from benchmark.results import calculate_statistics
 from i18n import get_text
