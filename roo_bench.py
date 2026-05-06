@@ -136,37 +136,168 @@ def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: 
         print(get_text("error_restart_unknown", error=str(e)))
 
 def get_capabilities_from_ollama_site(model_name):
+    """Получение capabilities модели из Ollama API или HTML парсинга.
+    
+    Args:
+        model_name: Имя модели (например, "llama3.2" или "dev-qwen2")
+        
+    Returns:
+        tuple: (vision, tools, thinking) - статусы возможностей
+    """
     base_name = model_name.split(':')[0]
     if base_name.startswith('dev-'):
         base_name = base_name[4:]
 
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # Попытка 1: Использование Ollama API
+    try:
+        api_url = f"https://ollama.com/api/library/{base_name}"
+        response = requests.get(api_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        
+        if response.status_code == 200:
+            # API возвращает JSON с информацией о модели
+            data = response.json()
+            model_info = data.get("model", {})
+            
+            # Ищем capabilities в JSON ответе
+            # API может возвращать capabilities в разных форматах
+            capabilities = model_info.get("capabilities", {})
+            
+            vision = "✅" if capabilities.get("vision") else "❌"
+            tools = "✅" if capabilities.get("tools") else "❌"
+            thinking = "✅" if capabilities.get("thinking") else "❌"
+            
+            if vision != "❌" or tools != "❌" or thinking != "❌":
+                return vision, tools, thinking
+            
+            # Если capabilities нет в JSON, пробуем поискать в других полях
+            model_str = str(model_info).lower()
+            if "vision" in model_str:
+                vision = "✅"
+            if "tools" in model_str or "tool use" in model_str:
+                tools = "✅"
+            if "thinking" in model_str or "reasoning" in model_str:
+                thinking = "✅"
+            
+            if vision != "❓" or tools != "❓" or thinking != "❓":
+                return vision, tools, thinking
+        
+        # Если API вернул ошибку или не содержит нужной информации, пробуем HTML парсинг
+        if response.status_code != 200:
+            # Пробуем поиск через search API
+            search_url = f"https://ollama.com/api/search?q={urllib.parse.quote(base_name)}"
+            search_resp = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+            if search_resp.status_code == 200:
+                search_data = search_resp.json()
+                for item in search_data.get("results", []):
+                    if item.get("name") == base_name:
+                        # Получаем capabilities из search results
+                        caps = item.get("capabilities", {})
+                        vision = "✅" if caps.get("vision") else "❌"
+                        tools = "✅" if caps.get("tools") else "❌"
+                        thinking = "✅" if caps.get("thinking") else "❌"
+                        return vision, tools, thinking
+                return "❓", "❓", "❌"
     
+    except requests.exceptions.Timeout:
+        print(f"⚠️  Timeout при запросе к Ollama API для {base_name}, используем HTML парсинг")
+    except requests.exceptions.ConnectionError:
+        print(f"⚠️  ConnectionError при запросе к Ollama API для {base_name}, используем HTML парсинг")
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code in [404, 500]:
+            print(f"⚠️  HTTP {e.response.status_code} от Ollama API для {base_name}, используем HTML парсинг")
+        else:
+            raise
+    except Exception as e:
+        print(f"⚠️  Ошибка при запросе к Ollama API для {base_name}: {e}, используем HTML парсинг")
+
+    # Fallback: HTML парсинг с более надёжными селекторами
     try:
         url = f"https://ollama.com/library/{base_name}"
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         
         if response.status_code != 200:
+            # Пробуем поиск через HTML
             search_url = f"https://ollama.com/search?q={urllib.parse.quote(base_name)}"
-            search_resp = requests.get(search_url, headers=headers, timeout=5)
+            search_resp = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
             if search_resp.status_code == 200:
                 soup = BeautifulSoup(search_resp.text, 'html.parser')
                 link = soup.find('a', href=lambda href: href and '/library/' in href)
                 if link:
                     url = "https://ollama.com" + link['href']
-                    response = requests.get(url, headers=headers, timeout=5)
-
+                    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            page_text = soup.get_text().lower()
             
+            # Более надёжный парсинг: ищем конкретные элементы
+            # Ищем capabilities section или description с ключевыми словами
+            
+            # Метод 1: Поиск через data-атрибуты или специфичные классы
+            capabilities_section = soup.find('div', class_=lambda c: c and 'capabilities' in c.lower())
+            if capabilities_section:
+                caps_text = capabilities_section.get_text().lower()
+                vision = "✅" if "vision" in caps_text else "❌"
+                tools = "✅" if "tools" in caps_text or "tool use" in caps_text else "❌"
+                thinking = "✅" if "thinking" in caps_text or "reasoning" in caps_text else "❌"
+                return vision, tools, thinking
+            
+            # Метод 2: Поиск через description/summary
+            description = soup.find('div', class_='description') or soup.find('div', class_='summary')
+            if description:
+                desc_text = description.get_text().lower()
+                vision = "✅" if "vision" in desc_text or "multimodal" in desc_text else "❌"
+                tools = "✅" if "tools" in desc_text or "tool use" in desc_text else "❌"
+                thinking = "✅" if "thinking" in desc_text or "reasoning" in desc_text else "❌"
+                return vision, tools, thinking
+            
+            # Метод 3: Поиск через JSON-LD (если есть)
+            json_ld = soup.find('script', type='application/ld+json')
+            if json_ld:
+                try:
+                    import json
+                    ld_data = json.loads(json_ld.string)
+                    if isinstance(ld_data, dict):
+                        capabilities = ld_data.get('capability', {})
+                        if isinstance(capabilities, dict):
+                            vision = "✅" if capabilities.get('vision') else "❌"
+                            tools = "✅" if capabilities.get('tools') else "❌"
+                            thinking = "✅" if capabilities.get('thinking') else "❌"
+                            return vision, tools, thinking
+                except json.JSONDecodeError:
+                    pass
+            
+            # Метод 4: Поиск через alt-текст изображений (иконки capabilities)
+            vision_icon = soup.find('img', alt=lambda alt: alt and 'vision' in alt.lower())
+            tools_icon = soup.find('img', alt=lambda alt: alt and 'tools' in alt.lower())
+            thinking_icon = soup.find('img', alt=lambda alt: alt and 'thinking' in alt.lower() or 'reasoning' in alt.lower())
+            
+            vision = "✅" if vision_icon else "❌"
+            tools = "✅" if tools_icon else "❌"
+            thinking = "✅" if thinking_icon else "❌"
+            
+            if vision != "❓" or tools != "❓" or thinking != "❓":
+                return vision, tools, thinking
+            
+            # Метод 5: Финальный fallback - поиск в тексте страницы
+            page_text = soup.get_text().lower()
             vision = "✅" if "vision" in page_text else "❌"
             tools = "✅" if "tools" in page_text or "tool use" in page_text else "❌"
-            thinking = "✅" if "thinking" in page_text or "reasoning" in page_text or "deepseek" in base_name else "❌"
+            thinking = "✅" if "thinking" in page_text or "reasoning" in page_text or "deepseek" in base_name.lower() else "❌"
+            
             return vision, tools, thinking
             
-    except Exception:
-        pass
+    except requests.exceptions.Timeout:
+        print(f"⚠️  Timeout при HTML парсинге для {base_name}")
+    except requests.exceptions.ConnectionError:
+        print(f"⚠️  ConnectionError при HTML парсинге для {base_name}")
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code in [404, 500]:
+            print(f"⚠️  HTTP {e.response.status_code} при HTML парсинге для {base_name}")
+        else:
+            raise
+    except Exception as e:
+        print(f"⚠️  Ошибка при HTML парсинге для {base_name}: {e}")
+
     return "❓", "❓", "❓"
 
 def get_models():
