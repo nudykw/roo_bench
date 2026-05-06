@@ -95,9 +95,9 @@ The project uses a modular architecture. You can run it in two ways:
 ./venv/bin/python main.py --models llama3.2,qwen2.5
 
 # Filter models by capabilities
-./venv/bin/python main.py --of v  # Only vision models
-./venv/bin/python main.py --of T  # Only models with tool use
-./venv/bin/python main.py --of vt  # Vision + Tools
+./venv/bin/python main.py --capabilities v  # Only vision models
+./venv/bin/python main.py --capabilities T  # Only models with tool use
+./venv/bin/python main.py --capabilities vt  # Vision + Tools
 ```
 
 #### Running via roo_bench.py (Backward Compatible)
@@ -145,7 +145,7 @@ The project uses a modular architecture. You can run it in two ways:
 ./venv/bin/python roo_bench.py \
   --models llama3.2,qwen2.5 \
   --lang ua \
-  --of v \
+  --capabilities v \
   --num-runs 3 \
   --context-sizes 8192,16384,32768 \
   --output benchmark_results.json \
@@ -171,7 +171,7 @@ The cache is also automatically saved after model discovery during benchmark run
 |----------|-------------|---------|
 | `-v, --verbose` | Increase verbosity level (`-v`, `-vv`, `-vvv` for debug output) | 0 |
 | `--models` | Comma-separated list of model names | All available |
-| `--of` | Filter by capabilities: `v` (vision), `T` (tools), `t` (thinking) | None |
+| `--capabilities, -f` | Filter by capabilities: `v` (vision), `T` (tools), `t` (thinking) | None |
 | `--lang` | Interface language: `en` or `ua` | `en` |
 | `--restart-method` | Ollama restart method: `systemctl`, `docker`, `kill_start`, `manual`, `ssh` | `systemctl` |
 | `--no-restart` | Skip Ollama restart before benchmark | False |
@@ -179,7 +179,7 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--ssh-user` | SSH user (optional if user@host format used) | None |
 | `--ssh-port` | SSH port | `22` |
 | `--ssh-key` | Path to SSH private key (auto-detected if not specified) | None |
-| `--num-runs` | Number of benchmark runs per context | `1` |
+| `--num-runs` | Number of benchmark runs per context | `3` |
 | `--context-sizes` | Comma-separated context sizes to test | Auto-detect |
 | `--context-sizes-auto` | Auto-generate context sizes | False |
 | `--output` | Output file path | None |
@@ -454,9 +454,9 @@ chmod +x roo_bench.py
 ./venv/bin/python main.py --models llama3.2,qwen2.5
 
 # Фільтрувати моделі за можливостями
-./venv/bin/python main.py --of v  # Тільки візіон моделі
-./venv/bin/python main.py --of T  # Тільки моделі з інструментами
-./venv/bin/python main.py --of vt  # Візіон + Інструменти
+./venv/bin/python main.py --capabilities v  # Тільки візіон моделі
+./venv/bin/python main.py --capabilities T  # Тільки моделі з інструментами
+./venv/bin/python main.py --capabilities vt  # Візіон + Інструменти
 ```
 
 #### Запуск через roo_bench.py (Зворотна сумісність)
@@ -504,7 +504,7 @@ chmod +x roo_bench.py
 ./venv/bin/python roo_bench.py \
   --models llama3.2,qwen2.5 \
   --lang ua \
-  --of v \
+  --capabilities v \
   --num-runs 3 \
   --context-sizes 8192,16384,32768 \
   --output benchmark_results.json \
@@ -530,7 +530,7 @@ Roo Bench автоматично кешує можливості моделей 
 |----------|------|------------------|
 | `-v, --verbose` | Збільшити рівень деталізації (`-v`, `-vv`, `-vvv` для відладки) | 0 |
 | `--models` | Список імен моделей через кому | Усі доступні |
-| `--of` | Фільтр за можливостями: `v` (візіон), `T` (інструменти), `t` (thinking) | None |
+| `--capabilities, -f` | Фільтр за можливостями: `v` (візіон), `T` (інструменти), `t` (thinking) | None |
 | `--lang` | Мова інтерфейсу: `en` або `ua` | `en` |
 | `--restart-method` | Метод перезапуску Ollama: `systemctl`, `docker`, `kill_start`, `manual`, `ssh` | `systemctl` |
 | `--no-restart` | Пропустити перезапуск Ollama перед бенчмарком | False |
@@ -538,7 +538,7 @@ Roo Bench автоматично кешує можливості моделей 
 | `--ssh-user` | SSH користувач (опціонально, якщо використовується формат user@host) | None |
 | `--ssh-port` | SSH порт | `22` |
 | `--ssh-key` | Шлях до приватного SSH ключа (авто-виявлення, якщо не вказано) | None |
-| `--num-runs` | Кількість запусків бенчмарку на контекст | `1` |
+| `--num-runs` | Кількість запусків бенчмарку на контекст | `3` |
 | `--context-sizes` | Розміри контексту для тестування через кому | Авто-виявлення |
 | `--context-sizes-auto` | Авто-генерація розмірів контексту | False |
 | `--output` | Шлях до файлу виводу | None |
