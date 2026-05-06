@@ -358,9 +358,16 @@ def get_capabilities_from_ollama_site(model_name):
 
     return "❓", "❓", "❓"
 
-def get_models():
+def get_models(config=None):
+    """Get models from Ollama server.
+    
+    Args:
+        config: OllamaConfig object (optional, uses global OLLAMA_URL if not provided)
+    """
     try:
-        response = requests.get(f"{OLLAMA_URL}/api/tags")
+        base_url = config.base_url if config else OLLAMA_URL
+        headers = config.get_headers() if config else {}
+        response = requests.get(f"{base_url}/api/tags", headers=headers)
         models = []
         for m in response.json().get("models",[]):
             details = m.get("details", {})
@@ -394,15 +401,17 @@ def get_models():
         print(get_text("error_ollama_connection", error=str(e)))
         return []
 
+
 import math
 
-def run_benchmark(model_name, context_size, num_runs=3):
+def run_benchmark(model_name, context_size, num_runs=3, config=None):
     """Run benchmark for a model with multiple runs for averaging.
     
     Args:
         model_name: Model name
         context_size: Context size
         num_runs: Number of runs for averaging (default: 3)
+        config: OllamaConfig object (optional, uses global OLLAMA_URL if not provided)
         
     Returns:
         tuple: (avg_tps, vram, tps_list, error)
@@ -416,6 +425,10 @@ def run_benchmark(model_name, context_size, num_runs=3):
     tps_list = []
     vram = None
     error = None
+    
+    base_url = config.base_url if config else OLLAMA_URL
+    headers = config.get_headers() if config else {}
+    timeout = config.timeout if config else 300
     
     for run_num in range(num_runs):
         payload = {
@@ -431,7 +444,7 @@ def run_benchmark(model_name, context_size, num_runs=3):
         response = None
         
         try:
-            response = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=300)
+            response = requests.post(f"{base_url}/api/generate", json=payload, headers=headers, timeout=timeout)
             
             if response.status_code != 200:
                 try:
@@ -484,6 +497,202 @@ def run_benchmark(model_name, context_size, num_runs=3):
         return avg_tps, vram, tps_list, None
     else:
         return 0.0, None, [], error
+
+
+def _run_benchmark(config, args):
+    """Main benchmark logic extracted from main().
+    
+    Args:
+        config: OllamaConfig object
+        args: Parsed arguments
+    """
+    print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
+    print(get_text("scanning_models"))
+    models = get_models(config)
+    
+    if not models:
+        return
+
+    for m in models:
+        vision, tools, thinking = get_capabilities_from_ollama_site(m["name"])
+        m["vision"] = vision
+        m["tools"] = tools
+        m["thinking"] = thinking
+
+    if args.of:
+        print(get_text("filter_applied", of=args.of))
+        filtered=[]
+        for m in models:
+            keep = True
+            if 'v' in args.of and m["vision"] != "✅": keep = False
+            if 'T' in args.of and m["tools"] != "✅": keep = False
+            if 't' in args.of and m["thinking"] != "✅": keep = False
+            if keep: filtered.append(m)
+        models = filtered
+        if not models:
+            print(get_text("no_models_match_filter"))
+            return
+
+    test_models=[]
+
+    if args.models:
+        target_names = [name.strip() for name in args.models.split(',')]
+        test_models = [m for m in models if m['name'] in target_names]
+        
+        found_names = [m['name'] for m in test_models]
+        not_found = [name for name in target_names if name not in found_names]
+        if not_found:
+            print(get_text("no_models_found", models=', '.join(not_found)))
+        if not test_models:
+            print(get_text("no_test_models"))
+            return
+    else:
+        print(get_text("available_models"))
+        for i, m in enumerate(models):
+            # Convert max context to readable format 'K'
+            max_ctx_str = f"{m['max_ctx'] // 1024}K" if m['max_ctx'] >= 1024 else str(m['max_ctx'])
+            
+            print(get_text("model_list_header",
+                index=i,
+                name=m['name'],
+                params=m['params'],
+                size_gb=m['size_gb'],
+                max_ctx_str=max_ctx_str,
+                vision=m['vision'],
+                tools=m['tools'],
+                thinking=m['thinking']))
+        
+        selected_idx = input(get_text("select_models") + "\n")
+        if selected_idx.strip().lower() == 'all':
+            test_models = models
+        else:
+            try:
+                indices = [int(x.strip()) for x in selected_idx.split(",")]
+                test_models = [models[i] for i in indices]
+            except (ValueError, IndexError):
+                print(get_text("invalid_input"))
+                return
+
+    model_names_for_cmd = ",".join([m["name"] for m in test_models])
+    # Use sys.executable for portability and absolute path to script
+    script_name = os.path.basename(sys.argv[0])
+    cmd_str = f"sudo {sys.executable} {script_name} --models {model_names_for_cmd}"  # Use sys.executable for portability
+    if args.of:
+        cmd_str += f" --of {args.of}"
+    
+    print("\n" + "="*60)
+    print(get_text("repeated_run_header"))
+    print(f"   {cmd_str}")
+    print("="*60 + "\n")
+
+    results = {}
+
+    # Get list of context sizes from arguments
+    context_sizes = get_context_sizes(args)
+    
+    for m in test_models:
+        model_name = m["name"]
+        max_ctx = m["max_ctx"]
+        max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
+        
+        print(get_text("testing_model", model_name=model_name))
+        print(get_text("model_size", size_gb=m['size_gb'], max_ctx_str=max_ctx_str))
+        results[model_name] = []
+        
+        # Filter contexts: take only those that are LESS THAN OR EQUAL to maximum
+        valid_contexts = [c for c in context_sizes if c <= max_ctx]
+        
+        # If the model supports some "non-standard" max context (e.g. 128000),
+        # which is not in our list, but it's less than 256K, we can add it for testing
+        if max_ctx not in valid_contexts and max_ctx > 0 and max_ctx <= 262144:
+            valid_contexts.append(max_ctx)
+            valid_contexts.sort()
+
+        if not valid_contexts:
+            print(get_text("skipping_no_contexts"))
+            continue
+
+        for ctx in valid_contexts:
+            restart_ollama(args.restart_method, args.no_restart)
+            
+            print(get_text("warming_up", ctx=ctx))
+            avg_tps, vram, tps_list, error_msg = run_benchmark(model_name, ctx, args.num_runs, config)
+            
+            if error_msg:
+                print(get_text("benchmark_failed", error_msg=error_msg))
+                print(get_text("stopping_tests", model_name=model_name))
+                break
+                
+            # Show results of each run
+            print(get_text("benchmark_runs_header"))
+            for run in tps_list:
+                run_num = run['run']
+                tps = run['tps']
+                vram_run = run['vram']
+                if vram_run:
+                    vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
+                else:
+                    vram_str = "N/A"
+                print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
+            
+            # Show summary
+            print(get_text("benchmark_summary"))
+            print(f"   Average: {avg_tps:.2f} TPS")
+            print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
+            print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
+            
+            # Calculate std dev
+            mean = avg_tps
+            variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+            std_dev = math.sqrt(variance)
+            print(f"   Std Dev: {std_dev:.2f} TPS")
+            
+            # Save averaged results
+            results[model_name].append({
+                "ctx": ctx,
+                "avg_tps": avg_tps,
+                "min_tps": min(r['tps'] for r in tps_list),
+                "max_tps": max(r['tps'] for r in tps_list),
+                "std_dev": std_dev,
+                "vram": vram
+            })
+
+    print("\n" + "="*60)
+    print(get_text("recommendations_header"))
+    print("="*60)
+    
+    for model_name, runs in results.items():
+        if not runs:
+            print(get_text("no_successful_runs", model_name=model_name))
+            continue
+        
+        # Output results for each model
+        print("\n" + "="*60)
+        print(get_text("results_header", model_name=model_name))
+        print("="*60)
+        
+        for run in runs:
+            ctx = run['ctx']
+            ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
+            avg_tps = run['avg_tps']
+            min_tps = run['min_tps']
+            max_tps = run['max_tps']
+            std_dev = run['std_dev']
+            vram = run['vram']
+            vram_str = f"{vram / 1024 / 1024:.1f} MiB" if vram else "N/A"
+            
+            print(get_text("result_row",
+                ctx=ctx_str,
+                avg_tps=avg_tps,
+                min_tps=min_tps,
+                max_tps=max_tps,
+                std_dev=std_dev,
+                vram=vram_str))
+    
+    # Save results to file
+    save_results(results, args.output, args.output_format,
+                 [m['name'] for m in test_models], test_models, args)
+
 
 def get_top_options(runs, min_tps):
     valid = [r for r in runs if r['tps'] >= min_tps]
@@ -571,7 +780,7 @@ def save_results(results, output_file, output_format, model_names, test_models, 
             print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
 
 def main():
-    global _current_language
+    global _current_language, OLLAMA_URL
     
     # Initialize default language
     if _current_language is None:
@@ -598,196 +807,19 @@ def main():
     # Set language
     set_language(args.lang)
     
-    # Initialize Ollama configuration
+    # Initialize Ollama configuration (Step 4: Update Initialization)
     config = get_ollama_config(args)
+    
+    # Save original URL and update for all functions
+    original_ollama_url = OLLAMA_URL
     OLLAMA_URL = config.base_url
     
-    print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
-    print(get_text("scanning_models"))
-    models = get_models()
-    
-    if not models:
-        return
+    try:
+        _run_benchmark(config, args)
+    finally:
+        # Restore original URL
+        OLLAMA_URL = original_ollama_url
 
-    for m in models:
-        vision, tools, thinking = get_capabilities_from_ollama_site(m["name"])
-        m["vision"] = vision
-        m["tools"] = tools
-        m["thinking"] = thinking
-
-    if args.of:
-        print(get_text("filter_applied", of=args.of))
-        filtered=[]
-        for m in models:
-            keep = True
-            if 'v' in args.of and m["vision"] != "✅": keep = False
-            if 'T' in args.of and m["tools"] != "✅": keep = False
-            if 't' in args.of and m["thinking"] != "✅": keep = False
-            if keep: filtered.append(m)
-        models = filtered
-        if not models:
-            print(get_text("no_models_match_filter"))
-            return
-
-    test_models=[]
-
-    if args.models:
-        target_names = [name.strip() for name in args.models.split(',')]
-        test_models = [m for m in models if m['name'] in target_names]
-        
-        found_names = [m['name'] for m in test_models]
-        not_found = [name for name in target_names if name not in found_names]
-        if not_found:
-            print(get_text("no_models_found", models=', '.join(not_found)))
-        if not test_models:
-            print(get_text("no_test_models"))
-            return
-    else:
-        print(get_text("available_models"))
-        for i, m in enumerate(models):
-            # Convert max context to readable format 'K'
-            max_ctx_str = f"{m['max_ctx'] // 1024}K" if m['max_ctx'] >= 1024 else str(m['max_ctx'])
-            
-            print(get_text("model_list_header", 
-                index=i, 
-                name=m['name'], 
-                params=m['params'], 
-                size_gb=m['size_gb'], 
-                max_ctx_str=max_ctx_str,
-                vision=m['vision'], 
-                tools=m['tools'], 
-                thinking=m['thinking']))
-        
-        selected_idx = input(get_text("select_models") + "\n")
-        if selected_idx.strip().lower() == 'all':
-            test_models = models
-        else:
-            try:
-                indices = [int(x.strip()) for x in selected_idx.split(",")]
-                test_models = [models[i] for i in indices]
-            except (ValueError, IndexError):
-                print(get_text("invalid_input"))
-                return
-
-    model_names_for_cmd = ",".join([m["name"] for m in test_models])
-    # Use sys.executable for portability and absolute path to script
-    script_name = os.path.basename(sys.argv[0])
-    cmd_str = f"sudo {sys.executable} {script_name} --models {model_names_for_cmd}"  # Use sys.executable for portability
-    if args.of:
-        cmd_str += f" --of {args.of}"
-    
-    print("\n" + "="*60)
-    print(get_text("repeated_run_header"))
-    print(f"   {cmd_str}")
-    print("="*60 + "\n")
-
-    results = {}
-
-    # Get list of context sizes from arguments
-    context_sizes = get_context_sizes(args)
-    
-    for m in test_models:
-        model_name = m["name"]
-        max_ctx = m["max_ctx"]
-        max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
-        
-        print(get_text("testing_model", model_name=model_name))
-        print(get_text("model_size", size_gb=m['size_gb'], max_ctx_str=max_ctx_str))
-        results[model_name] = []
-        
-        # Filter contexts: take only those that are LESS THAN OR EQUAL to maximum
-        valid_contexts = [c for c in context_sizes if c <= max_ctx]
-        
-        # If the model supports some "non-standard" max context (e.g. 128000),
-        # which is not in our list, but it's less than 256K, we can add it for testing
-        if max_ctx not in valid_contexts and max_ctx > 0 and max_ctx <= 262144:
-            valid_contexts.append(max_ctx)
-            valid_contexts.sort()
-
-        if not valid_contexts:
-            print(get_text("skipping_no_contexts"))
-            continue
-
-        for ctx in valid_contexts:
-            restart_ollama(args.restart_method, args.no_restart)
-            
-            print(get_text("warming_up", ctx=ctx))
-            avg_tps, vram, tps_list, error_msg = run_benchmark(model_name, ctx, args.num_runs)
-            
-            if error_msg:
-                print(get_text("benchmark_failed", error_msg=error_msg))
-                print(get_text("stopping_tests", model_name=model_name))
-                break
-                
-            # Show results of each run
-            print(get_text("benchmark_runs_header"))
-            for run in tps_list:
-                run_num = run['run']
-                tps = run['tps']
-                vram_run = run['vram']
-                if vram_run:
-                    vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
-                else:
-                    vram_str = "N/A"
-                print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
-            
-            # Show summary
-            print(get_text("benchmark_summary"))
-            print(f"   Average: {avg_tps:.2f} TPS")
-            print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
-            print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
-            
-            # Calculate std dev
-            mean = avg_tps
-            variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
-            std_dev = math.sqrt(variance)
-            print(f"   Std Dev: {std_dev:.2f} TPS")
-            
-            # Save averaged results
-            results[model_name].append({
-                "ctx": ctx,
-                "avg_tps": avg_tps,
-                "min_tps": min(r['tps'] for r in tps_list),
-                "max_tps": max(r['tps'] for r in tps_list),
-                "std_dev": std_dev,
-                "vram": vram
-            })
-
-    print("\n" + "="*60)
-    print(get_text("recommendations_header"))
-    print("="*60)
-    
-    for model_name, runs in results.items():
-        if not runs:
-            print(get_text("no_successful_runs", model_name=model_name))
-            continue
-        
-        # Output results for each model
-        print("\n" + "="*60)
-        print(get_text("results_header", model_name=model_name))
-        print("="*60)
-        
-        for run in runs:
-            ctx = run['ctx']
-            ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
-            avg_tps = run['avg_tps']
-            min_tps = run['min_tps']
-            max_tps = run['max_tps']
-            std_dev = run['std_dev']
-            vram = run['vram']
-            vram_str = f"{vram / 1024 / 1024:.1f} MiB" if vram else "N/A"
-            
-            print(get_text("result_row",
-                ctx=ctx_str,
-                avg_tps=avg_tps,
-                min_tps=min_tps,
-                max_tps=max_tps,
-                std_dev=std_dev,
-                vram=vram_str))
-    
-    # Save results to file
-    save_results(results, args.output, args.output_format,
-                 [m['name'] for m in test_models], test_models, args)
 
 if __name__ == "__main__":
     main()
