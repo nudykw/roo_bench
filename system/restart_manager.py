@@ -76,7 +76,7 @@ class RestartManager:
         Returns:
             list: Full SSH command
         """
-        cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10']
+        cmd = ['ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10']
         if self.ssh_port != 22:
             cmd.extend(['-p', str(self.ssh_port)])
         

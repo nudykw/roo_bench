@@ -154,8 +154,12 @@ The project uses a modular architecture. You can run it in two ways:
 | `--models` | Comma-separated list of model names | All available |
 | `--of` | Filter by capabilities: `v` (vision), `T` (tools), `t` (thinking) | None |
 | `--lang` | Interface language: `en` or `ua` | `en` |
-| `--restart-method` | Ollama restart method: `systemctl`, `docker`, `kill_start`, `manual` | `systemctl` |
+| `--restart-method` | Ollama restart method: `systemctl`, `docker`, `kill_start`, `manual`, `ssh` | `systemctl` |
 | `--no-restart` | Skip Ollama restart before benchmark | False |
+| `--ssh-host` | SSH host for remote restart (e.g., `user@host`) | None |
+| `--ssh-user` | SSH user (optional if user@host format used) | None |
+| `--ssh-port` | SSH port | `22` |
+| `--ssh-key` | Path to SSH private key (auto-detected if not specified) | None |
 | `--num-runs` | Number of benchmark runs per context | `1` |
 | `--context-sizes` | Comma-separated context sizes to test | Auto-detect |
 | `--context-sizes-auto` | Auto-generate context sizes | False |
@@ -197,6 +201,41 @@ export OLLAMA_API_KEY=your-api-key  # Optional
 **Option 3: Configuration file (config.json)**
 ```bash
 ./venv/bin/python roo_bench.py --config config.json
+```
+
+#### Remote Ollama Server with SSH Restart
+
+Roo Bench supports restarting Ollama on a remote machine via SSH. This is useful when running benchmarks against Ollama servers on different machines.
+
+**Prerequisites:**
+- SSH access to the remote machine
+- `sudo` access (or NOPASSWD configured for systemctl)
+- SSH key recommended (auto-detected from `~/.ssh/`)
+
+**Basic usage:**
+```bash
+# Restart Ollama on remote machine via SSH
+./venv/bin/python roo_bench.py \
+  --restart-method ssh \
+  --ssh-host user@192.168.1.100 \
+  --ollama-url http://192.168.1.100:11434
+
+# With custom SSH port and key
+./venv/bin/python roo_bench.py \
+  --restart-method ssh \
+  --ssh-host user@192.168.1.100 \
+  --ssh-port 2222 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --ollama-url http://192.168.1.100:11434
+```
+
+**Note:** If `--ssh-key` is not specified, the tool auto-detects keys from `~/.ssh/` (ed25519, rsa, dsa, ecdsa in that order).
+
+To avoid password prompts, configure NOPASSWD sudo on the remote machine:
+```bash
+# On remote machine:
+echo 'username ALL=(ALL) NOPASSWD: /usr/bin/systemctl' | sudo tee /etc/sudoers.d/ollama
+sudo chmod 440 /etc/sudoers.d/ollama
 ```
 
 See `config.example.json` for the configuration file structure.
@@ -430,8 +469,12 @@ chmod +x roo_bench.py
 | `--models` | Список імен моделей через кому | Усі доступні |
 | `--of` | Фільтр за можливостями: `v` (візіон), `T` (інструменти), `t` (thinking) | None |
 | `--lang` | Мова інтерфейсу: `en` або `ua` | `en` |
-| `--restart-method` | Метод перезапуску Ollama: `systemctl`, `docker`, `kill_start`, `manual` | `systemctl` |
+| `--restart-method` | Метод перезапуску Ollama: `systemctl`, `docker`, `kill_start`, `manual`, `ssh` | `systemctl` |
 | `--no-restart` | Пропустити перезапуск Ollama перед бенчмарком | False |
+| `--ssh-host` | SSH хост для віддаленого перезапуску (напр., `user@host`) | None |
+| `--ssh-user` | SSH користувач (опціонально, якщо використовується формат user@host) | None |
+| `--ssh-port` | SSH порт | `22` |
+| `--ssh-key` | Шлях до приватного SSH ключа (авто-виявлення, якщо не вказано) | None |
 | `--num-runs` | Кількість запусків бенчмарку на контекст | `1` |
 | `--context-sizes` | Розміри контексту для тестування через кому | Авто-виявлення |
 | `--context-sizes-auto` | Авто-генерація розмірів контексту | False |
@@ -468,6 +511,41 @@ export OLLAMA_API_KEY=your-api-key  # Опціонально
 Дивіться `config.example.json` для структури файлу конфігурації.
 
 **Пріоритет конфігурації:** CLI > Змінні середовища > Файл конфігурації
+
+#### Віддалений перезапуск через SSH
+
+Roo Bench підтримує перезапуск Ollama на віддаленій машині через SSH. Це корисно, коли бенчмарк запускається проти серверів Ollama на різних машинах.
+
+**Передумови:**
+- SSH доступ до віддаленої машини
+- Доступ `sudo` (або NOPASSWD налаштовано для systemctl)
+- Рекомендується SSH ключ (авто-виявлення з `~/.ssh/`)
+
+**Базове використання:**
+```bash
+# Перезапустити Ollama на віддаленій машині через SSH
+./venv/bin/python roo_bench.py \
+  --restart-method ssh \
+  --ssh-host user@192.168.1.100 \
+  --ollama-url http://192.168.1.100:11434
+
+# З нестандартним портом SSH та ключем
+./venv/bin/python roo_bench.py \
+  --restart-method ssh \
+  --ssh-host user@192.168.1.100 \
+  --ssh-port 2222 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --ollama-url http://192.168.1.100:11434
+```
+
+**Примітка:** Якщо `--ssh-key` не вказано, інструмент автоматично виявляє ключі з `~/.ssh/` (ed25519, rsa, dsa, ecdsa у цьому порядку).
+
+Щоб уникнути запитів пароля, налаштуйте NOPASSWD sudo на віддаленій машині:
+```bash
+# На віддаленій машині:
+echo 'username ALL=(ALL) NOPASSWD: /usr/bin/systemctl' | sudo tee /etc/sudoers.d/ollama
+sudo chmod 440 /etc/sudoers.d/ollama
+```
 
 #### Змінні середовища
 
