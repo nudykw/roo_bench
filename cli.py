@@ -15,7 +15,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description=get_text("cli_help"))
     parser.add_argument('--models', type=str, help=get_text("cli_models"))
-    parser.add_argument('--of', type=str, help=get_text("cli_of"))
+    parser.add_argument('--capabilities', '-f', type=str, help=get_text("cli_capabilities"))
     parser.add_argument('--lang', type=str, choices=get_available_languages(),
                         default=_current_language if _current_language else "en",
                         help=get_text("cli_lang"))

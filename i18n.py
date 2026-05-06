@@ -7,7 +7,7 @@
 TRANSLATIONS = {
     "en": {
         "app_title": "Roo Code Model Benchmark",
-        "scanning_models": "Scanning local models and gathering data from ollama.com...",
+        "scanning_models": "Scanning models and gathering data from ollama.com...",
         "available_models": "Available models:",
         "model_list_header": "[{index}] {name:<25} | {params:<5} | Size: {size_gb:4.1f} GB | MaxCtx: {max_ctx_str:>4} | Vision: {vision} | Tools: {tools} | Think: {thinking}",
         "select_models": "Enter model numbers separated by commas (or 'all'): ",
@@ -33,7 +33,7 @@ TRANSLATIONS = {
         "restart_ollama": "🔄 Clearing memory (restarting Ollama)...",
         "cli_help": "Roo Code Model Benchmark",
         "cli_models": "List of models separated by comma",
-        "cli_of": "Filter: v (Vision), T (Tools), t (Think). Example: --of vT",
+        "cli_capabilities": "Capabilities filter: v (Vision), T (Tools), t (Think). Example: --capabilities vT or -f vT",
         "cli_lang": "Language (en or ua)",
         "cli_restart_method": "Restart method: systemctl, docker, kill_start, manual",
         "cli_no_restart": "Disable Ollama restart",
@@ -55,7 +55,7 @@ TRANSLATIONS = {
         "error_timeout": "Timeout: model was generating response too long (more than 300 seconds).",
         "error_crash": "Crash/OOM: Ollama process unexpectedly terminated (RAM/VRAM shortage).",
         "error_unknown": "Unknown error: {error_details}",
-        "filter_applied": "🔍 Filter applied: {of}",
+        "filter_applied": "🔍 Capabilities filter applied: {capabilities}",
         "no_models_match_filter": "❌ No models match the specified filters.",
         "skipping_no_contexts": "  ⏭️  Skipping: Could not determine valid context sizes for testing.",
         "output_json": "Results saved to {output_file} (JSON)",
@@ -75,7 +75,7 @@ TRANSLATIONS = {
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
-        "scanning_models": "Сканирование локальних моделей і збір даних з ollama.com...",
+        "scanning_models": "Сканирование моделей і збір даних з ollama.com...",
         "available_models": "Доступні моделі:",
         "model_list_header": "[{index}] {name:<25} | {params:<5} | Розмір: {size_gb:4.1f} GB | MaxCtx: {max_ctx_str:>4} | Vision: {vision} | Tools: {tools} | Think: {thinking}",
         "select_models": "Введіть номери моделей через запятую (або 'all'): ",
@@ -101,7 +101,7 @@ TRANSLATIONS = {
         "restart_ollama": "🔄 Очистка пам'яті (перезапуск Ollama)...",
         "cli_help": "Roo Code Model Benchmark",
         "cli_models": "Список моделей через запятую",
-        "cli_of": "Фільтр: v (Vision), T (Tools), t (Think). Приклад: --of vT",
+        "cli_capabilities": "Фільтр можливостей: v (Vision), T (Tools), t (Think). Приклад: --capabilities vT або -f vT",
         "cli_lang": "Мова (en або ua)",
         "cli_restart_method": "Метод перезапуску: systemctl, docker, kill_start, manual",
         "cli_no_restart": "Вимкнути перезапуск Ollama",
@@ -123,7 +123,7 @@ TRANSLATIONS = {
         "error_timeout": "Timeout: модель генерувала відповідь занадто довго (більше 300 секунд).",
         "error_crash": "Crash/OOM: Процес Ollama несподівано завершився (нехватка RAM/VRAM).",
         "error_unknown": "Невідома помилка: {error_details}",
-        "filter_applied": "🔍 Применен фільтр: {of}",
+        "filter_applied": "🔍 Фільтр можливостей застосовано: {capabilities}",
         "no_models_match_filter": "❌ Ні одна модель не відповідає заданим фільтрам.",
         "skipping_no_contexts": "  ⏭️  Пропуск: Не вдалося визначити валідні розміри контексту для тесту.",
         "output_json": "Результати збережено в {output_file} (JSON)",
@@ -169,13 +169,14 @@ def set_language(lang):
     return False
 
 
-def get_text(key, *args):
+def get_text(key, *args, **kwargs):
     """
     Отримує текст за ключем з поточної мови.
     
     Args:
         key: Ключ для отримання тексту
         *args: Додаткові аргументи для форматирования
+        **kwargs: Додаткові іменовані аргументи для форматирования
     
     Returns:
         str: Текст або ключ якщо мова не знайдена
@@ -194,8 +195,8 @@ def get_text(key, *args):
         text = translations[key]
         # Форматуємо текст з аргументами
         try:
-            return text.format(*args)
-        except (KeyError, IndexError):
+            return text.format(*args, **kwargs)
+        except (KeyError, IndexError, AttributeError):
             return text
     return key
 

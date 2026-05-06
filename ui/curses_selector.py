@@ -1,6 +1,7 @@
 """Interactive curses-based model selection interface."""
 
 import curses
+import sys
 from i18n import get_text, _current_language
 
 
@@ -61,6 +62,7 @@ def interactive_model_select(stdscr, models: list) -> list:
 
     def draw():
         """Draw the interface."""
+        nonlocal start_row
         stdscr.erase()
 
         # Title
@@ -76,14 +78,14 @@ def interactive_model_select(stdscr, models: list) -> list:
         header_fmt = "[ ] {name:<25} | {params:<5} | Size: {size_gb:4.1f} GB | MaxCtx: {max_ctx_str:>4} | Vision: {vision} | Tools: {tools} | Think: {thinking}"
         try:
             # Build header text
-            header_model = {"name": "Name", "params": "Params", "size_gb": "Size", "max_ctx": 32768,
+            header_model = {"name": "Name", "params": "Params", "size_gb": 0.0, "max_ctx": 32768,
                           "vision": "Vision", "tools": "Tools", "thinking": "Think"}
             max_ctx_str = "32K"
-            header_text = header_fmt.format(index="", **header_model, max_ctx_str=max_ctx_str)
+            header_text = header_fmt.format(**header_model, max_ctx_str=max_ctx_str)
             # Truncate to screen width
             header_text = header_text[:max_cols-1]
             stdscr.addstr(1, 0, header_text, curses.color_pair(4) | curses.A_UNDERLINE)
-        except curses.error:
+        except (curses.error, ValueError, KeyError):
             pass
 
         # Calculate visible range
@@ -100,7 +102,20 @@ def interactive_model_select(stdscr, models: list) -> list:
 
             y = model_area_start + i
             m = models[model_idx]
-            max_ctx_str = f"{m['max_ctx'] // 1024}K" if m['max_ctx'] >= 1024 else str(m['max_ctx'])
+            
+            # Ensure size_gb is a number (handle cases where it might be a string)
+            try:
+                size_gb = float(m.get('size_gb', 0))
+            except (ValueError, TypeError):
+                size_gb = 0.0
+            
+            max_ctx = m.get('max_ctx', 32768)
+            if isinstance(max_ctx, str):
+                try:
+                    max_ctx = int(max_ctx)
+                except (ValueError, TypeError):
+                    max_ctx = 32768
+            max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
 
             is_selected = model_idx in selected
             is_current = model_idx == current_row
@@ -110,7 +125,11 @@ def interactive_model_select(stdscr, models: list) -> list:
             line_fmt = f"{select_marker} {{name:<25}} | {{params:<5}} | Size: {{size_gb:4.1f}} GB | MaxCtx: {{max_ctx_str:>4}} | Vision: {{vision}} | Tools: {{tools}} | Think: {{thinking}}"
 
             try:
-                line_text = line_fmt.format(**m, max_ctx_str=max_ctx_str)
+                # Create a clean dict without size_gb to avoid string/float conflict
+                fmt_data = {k: v for k, v in m.items() if k != 'size_gb'}
+                fmt_data['size_gb'] = size_gb
+                fmt_data['max_ctx_str'] = max_ctx_str
+                line_text = line_fmt.format(**fmt_data)
                 line_text = line_text[:max_cols-1]
 
                 if is_selected and is_current:
@@ -123,7 +142,9 @@ def interactive_model_select(stdscr, models: list) -> list:
                     attr = curses.A_NORMAL
 
                 stdscr.addstr(y, 0, line_text.ljust(max_cols-1), attr)
-            except curses.error:
+            except (curses.error, ValueError, KeyError) as e:
+                # Log format errors for debugging
+                print(f"⚠️  Format error for model {m.get('name', 'unknown')}: {e}", file=sys.stderr)
                 pass
 
         # Draw hint

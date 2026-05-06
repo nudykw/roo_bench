@@ -70,17 +70,17 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         m["tools"] = tools
         m["thinking"] = thinking
 
-    # Apply output filter if specified
-    if args.of:
-        print(get_text("filter_applied", of=args.of))
+    # Apply capabilities filter if specified
+    if args.capabilities:
+        print(get_text("filter_applied", capabilities=args.capabilities))
         filtered = []
         for m in models:
             keep = True
-            if 'v' in args.of and m["vision"] != "✅":
+            if 'v' in args.capabilities and m["vision"] != "✅":
                 keep = False
-            if 'T' in args.of and m["tools"] != "✅":
+            if 'T' in args.capabilities and m["tools"] != "✅":
                 keep = False
-            if 't' in args.of and m["thinking"] != "✅":
+            if 't' in args.capabilities and m["thinking"] != "✅":
                 keep = False
             if keep:
                 filtered.append(m)
@@ -109,8 +109,17 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         # Interactive model selection with curses
         try:
             test_models = curses.wrapper(lambda stdscr: interactive_model_select(stdscr, models))
-        except Exception:
+        except curses.error:
+            # Fallback to numeric input if curses fails (e.g., terminal not supported)
+            print("\n⚠️  Interactive curses mode not available, using numeric input...")
+            selected_idx = input(get_text("select_models") + "\n")
+        except ValueError as e:
+            # Fallback for format errors (e.g., size_gb is string instead of float)
+            print(f"\n⚠️  Data format error in curses mode: {e}, using numeric input...")
+            selected_idx = input(get_text("select_models") + "\n")
+        except Exception as e:
             # Fallback to old numeric input if curses fails (e.g., Windows console)
+            print(f"\n⚠️  Curses error: {e}, using numeric input...")
             selected_idx = input(get_text("select_models") + "\n")
             if selected_idx.strip().lower() == 'all':
                 test_models = models
@@ -126,8 +135,8 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     # Use sys.executable for portability and absolute path to script
     script_name = os.path.basename(sys.argv[0])
     cmd_str = f"sudo {sys.executable} {script_name} --models {model_names_for_cmd}"
-    if args.of:
-        cmd_str += f" --of {args.of}"
+    if args.capabilities:
+        cmd_str += f" --capabilities {args.capabilities}"
 
     print("\n" + "="*60)
     print(get_text("repeated_run_header"))

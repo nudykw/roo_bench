@@ -28,28 +28,35 @@ class CapabilitiesFetcher:
 
             if response.status_code == 200:
                 data = response.json()
-                model_info = data.get("model", {})
+                model_data = data.get("model", {})
+                
+                # Get model_info dict (contains keys like "vision_model.vision", "tool.function.tool_use", etc.)
+                model_info = model_data.get("model_info", {})
+                if not model_info and isinstance(model_data, dict):
+                    model_info = model_data.get("model_info", {})
 
-                # Look for capabilities in JSON response
-                capabilities = model_info.get("capabilities", {})
+                # Check for direct capabilities object first
+                direct_caps = model_data.get("capabilities", {})
+                if direct_caps:
+                    vision = "✅" if direct_caps.get("vision") else "❌"
+                    tools = "✅" if direct_caps.get("tools") else "❌"
+                    thinking = "✅" if direct_caps.get("thinking") else "❌"
+                    if vision != "❌" or tools != "❌" or thinking != "❌":
+                        return vision, tools, thinking
 
-                vision = "✅" if capabilities.get("vision") else "❌"
-                tools = "✅" if capabilities.get("tools") else "❌"
-                thinking = "✅" if capabilities.get("thinking") else "❌"
+                # Parse model_info keys to detect capabilities
+                # Vision: keys containing "vision" (e.g., "vision_model.vision", "clip.vision")
+                # Tools: keys containing "tool" or "function" (e.g., "tool.function.tool_use")
+                # Thinking: keys containing "reasoning" or "thinking" (e.g., "reasoning.thinking")
+                vision_keys = [k for k in model_info.keys() if 'vision' in k.lower() or 'multimodal' in k.lower()]
+                tools_keys = [k for k in model_info.keys() if 'tool' in k.lower() or 'function' in k.lower()]
+                thinking_keys = [k for k in model_info.keys() if 'reasoning' in k.lower() or 'thinking' in k.lower()]
+
+                vision = "✅" if vision_keys else "❌"
+                tools = "✅" if tools_keys else "❌"
+                thinking = "✅" if thinking_keys else "❌"
 
                 if vision != "❌" or tools != "❌" or thinking != "❌":
-                    return vision, tools, thinking
-
-                # If capabilities is not in JSON, try searching in other fields
-                model_str = str(model_info).lower()
-                if "vision" in model_str:
-                    vision = "✅"
-                if "tools" in model_str or "tool use" in model_str:
-                    tools = "✅"
-                if "thinking" in model_str or "reasoning" in model_str:
-                    thinking = "✅"
-
-                if vision != "❓" or tools != "❓" or thinking != "❓":
                     return vision, tools, thinking
 
             # If API returned an error or doesn't contain the needed information, try HTML parsing
