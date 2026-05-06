@@ -43,6 +43,7 @@ Roo Bench is a professional benchmarking tool designed to analyze Ollama models'
 - **Multi-language Support** — Ukrainian and English interface
 - **Flexible Restart Methods** — systemctl, docker, or custom commands
 - **Multiple Benchmark Runs** — Average, min/max statistics
+- **Remote Ollama Support** — Connect to Ollama servers on the local network
 
 ### Installation
 
@@ -150,6 +151,11 @@ chmod +x roo_bench.py
 | `--context-sizes-auto` | Auto-generate context sizes | False |
 | `--output` | Output file path | None |
 | `--output-format` | Output format: `json` or `csv` | None |
+| `--ollama-url` | Ollama server URL | `http://localhost:11434` |
+| `--ollama-port` | Ollama server port | `11434` |
+| `--ollama-api-key` | API key for authentication | None |
+| `--ollama-timeout` | Connection timeout in seconds | `300` |
+| `--config` | Path to configuration file | `config.json` |
 
 #### Environment Variables
 
@@ -160,6 +166,32 @@ export ROO_BENCH_LANG=ua
 # Set default context sizes
 export ROO_BENCH_CONTEXT_SIZES="8192,16384,32768"
 ```
+
+#### Remote Ollama Server Configuration
+
+Roo Bench supports connecting to a remote Ollama server on your local network. You can configure this using:
+
+**Option 1: Command-line arguments**
+```bash
+./venv/bin/python roo_bench.py --ollama-url http://192.168.1.100:11434
+./venv/bin/python roo_bench.py --ollama-url http://192.168.1.100:11434 --ollama-api-key your-api-key
+```
+
+**Option 2: Environment variables**
+```bash
+export OLLAMA_URL=http://192.168.1.100:11434
+export OLLAMA_API_KEY=your-api-key  # Optional
+./venv/bin/python roo_bench.py
+```
+
+**Option 3: Configuration file (config.json)**
+```bash
+./venv/bin/python roo_bench.py --config config.json
+```
+
+See `config.example.json` for the configuration file structure.
+
+**Configuration Priority:** CLI arguments > Environment variables > Configuration file
 
 ### Architecture
 
@@ -332,6 +364,37 @@ chmod +x roo_bench.py
 | `--context-sizes-auto` | Авто-генерація розмірів контексту | False |
 | `--output` | Шлях до файлу виводу | None |
 | `--output-format` | Формат виводу: `json` або `csv` | None |
+| `--ollama-url` | URL сервера Ollama | `http://localhost:11434` |
+| `--ollama-port` | Порт сервера Ollama | `11434` |
+| `--ollama-api-key` | API ключ для автентифікації | None |
+| `--ollama-timeout` | Час очікування підключення (сек) | `300` |
+| `--config` | Шлях до файлу конфігурації | `config.json` |
+
+#### Налаштування віддаленого сервера Ollama
+
+Roo Bench підтримує підключення до віддаленого сервера Ollama в локальній мережі. Ви можете налаштувати це використовуючи:
+
+**Варіант 1: Аргументи командного рядка**
+```bash
+./venv/bin/python roo_bench.py --ollama-url http://192.168.1.100:11434
+./venv/bin/python roo_bench.py --ollama-url http://192.168.1.100:11434 --ollama-api-key your-api-key
+```
+
+**Варіант 2: Змінні середовища**
+```bash
+export OLLAMA_URL=http://192.168.1.100:11434
+export OLLAMA_API_KEY=your-api-key  # Опціонально
+./venv/bin/python roo_bench.py
+```
+
+**Варіант 3: Файл конфігурації (config.json)**
+```bash
+./venv/bin/python roo_bench.py --config config.json
+```
+
+Дивіться `config.example.json` для структури файлу конфігурації.
+
+**Пріоритет конфігурації:** CLI > Змінні середовища > Файл конфігурації
 
 #### Змінні середовища
 
@@ -469,6 +532,24 @@ ollama list
 
 # Check Ollama API directly
 curl http://localhost:11434/api/tags
+```
+
+##### Remote Connection Errors
+
+**Problem:** Cannot connect to remote Ollama server
+
+**Solutions:**
+```bash
+# Check if the remote server is accessible
+curl http://192.168.1.100:11434/api/tags
+
+# Verify firewall allows port 11434
+# On the server, ensure Ollama is configured to accept connections:
+export OLLAMA_HOST=0.0.0.0:11434
+systemctl restart ollama
+
+# Test with simple curl request
+curl http://192.168.1.100:11434/api/tags
 ```
 
 ---

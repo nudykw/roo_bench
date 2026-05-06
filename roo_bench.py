@@ -10,9 +10,28 @@ import csv
 from datetime import datetime
 from enum import Enum
 from bs4 import BeautifulSoup
-from i18n import get_text, set_language, get_available_languages
+from i18n import get_text, set_language, get_available_languages, _current_language
+from config import OllamaConfig
 
 OLLAMA_URL = "http://localhost:11434"
+
+def get_ollama_config(args):
+    """Get Ollama configuration from CLI arguments.
+    
+    Args:
+        args: Parsed arguments from argparse
+        
+    Returns:
+        OllamaConfig: Configuration object
+    """
+    cli_config = {
+        'ollama_url': getattr(args, 'ollama_url', None),
+        'ollama_port': getattr(args, 'ollama_port', None),
+        'ollama_api_key': getattr(args, 'ollama_api_key', None),
+        'ollama_timeout': getattr(args, 'ollama_timeout', None),
+        'config': getattr(args, 'config', None)
+    }
+    return OllamaConfig(cli_config)
 CONTEXT_SIZES = [8192, 16384, 32768, 65536, 131072, 262144]
 
 def get_context_sizes(args):
@@ -569,10 +588,19 @@ def main():
     parser.add_argument('--context-sizes-auto', action='store_true', help=get_text("cli_context_sizes_auto"))
     parser.add_argument('--output', type=str, help=get_text("cli_output"))
     parser.add_argument('--output-format', type=str, choices=['json', 'csv'], help=get_text("cli_output_format"))
+    parser.add_argument('--ollama-url', type=str, help='Ollama server URL')
+    parser.add_argument('--ollama-port', type=int, help='Ollama server port')
+    parser.add_argument('--ollama-api-key', type=str, help='API key for authentication')
+    parser.add_argument('--ollama-timeout', type=int, help='Connection timeout')
+    parser.add_argument('--config', type=str, help='Path to configuration file')
     args = parser.parse_args()
     
     # Set language
     set_language(args.lang)
+    
+    # Initialize Ollama configuration
+    config = get_ollama_config(args)
+    OLLAMA_URL = config.base_url
     
     print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
     print(get_text("scanning_models"))

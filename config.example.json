@@ -1,5 +1,3 @@
-// Ollama server connection configuration
-// Update these values to connect to your remote Ollama server
 {
   "url": "http://192.168.1.100:11434",
   "port": 11434,
