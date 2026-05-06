@@ -65,13 +65,18 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     if not models:
         return
 
-    # Capabilities are already in models from Ollama API
-    # Convert boolean capabilities to display format
+    # Initialize capabilities fetcher and add discovered models to cache
+    from api.capabilities_fetcher import CapabilitiesFetcher
+    capabilities_fetcher = CapabilitiesFetcher()
+    
+    # Add all discovered models to the cache
     for m in models:
         caps = m.get("capabilities", {})
         m["vision"] = "✅" if caps.get("vision", False) else "❌"
         m["tools"] = "✅" if caps.get("tools", False) else "❌"
         m["thinking"] = "✅" if caps.get("thinking", False) else "❌"
+        # Add to capabilities fetcher cache
+        capabilities_fetcher.add_model_from_api(m["name"], caps)
 
     # Apply capabilities filter if specified
     if args.capabilities:
@@ -133,6 +138,9 @@ def run_benchmark_workflow(config: OllamaConfig, args):
                 except (ValueError, IndexError):
                     print(get_text("invalid_input"))
                     return
+
+    # Save capabilities cache immediately after all model data is collected
+    capabilities_fetcher.save_cache()
 
     model_names_for_cmd = ",".join([m["name"] for m in test_models])
     # Use sys.executable for portability and absolute path to script
@@ -197,6 +205,36 @@ def main():
 
     # Set language
     set_language(args.lang)
+
+    # Handle --update-cache flag
+    if getattr(args, 'update_cache', False):
+        from api.capabilities_fetcher import CapabilitiesFetcher
+        from api.ollama_client import OllamaClient
+        from config import OllamaConfig
+        
+        config = get_ollama_config(args)
+        print("Updating capabilities cache...")
+        
+        ollama_client = OllamaClient(
+            base_url=config.base_url,
+            headers=config.get_headers(),
+            timeout=config.timeout
+        )
+        
+        fetcher = CapabilitiesFetcher()
+        models = ollama_client.get_models()
+        
+        if not models:
+            print("No models found!")
+            return
+        
+        for m in models:
+            caps = m.get("capabilities", {})
+            fetcher.add_model_from_api(m["name"], caps)
+        
+        fetcher.save_cache()
+        print("Cache update complete!")
+        return
 
     # Initialize Ollama configuration
     config = get_ollama_config(args)

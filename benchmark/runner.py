@@ -1,7 +1,6 @@
 """Core benchmark execution orchestration."""
 
 from api.ollama_client import OllamaClient
-from api.capabilities_fetcher import CapabilitiesFetcher
 from system.restart_manager import restart_ollama, RestartMethod
 from benchmark.results import calculate_statistics
 from i18n import get_text
@@ -30,7 +29,6 @@ class BenchmarkRunner:
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
         self.num_runs = num_runs
-        self.capabilities_fetcher = CapabilitiesFetcher()
         self.no_restart = no_restart
         self.ssh_host = ssh_host
         self.ssh_user = ssh_user

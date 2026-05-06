@@ -123,6 +123,30 @@ class CapabilitiesFetcher:
         except (json.JSONDecodeError, IOError) as e:
             print(f"⚠️  Error loading cache: {e}")
 
+    def add_model_from_api(self, model_name: str, capabilities: dict):
+        """Add a model's capabilities to the cache.
+        
+        Args:
+            model_name: Full model name (e.g., 'qwen3.6-35b:q4_0')
+            capabilities: Dict with 'vision', 'tools', 'thinking', 'audio' booleans
+        """
+        # Extract base name (without version/quant tags)
+        base_name = model_name.split(':')[0]
+        
+        # Store with both full name and base name
+        self.MODEL_CAPABILITIES[base_name] = {
+            'vision': capabilities.get('vision', False),
+            'tools': capabilities.get('tools', False),
+            'thinking': capabilities.get('thinking', False)
+        }
+        # Also store full name if it differs
+        if base_name != model_name:
+            self.MODEL_CAPABILITIES[model_name] = {
+                'vision': capabilities.get('vision', False),
+                'tools': capabilities.get('tools', False),
+                'thinking': capabilities.get('thinking', False)
+            }
+    
     def save_cache(self):
         """Save current MODEL_CAPABILITIES to JSON file.
         

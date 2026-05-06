@@ -14,6 +14,7 @@
   - [Overview](#overview)
   - [Installation](#installation)
   - [Usage](#usage)
+  - [Updating Capabilities Cache](#updating-capabilities-cache)
   - [Configuration](#configuration)
   - [Architecture](#architecture)
   - [Contributing](#contributing)
@@ -23,6 +24,7 @@
   - [Огляд](#огляд)
   - [Встановлення](#встановлення)
   - [Використання](#використання)
+  - [Оновлення кешу можливостей](#оновлення-кешу-можливостей)
   - [Конфігурація](#конфігурація)
   - [Архітектура](#архітектура)
   - [Участь у розробці](#участь-у-розробці)
@@ -150,6 +152,17 @@ The project uses a modular architecture. You can run it in two ways:
   --output-format json
 ```
 
+#### Updating Capabilities Cache
+
+Roo Bench automatically caches model capabilities (vision, tools, thinking) in `data/capabilities_cache.json`. You can force an update:
+
+```bash
+# Update capabilities cache from Ollama API
+./venv/bin/python main.py --update-cache
+```
+
+The cache is also automatically saved after model discovery during benchmark runs.
+
 ### Configuration
 
 #### Command-Line Arguments
@@ -176,6 +189,7 @@ The project uses a modular architecture. You can run it in two ways:
 | `--ollama-api-key` | API key for authentication | None |
 | `--ollama-timeout` | Connection timeout in seconds | `300` |
 | `--config` | Path to configuration file | `config.json` |
+| `--update-cache` | Force update capabilities cache from Ollama API | False |
 
 #### Environment Variables
 
@@ -497,6 +511,17 @@ chmod +x roo_bench.py
   --output-format json
 ```
 
+#### Оновлення кешу можливостей
+
+Roo Bench автоматично кешує можливості моделей (візіон, інструменти, thinking) у `data/capabilities_cache.json`. Ви можете примусово оновити кеш:
+
+```bash
+# Оновити кеш можливостей з Ollama API
+./venv/bin/python main.py --update-cache
+```
+
+Кеш також автоматично зберігається після виявлення моделей під час запусків бенчмарку.
+
 ### Конфігурація
 
 #### Аргументи командного рядка
@@ -523,6 +548,7 @@ chmod +x roo_bench.py
 | `--ollama-api-key` | API ключ для автентифікації | None |
 | `--ollama-timeout` | Час очікування підключення (сек) | `300` |
 | `--config` | Шлях до файлу конфігурації | `config.json` |
+| `--update-cache` | Примусово оновити кеш можливостей з Ollama API | False |
 
 #### Налаштування віддаленого сервера Ollama
 

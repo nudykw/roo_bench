@@ -67,6 +67,8 @@ def parse_args():
     parser.add_argument('--ollama-api-key', type=str, help='API key for authentication')
     parser.add_argument('--ollama-timeout', type=int, help='Connection timeout')
     parser.add_argument('--config', type=str, help='Path to configuration file')
+    parser.add_argument('--update-cache', action='store_true',
+                        help='Force update capabilities cache from Ollama API')
     return parser.parse_args()
 
 
