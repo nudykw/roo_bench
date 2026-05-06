@@ -3,6 +3,8 @@ import subprocess
 import time
 import urllib.parse
 import argparse
+import sys
+import os
 from enum import Enum
 from bs4 import BeautifulSoup
 from i18n import get_text, set_language, get_available_languages
@@ -559,7 +561,9 @@ def main():
                 return
 
     model_names_for_cmd = ",".join([m["name"] for m in test_models])
-    cmd_str = f"sudo ./venv/bin/python roo_bench.py --models {model_names_for_cmd}"
+    # Use sys.executable for portability and absolute path to script
+    script_name = os.path.basename(sys.argv[0])
+    cmd_str = f"sudo {sys.executable} {script_name} --models {model_names_for_cmd}"  # Use sys.executable for portability
     if args.of:
         cmd_str += f" --of {args.of}"
     
