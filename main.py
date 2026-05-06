@@ -8,9 +8,8 @@ from i18n import set_language
 from config import OllamaConfig
 from cli import parse_args, get_context_sizes
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
-from api.ollama_client import OllamaClient
+from api.client_factory import ApiClientFactory
 from system.restart_manager import restart_ollama, RestartMethod
-from system.ssh_client import SSHClient
 from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
 from benchmark.results import calculate_statistics, format_result_row, format_recommendations
@@ -61,20 +60,15 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
     print(get_text("scanning_models"))
 
-    # Create centralized SSH client
-    ssh_client = SSHClient(
-        host=getattr(args, 'ssh_host', None),
-        user=getattr(args, 'ssh_user', None),
-        port=getattr(args, 'ssh_port', 22),
-        key_path=getattr(args, 'ssh_key', None)
-    )
-
-    # Initialize Ollama client
-    ollama_client = OllamaClient(
+    # Create API client using factory (auto-detects local vs remote based on --ssh-host)
+    ollama_client = ApiClientFactory.create_client(
         base_url=config.base_url,
         headers=config.get_headers(),
         timeout=config.timeout,
-        ssh_client=ssh_client
+        ssh_host=getattr(args, 'ssh_host', None),
+        ssh_user=getattr(args, 'ssh_user', None),
+        ssh_port=getattr(args, 'ssh_port', 22),
+        ssh_key=getattr(args, 'ssh_key', None)
     )
 
     # Fetch models (capabilities are already extracted from model_info)
@@ -235,8 +229,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         context_sizes=context_sizes,
         num_runs=args.num_runs,
         restart_method=args.restart_method,
-        no_restart=args.no_restart,
-        ssh_client=ssh_client
+        no_restart=args.no_restart
     )
 
     # Run benchmarks for each model
@@ -287,13 +280,12 @@ def _main_impl():
     # Handle --update-cache flag
     if getattr(args, 'update_cache', False):
         from api.capabilities_fetcher import CapabilitiesFetcher
-        from api.ollama_client import OllamaClient
-        from config import OllamaConfig
+        from api.client_factory import ApiClientFactory
         
         config = get_ollama_config(args)
         print("Updating capabilities cache...")
         
-        ollama_client = OllamaClient(
+        ollama_client = ApiClientFactory.create_client(
             base_url=config.base_url,
             headers=config.get_headers(),
             timeout=config.timeout

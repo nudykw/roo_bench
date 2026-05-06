@@ -1,8 +1,7 @@
 """Core benchmark execution orchestration."""
 
-from api.ollama_client import OllamaClient
+from api.client_factory import BaseApiClient
 from system.restart_manager import restart_ollama, RestartMethod
-from system.ssh_client import SSHClient
 from benchmark.results import calculate_statistics
 from i18n import get_text
 
@@ -10,24 +9,22 @@ from i18n import get_text
 class BenchmarkRunner:
     """Orchestrates benchmark execution for models."""
 
-    def __init__(self, ollama_client: OllamaClient, context_sizes: list, num_runs: int = 3,
-                 restart_method: str = 'systemctl', no_restart: bool = False,
-                 ssh_client: SSHClient = None):
+    def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
+                 restart_method: str = 'systemctl', no_restart: bool = False):
         """Initialize benchmark runner.
 
         Args:
-            ollama_client: OllamaClient instance
+            ollama_client: BaseApiClient instance (LocalApiClient or RemoteApiClient)
             context_sizes: List of context sizes to test
             num_runs: Number of runs per configuration
             restart_method: Ollama restart method
             no_restart: If True, restart is not performed
-            ssh_client: SSHClient instance for remote operations
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
         self.num_runs = num_runs
         self.no_restart = no_restart
-        self.ssh_client = ssh_client
+        self.ssh_client = ollama_client.ssh_client  # Get SSH client from the API client
         
         # Map string method to RestartMethod enum
         method_map = {

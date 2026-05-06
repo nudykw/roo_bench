@@ -1,41 +1,52 @@
-"""Ollama API communication client."""
+"""API client factory for creating local or remote clients based on configuration."""
 
 import json
 import math
 import threading
+from abc import ABC, abstractmethod
+from typing import Optional, Dict, List, Tuple
+
 import requests
 from system.gpu_monitor import get_vram_usage
-from i18n import get_text
 from system.ssh_client import SSHClient
+from i18n import get_text
 
 
-class OllamaClient:
-    """Client for communicating with Ollama API."""
+class BaseApiClient(ABC):
+    """Abstract base class for API clients."""
 
-    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300,
-                 ssh_client: SSHClient = None):
-        """Initialize Ollama client.
+    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
+        """Initialize base API client.
 
         Args:
             base_url: Ollama API base URL
             headers: HTTP headers (e.g., authentication)
             timeout: Request timeout in seconds
-            ssh_client: SSHClient instance for remote VRAM monitoring
         """
         self.base_url = base_url
         self.headers = headers or {}
         self.timeout = timeout
-        self.ssh_client = ssh_client
+
+    @property
+    @abstractmethod
+    def is_remote(self) -> bool:
+        """Return True if this is a remote client with SSH."""
+        pass
+
+    @abstractmethod
+    def _monitor_vram(self, stop_event: threading.Event, max_vram_ref: list, vram_samples: list):
+        """Internal VRAM monitoring implementation."""
+        pass
 
     @staticmethod
     def get_capabilities_from_model_info(model_info: dict) -> dict:
         """Extract capabilities from Ollama API /api/show model_info.
-        
+
         Uses both direct key detection and architecture-based heuristics.
-        
+
         Args:
             model_info: Dictionary from model_info field of /api/show response
-            
+
         Returns:
             dict: {'vision': bool, 'tools': bool, 'thinking': bool, 'audio': bool}
         """
@@ -45,16 +56,16 @@ class OllamaClient:
             'thinking': False,
             'audio': False
         }
-        
+
         # Get architecture and basename for heuristic detection
         architecture = model_info.get('general.architecture', '').lower()
         basename = model_info.get('general.basename', '').lower()
         file_type = model_info.get('general.file_type', '').lower()
-        
+
         # Combine all strings for easier searching
         combined = f"{architecture} {basename} {file_type}"
         combined = combined.lower()
-        
+
         # Vision detection
         if any(kw in combined for kw in ['vision', 'instruct', 'clip', 'image', 'multi modal', 'moar']):
             capabilities['vision'] = True
@@ -65,7 +76,7 @@ class OllamaClient:
             if any(vision_kw in key.lower() for vision_kw in ['vision', 'image', 'clip', 'multi modal']):
                 capabilities['vision'] = True
                 break
-        
+
         # Tools/function calling detection
         if any(kw in combined for kw in ['tools', 'function', 'tool', 'function calling']):
             capabilities['tools'] = True
@@ -76,7 +87,7 @@ class OllamaClient:
             if 'tools' in key.lower() or 'function' in key.lower():
                 capabilities['tools'] = True
                 break
-        
+
         # Thinking/reasoning detection
         if any(kw in combined for kw in ['thinking', 'reason', 'deepseek', 'o1', 'o3']):
             capabilities['thinking'] = True
@@ -87,7 +98,7 @@ class OllamaClient:
             if 'thinking' in key.lower() or 'reason' in key.lower():
                 capabilities['thinking'] = True
                 break
-        
+
         # Audio detection
         if any(kw in combined for kw in ['audio', 'whisper', 'speech', 'voice']):
             capabilities['audio'] = True
@@ -98,12 +109,12 @@ class OllamaClient:
             if any(audio_kw in key.lower() for audio_kw in ['audio', 'whisper', 'speech', 'voice']):
                 capabilities['audio'] = True
                 break
-        
+
         return capabilities
 
     def get_models(self) -> list:
         """Get list of available models.
-        
+
         Returns:
             list: List of model dictionaries
         """
@@ -122,12 +133,12 @@ class OllamaClient:
 
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
-        
+
         Args:
             model_name: Model name
             context_size: Context size
             num_runs: Number of runs for averaging (default: 3)
-            
+
         Returns:
             tuple: (avg_tps, vram, tps_list, error)
                 avg_tps: Average TPS (float)
@@ -157,27 +168,9 @@ class OllamaClient:
             stop_monitoring = threading.Event()
             vram_samples = []
 
-            # Determine which VRAM monitoring function to use
-            use_ssh = self.ssh_client is not None and self.ssh_client.is_configured
-
-            def monitor_vram():
-                """Monitor VRAM during generation and collect samples."""
-                nonlocal max_vram
-                while not stop_monitoring.is_set():
-                    if use_ssh:
-                        v = self.ssh_client.get_vram_usage()
-                    else:
-                        v = get_vram_usage()
-                    if v is not None:
-                        vram_samples.append(v)
-                        if v > max_vram:
-                            max_vram = v
-                    # Sample every 500ms (SSH calls are slower)
-                    stop_monitoring.wait(0.5 if use_ssh else 0.2)
-
             try:
                 # Start VRAM monitoring thread
-                monitor_thread = threading.Thread(target=monitor_vram, daemon=True)
+                monitor_thread = threading.Thread(target=self._monitor_vram, args=(stop_monitoring, [max_vram], vram_samples), daemon=True)
                 monitor_thread.start()
 
                 try:
@@ -292,10 +285,10 @@ class OllamaClient:
 
     def get_model_info(self, model_name: str) -> dict:
         """Get model information including current default parameters.
-        
+
         Args:
             model_name: Model name
-            
+
         Returns:
             dict: Model information with parameters (including num_ctx, num_predict, etc.)
         """
@@ -314,17 +307,17 @@ class OllamaClient:
 
     def get_current_num_ctx(self, model_name: str) -> int:
         """Get the current default num_ctx for a model.
-        
+
         Args:
             model_name: Model name
-            
+
         Returns:
             int: Current num_ctx value (default: 2048)
         """
         model_info = self.get_model_info(model_name)
         if not model_info:
             return 2048
-        
+
         # Look for num_ctx in model_info
         # It can be in 'parameters' field or as 'tokenizer.llama.num_ctx' in model_info
         parameters = model_info.get("parameters", "")
@@ -337,7 +330,7 @@ class OllamaClient:
                         return int(line.split(':')[1].strip())
                     except (ValueError, IndexError):
                         pass
-        
+
         # Also check model_info keys
         model_info_dict = model_info.get("model_info", {})
         for key, val in model_info_dict.items():
@@ -346,14 +339,14 @@ class OllamaClient:
                     return int(val)
                 except (ValueError, TypeError):
                     pass
-        
+
         return 2048
 
     def get_running_models(self) -> list:
         """Get list of currently running models with their actual context usage.
-        
+
         Uses the /api/ps endpoint which shows the actual context window being used.
-        
+
         Returns:
             list: List of dicts with model info including 'n_ctx' field
         """
@@ -380,13 +373,13 @@ class OllamaClient:
 
     def get_actual_num_ctx(self, model_name: str) -> int:
         """Get the actual num_ctx being used by a running model.
-        
+
         This reads from /api/ps which shows the real-time context window.
         The /api/ps endpoint returns 'context_length' for running models.
-        
+
         Args:
             model_name: Model name (or full/short ID)
-            
+
         Returns:
             int: Actual num_ctx being used, or 0 if model not running
         """
@@ -408,11 +401,11 @@ class OllamaClient:
 
     def verify_num_ctx(self, model_name: str, expected_ctx: int) -> tuple:
         """Verify that the model's num_ctx matches the expected value.
-        
+
         Args:
             model_name: Model name
             expected_ctx: Expected num_ctx value
-            
+
         Returns:
             tuple: (is_verified: bool, actual_ctx: int, message: str)
                 is_verified: True if actual ctx matches expected
@@ -420,23 +413,23 @@ class OllamaClient:
                 message: Human-readable message describing the result
         """
         actual_ctx = self.get_current_num_ctx(model_name)
-        
+
         if actual_ctx == expected_ctx:
             message = get_text("ctx_verified", actual=actual_ctx, expected=expected_ctx)
             return True, actual_ctx, message
-        
+
         message = get_text("ctx_mismatch", actual=actual_ctx, expected=expected_ctx)
         return False, actual_ctx, message
 
     def verify_num_ctx_via_show(self, model_name: str, expected_ctx: int) -> tuple:
         """Verify num_ctx by parsing the full /api/show response.
-        
+
         This method looks for context_length in the model's architecture info.
-        
+
         Args:
             model_name: Model name
             expected_ctx: Expected num_ctx value
-            
+
         Returns:
             tuple: (is_verified: bool, details: str, found_values: dict)
                 is_verified: True if context_length matches expected
@@ -446,9 +439,9 @@ class OllamaClient:
         model_info = self.get_model_info(model_name)
         if not model_info:
             return False, "Could not retrieve model info", {}
-        
+
         found_values = {}
-        
+
         # Method 1: Check 'parameters' field for num_ctx
         parameters = model_info.get("parameters", "")
         if parameters:
@@ -460,7 +453,7 @@ class OllamaClient:
                         found_values['num_ctx_param'] = val
                     except (ValueError, IndexError):
                         pass
-        
+
         # Method 2: Check model_info keys for context_length or num_ctx
         model_info_dict = model_info.get("model_info", {})
         for key, val in model_info_dict.items():
@@ -470,14 +463,14 @@ class OllamaClient:
                     found_values[key] = int(val)
                 except (ValueError, TypeError):
                     pass
-        
+
         # Method 3: Check top-level context_length
         if 'context_length' in model_info:
             try:
                 found_values['context_length'] = int(model_info['context_length'])
             except (ValueError, TypeError):
                 pass
-        
+
         # Check if any found value matches expected
         matched_key = None
         actual_value = None
@@ -486,7 +479,7 @@ class OllamaClient:
                 matched_key = key
                 actual_value = val
                 break
-        
+
         # If no exact match, check if any value >= expected (model can support it)
         if not actual_value:
             for key, val in found_values.items():
@@ -494,7 +487,7 @@ class OllamaClient:
                     matched_key = key
                     actual_value = val
                     break
-        
+
         if actual_value:
             details = f"   🔍 via /api/show: Found context values: {found_values}"
             if actual_value == expected_ctx:
@@ -506,20 +499,20 @@ class OllamaClient:
             else:
                 details += f" | ❌ Too small (found {actual_value} < {expected_ctx})"
                 return False, details, found_values
-        
+
         return False, f"   🔍 via /api/show: No context values found in model info", found_values
 
     def verify_ctx_via_generation(self, model_name: str, context_size: int, prompt: str) -> tuple:
         """Verify context size by sending a test generation and checking prompt_eval_count.
-        
+
         This method sends a prompt and verifies that the model evaluates all tokens,
         which confirms the context window is large enough.
-        
+
         Args:
             model_name: Model name
             context_size: Requested context size
             prompt: Test prompt to send
-            
+
         Returns:
             tuple: (is_verified: bool, eval_count: int, total_duration: float, message: str)
         """
@@ -533,25 +526,25 @@ class OllamaClient:
                     "num_ctx": context_size
                 }
             }
-            
+
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
                 headers=self.headers,
                 timeout=60
             )
-            
+
             if response.status_code != 200:
                 return False, 0, 0.0, f"   🧪 Generation test failed: HTTP {response.status_code}"
-            
+
             data = response.json()
             eval_count = data.get("eval_count", 0)
             prompt_eval_count = data.get("prompt_eval_count", 0)
             total_duration = data.get("total_duration", 0) / 1e9
-            
+
             # Count tokens in prompt (rough estimate: ~4 chars per token for English)
             estimated_tokens = len(prompt.split())
-            
+
             if prompt_eval_count >= estimated_tokens:
                 msg = (f"   🧪 Generation test: prompt_eval_count={prompt_eval_count}, "
                        f"estimated_tokens={estimated_tokens} | ✅ Context verified")
@@ -560,7 +553,7 @@ class OllamaClient:
                 msg = (f"   🧪 Generation test: prompt_eval_count={prompt_eval_count}, "
                        f"estimated_tokens={estimated_tokens} | ⚠️  Not all tokens evaluated")
                 return False, prompt_eval_count, total_duration, msg
-                
+
         except requests.exceptions.Timeout:
             return False, 0, 0.0, "   🧪 Generation test timed out"
         except Exception as e:
@@ -568,17 +561,17 @@ class OllamaClient:
 
     def get_current_num_predict(self, model_name: str) -> int:
         """Get the current default num_predict for a model.
-        
+
         Args:
             model_name: Model name
-            
+
         Returns:
             int: Current num_predict value (default: -1)
         """
         model_info = self.get_model_info(model_name)
         if not model_info:
             return -1
-        
+
         parameters = model_info.get("parameters", "")
         if parameters:
             for line in parameters.split('\n'):
@@ -589,5 +582,127 @@ class OllamaClient:
                         return int(val)
                     except (ValueError, IndexError):
                         pass
-        
+
         return -1
+
+
+class LocalApiClient(BaseApiClient):
+    """Local API client without SSH."""
+
+    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
+        """Initialize local API client.
+
+        Args:
+            base_url: Ollama API base URL
+            headers: HTTP headers (e.g., authentication)
+            timeout: Request timeout in seconds
+        """
+        super().__init__(base_url, headers, timeout)
+        self.ssh_client = None
+
+    @property
+    def is_remote(self) -> bool:
+        """Return True if this is a remote client with SSH."""
+        return False
+
+    def _monitor_vram(self, stop_event: threading.Event, max_vram_ref: list, vram_samples: list):
+        """Monitor local VRAM during generation."""
+        while not stop_event.is_set():
+            v = get_vram_usage()
+            if v is not None:
+                vram_samples.append(v)
+                if v > max_vram_ref[0]:
+                    max_vram_ref[0] = v
+            stop_event.wait(0.2)
+
+
+class RemoteApiClient(BaseApiClient):
+    """Remote API client with SSH for remote operations."""
+
+    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300,
+                 ssh_client: SSHClient = None):
+        """Initialize remote API client.
+
+        Args:
+            base_url: Ollama API base URL
+            headers: HTTP headers (e.g., authentication)
+            timeout: Request timeout in seconds
+            ssh_client: SSHClient instance for remote VRAM monitoring
+        """
+        super().__init__(base_url, headers, timeout)
+        self.ssh_client = ssh_client
+
+    @property
+    def is_remote(self) -> bool:
+        """Return True if this is a remote client with SSH."""
+        return True
+
+    def _monitor_vram(self, stop_event: threading.Event, max_vram_ref: list, vram_samples: list):
+        """Monitor remote VRAM during generation via SSH."""
+        while not stop_event.is_set():
+            v = self.ssh_client.get_vram_usage() if self.ssh_client else None
+            if v is not None:
+                vram_samples.append(v)
+                if v > max_vram_ref[0]:
+                    max_vram_ref[0] = v
+            stop_event.wait(0.5)
+
+
+class ApiClientFactory:
+    """Factory for creating appropriate API client based on configuration."""
+
+    @staticmethod
+    def is_remote_config(ssh_host: str = None) -> bool:
+        """Check if SSH configuration indicates remote mode.
+
+        Args:
+            ssh_host: SSH host from CLI arguments
+
+        Returns:
+            bool: True if remote configuration is detected
+        """
+        return bool(ssh_host)
+
+    @staticmethod
+    def create_client(
+        base_url: str,
+        headers: dict = None,
+        timeout: int = 300,
+        ssh_host: str = None,
+        ssh_user: str = None,
+        ssh_port: int = 22,
+        ssh_key: str = None
+    ) -> BaseApiClient:
+        """Create the appropriate API client based on SSH configuration.
+
+        Args:
+            base_url: Ollama API base URL
+            headers: HTTP headers (e.g., authentication)
+            timeout: Request timeout in seconds
+            ssh_host: SSH host for remote mode
+            ssh_user: SSH user for remote mode
+            ssh_port: SSH port for remote mode
+            ssh_key: Path to SSH private key
+
+        Returns:
+            BaseApiClient: Either LocalApiClient or RemoteApiClient
+        """
+        if ApiClientFactory.is_remote_config(ssh_host):
+            ssh_client = SSHClient(
+                host=ssh_host,
+                user=ssh_user,
+                port=ssh_port,
+                key_path=ssh_key
+            )
+            return RemoteApiClient(
+                base_url=base_url,
+                headers=headers,
+                timeout=timeout,
+                ssh_client=ssh_client
+            )
+        else:
+            return LocalApiClient(
+                base_url=base_url,
+                headers=headers,
+                timeout=timeout
+            )
