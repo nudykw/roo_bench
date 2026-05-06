@@ -73,7 +73,13 @@ class BenchmarkRunner:
         max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
 
         print(get_text("testing_model", model_name=model_name))
-        print(get_text("model_size", size_gb=model['size_gb'], max_ctx_str=max_ctx_str))
+        # Format size_gb: if it's a number, format to 1 decimal; if "N/A", keep as string
+        size_gb_val = model['size_gb']
+        if isinstance(size_gb_val, (int, float)):
+            size_gb_str = f"{size_gb_val:.1f}"
+        else:
+            size_gb_str = str(size_gb_val)
+        print(get_text("model_size", size_gb=size_gb_str, max_ctx_str=max_ctx_str))
 
         results = []
         valid_contexts = self.filter_contexts(max_ctx)

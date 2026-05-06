@@ -75,11 +75,11 @@ def interactive_model_select(stdscr, models: list) -> list:
             pass
 
         # Column headers
-        header_fmt = "[ ] {name:<25} | {params:<5} | Size: {size_gb:4.1f} GB | MaxCtx: {max_ctx_str:>4} | Vision: {vision} | Tools: {tools} | Think: {thinking}"
+        header_fmt = "[ ] {name:<25} | {params:<5} | Size: {size_gb:4.1f} GB | MoE: {moe_str:>8} | MaxCtx: {max_ctx_str:>4} | Vision: {vision} | Tools: {tools} | Think: {thinking}"
         try:
             # Build header text
             header_model = {"name": "Name", "params": "Params", "size_gb": 0.0, "max_ctx": 32768,
-                          "vision": "Vision", "tools": "Tools", "thinking": "Think"}
+                          "moe_str": "MoE", "vision": "Vision", "tools": "Tools", "thinking": "Think"}
             max_ctx_str = "32K"
             header_text = header_fmt.format(**header_model, max_ctx_str=max_ctx_str)
             # Truncate to screen width
@@ -119,16 +119,34 @@ def interactive_model_select(stdscr, models: list) -> list:
 
             is_selected = model_idx in selected
             is_current = model_idx == current_row
+            
+            # Get MoE data and format it
+            moe_data = m.get('moe', None)
+            if moe_data is None:
+                moe_str = "❓"
+            elif moe_data is False:
+                moe_str = "⬛"
+            elif isinstance(moe_data, dict):
+                num_experts = moe_data.get('num_experts', 'N/A')
+                if isinstance(num_experts, int) and num_experts > 0:
+                    moe_str = f"🟡({num_experts})"
+                else:
+                    moe_str = "🟡"
+            elif moe_data is True:
+                moe_str = "🟡"
+            else:
+                moe_str = "❓"
 
             # Format line with index
             select_marker = "[x]" if is_selected else "[ ]"
-            line_fmt = f"{select_marker} {{name:<25}} | {{params:<5}} | Size: {{size_gb:4.1f}} GB | MaxCtx: {{max_ctx_str:>4}} | Vision: {{vision}} | Tools: {{tools}} | Think: {{thinking}}"
+            line_fmt = f"{select_marker} {{name:<25}} | {{params:<5}} | Size: {{size_gb:4.1f}} GB | MoE: {{moe_str:>8}} | MaxCtx: {{max_ctx_str:>4}} | Vision: {{vision}} | Tools: {{tools}} | Think: {{thinking}}"
 
             try:
                 # Create a clean dict without size_gb to avoid string/float conflict
                 fmt_data = {k: v for k, v in m.items() if k != 'size_gb'}
                 fmt_data['size_gb'] = size_gb
                 fmt_data['max_ctx_str'] = max_ctx_str
+                fmt_data['moe_str'] = moe_str
                 line_text = line_fmt.format(**fmt_data)
                 line_text = line_text[:max_cols-1]
 

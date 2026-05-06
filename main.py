@@ -81,62 +81,94 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     from api.capabilities_fetcher import CapabilitiesFetcher
     capabilities_fetcher = CapabilitiesFetcher()
     
+    # Check if we have a fresh model cache
+    use_cache = capabilities_fetcher.is_cache_fresh()
+    
+    if use_cache:
+        print(get_text("cache_using"))
+    else:
+        print(get_text("cache_fetching"))
+    
     # Add all discovered models to the cache
     for m in models:
-        # Add size_gb from model size (may not be in /api/tags response)
-        size_bytes = m.get("size", 0)
-        m["size_gb"] = round(size_bytes / (1024**3), 1) if size_bytes > 0 else "N/A"
+        model_name = m["name"]
         
-        # Add params from model details (may not be in /api/tags response)
-        details = m.get("details", {})
-        param_size = details.get("parameter_size", "N/A") if details else "N/A"
-        m["params"] = param_size
+        # Try to get metadata from cache first
+        cached = capabilities_fetcher.get_model_from_cache(model_name)
         
-        # Add quantization format from model details
-        quant = (details.get("quantization_format") or "N/A") if details else "N/A"
-        m["quant"] = quant
-        
-        # Add max_ctx and capabilities from model info
-        try:
-            model_info = ollama_client.get_model_info(m["name"])
-            max_ctx = 131072  # default
-            caps = {'vision': False, 'tools': False, 'thinking': False}
-            if model_info:
-                # Check for top-level 'capabilities' key (new Ollama API format)
-                top_level_caps = model_info.get("capabilities", [])
-                if isinstance(top_level_caps, list) and len(top_level_caps) > 0:
-                    caps_list_str = ' '.join(top_level_caps).lower()
-                    caps = {
-                        'vision': 'vision' in caps_list_str or 'image' in caps_list_str,
-                        'tools': 'tools' in caps_list_str or 'function' in caps_list_str,
-                        'thinking': 'thinking' in caps_list_str or 'reason' in caps_list_str
-                    }
-                else:
-                    # Fallback: extract from model_info dict
+        if cached and use_cache:
+            # Use cached data
+            m["size_gb"] = cached.get('size_gb', m.get("size", 0) / (1024**3))
+            m["params"] = cached.get('params', 'N/A')
+            m["quant"] = cached.get('quant', 'N/A')
+            m["max_ctx"] = cached.get('max_ctx', 131072)
+            m["moe"] = cached.get('moe', None)
+            caps = cached.get('capabilities', {'vision': False, 'tools': False, 'thinking': False, 'audio': False})
+            
+            # Update size_gb if it was calculated from bytes
+            if isinstance(m["size_gb"], (int, float)):
+                m["size_gb"] = round(m["size_gb"], 1)
+        else:
+            # Fetch from API
+            # Add size_gb from model size (may not be in /api/tags response)
+            size_bytes = m.get("size", 0)
+            m["size_gb"] = round(size_bytes / (1024**3), 1) if size_bytes > 0 else "N/A"
+            
+            # Add params from model details (may not be in /api/tags response)
+            details = m.get("details", {})
+            param_size = details.get("parameter_size", "N/A") if details else "N/A"
+            m["params"] = param_size
+            
+            # Add quantization format from model details
+            quant = (details.get("quantization_format") or "N/A") if details else "N/A"
+            m["quant"] = quant
+            
+            # Add max_ctx and capabilities from model info
+            try:
+                model_info = ollama_client.get_model_info(m["name"])
+                max_ctx = 131072  # default
+                caps = {'vision': False, 'tools': False, 'thinking': False, 'audio': False}
+                if model_info:
+                    # Check for top-level 'capabilities' key (new Ollama API format)
+                    top_level_caps = model_info.get("capabilities", [])
+                    if isinstance(top_level_caps, list) and len(top_level_caps) > 0:
+                        caps_list_str = ' '.join(top_level_caps).lower()
+                        caps = {
+                            'vision': 'vision' in caps_list_str or 'image' in caps_list_str,
+                            'tools': 'tools' in caps_list_str or 'function' in caps_list_str,
+                            'thinking': 'thinking' in caps_list_str or 'reason' in caps_list_str,
+                            'audio': 'audio' in caps_list_str or 'whisper' in caps_list_str
+                        }
+                    else:
+                        # Fallback: extract from model_info dict
+                        model_info_dict = model_info.get("model_info", {})
+                        caps = ollama_client.get_capabilities_from_model_info(model_info_dict)
+                    
+                    params_str = model_info.get("parameters", "")
+                    if params_str:
+                        for line in params_str.split('\n'):
+                            line = line.strip()
+                            if line.startswith('num_ctx:'):
+                                try:
+                                    max_ctx = int(line.split(':')[1].strip())
+                                except (ValueError, IndexError):
+                                    pass
+                    
                     model_info_dict = model_info.get("model_info", {})
-                    caps = ollama_client.get_capabilities_from_model_info(model_info_dict)
-                
-                params_str = model_info.get("parameters", "")
-                if params_str:
-                    for line in params_str.split('\n'):
-                        line = line.strip()
-                        if line.startswith('num_ctx:'):
+                    for key, val in model_info_dict.items():
+                        if 'context_length' in key.lower() or 'num_ctx' in key.lower():
                             try:
-                                max_ctx = int(line.split(':')[1].strip())
-                            except (ValueError, IndexError):
+                                max_ctx = int(val)
+                            except (ValueError, TypeError):
                                 pass
                 
-                model_info_dict = model_info.get("model_info", {})
-                for key, val in model_info_dict.items():
-                    if 'context_length' in key.lower() or 'num_ctx' in key.lower():
-                        try:
-                            max_ctx = int(val)
-                        except (ValueError, TypeError):
-                            pass
-            m["max_ctx"] = max_ctx
-        except Exception:
-            m["max_ctx"] = 131072  # default on error
-            caps = {'vision': False, 'tools': False, 'thinking': False}
+                m["max_ctx"] = max_ctx
+                
+                # Add metadata to cache
+                capabilities_fetcher.add_model_metadata(model_name, model_info)
+            except Exception:
+                m["max_ctx"] = 131072  # default on error
+                caps = {'vision': False, 'tools': False, 'thinking': False, 'audio': False}
         
         m["vision"] = "✅" if caps.get("vision", False) else "❌"
         m["tools"] = "✅" if caps.get("tools", False) else "❌"
@@ -209,8 +241,9 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         # Re-register SIGINT handler after curses.wrapper (curses may reset it)
         signal.signal(signal.SIGINT, signal_handler)
 
-    # Save capabilities cache immediately after all model data is collected
+    # Save capabilities cache and model metadata cache immediately after all model data is collected
     capabilities_fetcher.save_cache()
+    capabilities_fetcher.save_model_cache()
 
     model_names_for_cmd = ",".join([m["name"] for m in test_models])
     # Use sys.executable for portability and absolute path to script
@@ -417,6 +450,8 @@ def main():
 
 def _main_impl():
     """Main implementation separated for clean exception handling."""
+    from i18n import get_text
+    
     # Parse arguments
     args = parse_args()
 
@@ -427,13 +462,13 @@ def _main_impl():
     # Set language
     set_language(args.lang)
 
-    # Handle --update-cache flag
+    # Handle --update-cache flag (update full model metadata cache)
     if getattr(args, 'update_cache', False):
         from api.capabilities_fetcher import CapabilitiesFetcher
         from api.factory import ApiClientFactory
         
         config = get_ollama_config(args)
-        print("Updating capabilities cache...")
+        print(get_text("cache_update_start"))
         
         ollama_client = ApiClientFactory.create_client(
             base_url=config.base_url,
@@ -445,15 +480,38 @@ def _main_impl():
         models = ollama_client.get_models()
         
         if not models:
-            print("No models found!")
+            print(get_text("no_models_found", models=""))
             return
         
+        updated = 0
         for m in models:
-            caps = m.get("capabilities", {})
-            fetcher.add_model_from_api(m["name"], caps)
+            model_name = m["name"]
+            try:
+                model_info = ollama_client.get_model_info(model_name)
+                fetcher.add_model_metadata(model_name, model_info)
+                
+                # Extract capabilities from model_info
+                # API returns capabilities as a list of strings (e.g., ['vision', 'tools'])
+                caps_list = model_info.get('capabilities', [])
+                if isinstance(caps_list, list) and len(caps_list) > 0:
+                    caps_str = ' '.join(caps_list).lower()
+                    capabilities_dict = {
+                        'vision': 'vision' in caps_str or 'image' in caps_str,
+                        'tools': 'tools' in caps_str or 'function' in caps_str,
+                        'thinking': 'thinking' in caps_str or 'reason' in caps_str,
+                        'audio': 'audio' in caps_str or 'whisper' in caps_str
+                    }
+                else:
+                    capabilities_dict = {}
+                
+                fetcher.add_model_from_api(model_name, capabilities_dict)
+                updated += 1
+            except Exception as e:
+                print(f"  ⚠️  Error updating {model_name}: {e}")
         
         fetcher.save_cache()
-        print("Cache update complete!")
+        fetcher.save_model_cache()
+        print(get_text("cache_update_complete", count=updated))
         return
 
     # Initialize Ollama configuration

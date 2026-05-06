@@ -3,6 +3,30 @@
 from i18n import get_text
 
 
+def _format_moe_display(moe_data) -> str:
+    """Format MoE status for display.
+    
+    Args:
+        moe_data: MoE data from model cache (dict, bool, or None)
+        
+    Returns:
+        str: Display string with icon
+    """
+    if moe_data is None:
+        return "❓"
+    elif moe_data is False:
+        return "⬛"
+    elif isinstance(moe_data, dict):
+        # It's MoE
+        num_experts = moe_data.get('num_experts', 'N/A')
+        if isinstance(num_experts, int) and num_experts > 0:
+            return f"🟡({num_experts})"
+        return "🟡"
+    elif moe_data is True:
+        return "🟡"
+    return "❓"
+
+
 def print_model_list(models: list):
     """Print formatted model list to console.
 
@@ -12,13 +36,23 @@ def print_model_list(models: list):
     print(get_text("available_models"))
     for i, m in enumerate(models):
         max_ctx_str = f"{m['max_ctx'] // 1024}K" if m['max_ctx'] >= 1024 else str(m['max_ctx'])
+        
+        # Get MoE data from model metadata (if available)
+        moe_data = m.get('moe', None)
+        moe_str = _format_moe_display(moe_data)
+
+        # Ensure size_gb is a float for format string {size_gb:4.1f}
+        size_gb = m.get('size_gb', 0)
+        if not isinstance(size_gb, (int, float)):
+            size_gb = 0.0
 
         print(get_text("model_list_header",
             index=i,
             name=m['name'],
             params=m['params'],
-            size_gb=m['size_gb'],
+            size_gb=size_gb,
             max_ctx_str=max_ctx_str,
+            moe_str=moe_str,
             vision=m.get('vision', '❓'),
             tools=m.get('tools', '❓'),
             thinking=m.get('thinking', '❌')))

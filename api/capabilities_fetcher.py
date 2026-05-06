@@ -1,4 +1,10 @@
-"""Model capabilities fetching from ollama.com."""
+"""Model capabilities and metadata fetching from ollama.com.
+
+This module provides comprehensive model metadata caching including:
+- Capabilities (vision, tools, thinking, audio)
+- Model metadata (size, params, quantization, max_ctx)
+- MoE (Mixture of Experts) detection
+"""
 
 import json
 import os
@@ -6,13 +12,21 @@ import re
 import requests
 import urllib.parse
 from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 
 
 class CapabilitiesFetcher:
-    """Fetches model capabilities (vision, tools, thinking) from Ollama API and HTML."""
+    """Fetches and caches model capabilities and metadata from Ollama API and HTML."""
 
-    # Path to the cache file (relative to this module)
+    # Path to the cache files (relative to this module)
     CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'capabilities_cache.json')
+    MODEL_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'model_cache.json')
+    
+    # Cache version (increment to force cache refresh)
+    CACHE_VERSION = 1
+    
+    # Cache TTL in hours (refresh after this period)
+    CACHE_TTL_HOURS = 24
     
     # Default built-in capabilities for well-known models
     DEFAULT_CAPABILITIES = {
@@ -96,16 +110,68 @@ class CapabilitiesFetcher:
     # Color class patterns (used for size badges, not capabilities)
     COLOR_PATTERN = re.compile(r'bg-\[#?[a-z0-9]+\]')
 
-    def __init__(self, cache_file: str = None):
+    def __init__(self, cache_file: str = None, model_cache_file: str = None):
         """Initialize CapabilitiesFetcher with cache.
         
         Args:
-            cache_file: Path to JSON cache file. Defaults to data/capabilities_cache.json
+            cache_file: Path to capabilities JSON cache file. Defaults to data/capabilities_cache.json
+            model_cache_file: Path to model metadata JSON cache file. Defaults to data/model_cache.json
         """
         self.cache_file = cache_file or self.CACHE_FILE
+        self.model_cache_file = model_cache_file or self.MODEL_CACHE_FILE
         # Start with default capabilities, then merge with cached data
         self.MODEL_CAPABILITIES = dict(self.DEFAULT_CAPABILITIES)
         self._load_cache()
+        # Model metadata cache (full data from /api/show)
+        self.model_metadata = {}
+        self._load_model_cache()
+    
+    def is_cache_fresh(self) -> bool:
+        """Check if the model cache is fresh (not expired).
+        
+        Returns:
+            bool: True if cache exists and was fetched within CACHE_TTL_HOURS
+        """
+        if not os.path.exists(self.model_cache_file):
+            return False
+        
+        try:
+            with open(self.model_cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            cache_timestamp = cache_data.get('cache_timestamp', '')
+            if not cache_timestamp:
+                return False
+            
+            # Parse timestamp and check TTL
+            fetched_at = datetime.fromisoformat(cache_timestamp.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            age_hours = (now - fetched_at).total_seconds() / 3600
+            
+            return age_hours < self.CACHE_TTL_HOURS
+        except (json.JSONDecodeError, IOError, ValueError):
+            return False
+    
+    def _load_model_cache(self):
+        """Load cached model metadata from JSON file."""
+        if not os.path.exists(self.model_cache_file):
+            return
+        
+        try:
+            with open(self.model_cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            # Validate cache version
+            version = cache_data.get('cache_version', 0)
+            if version < self.CACHE_VERSION:
+                print(f"⚠️  Cache version {version} is outdated (need {self.CACHE_VERSION})")
+                return
+            
+            self.model_metadata = cache_data.get('models', {})
+            timestamp = cache_data.get('cache_timestamp', 'unknown')
+            print(f"✅ Loaded model cache: {len(self.model_metadata)} models from {timestamp} ({self.model_cache_file})")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"⚠️  Error loading model cache: {e}")
 
     def _load_cache(self):
         """Load cached capabilities from JSON file."""
@@ -175,7 +241,284 @@ class CapabilitiesFetcher:
                 print(f"ℹ️  No new models to save (all models are in default database)")
         except IOError as e:
             print(f"⚠️  Error saving cache: {e}")
-
+    
+    # ========================================================================
+    # Model Metadata Cache Methods
+    # ========================================================================
+    
+    def save_model_cache(self):
+        """Save model metadata to JSON cache file.
+        
+        Saves all discovered model metadata including capabilities, MoE info,
+        size, params, quantization, and context length.
+        """
+        try:
+            # Ensure directory exists
+            cache_dir = os.path.dirname(self.model_cache_file)
+            if cache_dir:
+                os.makedirs(cache_dir, exist_ok=True)
+            
+            cache_data = {
+                'cache_version': self.CACHE_VERSION,
+                'cache_timestamp': datetime.now(timezone.utc).isoformat(),
+                'models': self.model_metadata
+            }
+            
+            with open(self.model_cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Saved model cache: {len(self.model_metadata)} models to {self.model_cache_file}")
+        except IOError as e:
+            print(f"⚠️  Error saving model cache: {e}")
+    
+    def add_model_metadata(self, model_name: str, metadata: dict):
+        """Add or update model metadata in the cache.
+        
+        Args:
+            model_name: Full model name (e.g., 'qwen3.6-35b:q4_0')
+            metadata: Dict containing model metadata from /api/show
+        """
+        base_name = model_name.split(':')[0]
+        
+        # Extract and normalize all relevant fields
+        cached_entry = {
+            'name': model_name,
+            'base_name': base_name,
+            'size': metadata.get('size', 0),
+            'size_gb': round(metadata.get('size', 0) / (1024**3), 1) if metadata.get('size', 0) > 0 else "N/A",
+            'params': self._extract_params(metadata),
+            'total_params': self._extract_total_params(metadata),
+            'active_params': self._extract_active_params(metadata),
+            'quant': self._extract_quant(metadata),
+            'max_ctx': self._extract_max_ctx(metadata),
+            'capabilities': self._extract_capabilities(metadata),
+            'moe': self._detect_moe(metadata, base_name),
+            'fetched_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Store with both full name and base name
+        self.model_metadata[model_name] = cached_entry
+        if base_name != model_name:
+            # Also store with base name (but don't overwrite if full name already exists)
+            if base_name not in self.model_metadata:
+                base_entry = dict(cached_entry)
+                base_entry['name'] = base_name
+                self.model_metadata[base_name] = base_entry
+    
+    def get_model_from_cache(self, model_name: str) -> dict | None:
+        """Get cached model metadata by name.
+        
+        Args:
+            model_name: Model name to look up (full or base name)
+            
+        Returns:
+            dict: Cached model metadata, or None if not found
+        """
+        # Direct lookup
+        if model_name in self.model_metadata:
+            return self.model_metadata[model_name]
+        
+        # Try base name
+        base_name = model_name.split(':')[0]
+        if base_name in self.model_metadata:
+            return self.model_metadata[base_name]
+        
+        # Try dev-* prefix removal
+        for prefix in ['dev-', '+']:
+            if base_name.startswith(prefix):
+                clean_name = base_name[len(prefix):]
+                if clean_name in self.model_metadata:
+                    return self.model_metadata[clean_name]
+        
+        return None
+    
+    def _extract_params(self, metadata: dict) -> str:
+        """Extract human-readable params string from model metadata."""
+        details = metadata.get('details', {})
+        if details:
+            return details.get('parameter_size', 'N/A')
+        return 'N/A'
+    
+    def _extract_total_params(self, metadata: dict) -> str:
+        """Extract total parameters count."""
+        details = metadata.get('details', {})
+        if details:
+            return str(details.get('total_parameters', 'N/A'))
+        return 'N/A'
+    
+    def _extract_active_params(self, metadata: dict) -> str:
+        """Extract active parameters count (for MoE models)."""
+        details = metadata.get('details', {})
+        if details:
+            # For MoE models, this might be available
+            moe_info = metadata.get('moe', {})
+            if moe_info:
+                num_experts = moe_info.get('num_experts', 0)
+                experts_per_token = moe_info.get('experts_per_token', 0)
+                total = details.get('total_parameters', 0)
+                if num_experts > 0 and experts_per_token > 0 and total > 0:
+                    # Active params = total * experts_per_token / num_experts
+                    active = total * experts_per_token / num_experts
+                    return self._format_params(active)
+            return str(details.get('total_parameters', 'N/A'))
+        return 'N/A'
+    
+    def _extract_quant(self, metadata: dict) -> str:
+        """Extract quantization format."""
+        details = metadata.get('details', {})
+        if details:
+            return details.get('quantization_format', 'N/A')
+        return 'N/A'
+    
+    def _extract_max_ctx(self, metadata: dict) -> int:
+        """Extract maximum context length."""
+        max_ctx = 131072  # default
+        
+        # Check parameters field
+        parameters = metadata.get('parameters', '')
+        if parameters:
+            for line in parameters.split('\n'):
+                line = line.strip()
+                if line.startswith('num_ctx:'):
+                    try:
+                        max_ctx = int(line.split(':')[1].strip())
+                        return max_ctx
+                    except (ValueError, IndexError):
+                        pass
+        
+        # Check model_info keys
+        model_info = metadata.get('model_info', {})
+        for key, val in model_info.items():
+            if 'context_length' in key.lower() or 'num_ctx' in key.lower():
+                try:
+                    max_ctx = int(val)
+                    return max_ctx
+                except (ValueError, TypeError):
+                    pass
+        
+        return max_ctx
+    
+    def _extract_capabilities(self, metadata: dict) -> dict:
+        """Extract capabilities from model metadata."""
+        # Check top-level capabilities field (new Ollama API format)
+        caps_list = metadata.get('capabilities', [])
+        if isinstance(caps_list, list) and len(caps_list) > 0:
+            caps_str = ' '.join(caps_list).lower()
+            return {
+                'vision': 'vision' in caps_str or 'image' in caps_str,
+                'tools': 'tools' in caps_str or 'function' in caps_str,
+                'thinking': 'thinking' in caps_str or 'reason' in caps_str,
+                'audio': 'audio' in caps_str or 'whisper' in caps_str
+            }
+        
+        # Fallback: extract from model_info
+        model_info = metadata.get('model_info', {})
+        from api.base_client import BaseApiClient
+        return BaseApiClient.get_capabilities_from_model_info(model_info)
+    
+    # ========================================================================
+    # MoE (Mixture of Experts) Detection
+    # ========================================================================
+    
+    def _detect_moe(self, metadata: dict, base_name: str) -> dict | bool | None:
+        """Detect if model is MoE and extract MoE details.
+        
+        Returns:
+            dict: MoE details if confirmed MoE (e.g., {'is_moe': True, 'num_experts': 64, ...})
+            bool: False if confirmed NOT MoE
+            None: Unknown (insufficient data)
+        """
+        model_info = metadata.get('model_info', {})
+        details = metadata.get('details', {})
+        
+        # Method 1: Direct MoE fields in model_info
+        moe_fields = {}
+        for key, val in model_info.items():
+            if key.startswith('moe.'):
+                moe_fields[key] = val
+        
+        if moe_fields:
+            result = {'is_moe': True}
+            if 'moe.num_experts' in moe_fields:
+                try:
+                    result['num_experts'] = int(moe_fields['moe.num_experts'])
+                except (ValueError, TypeError):
+                    pass
+            if 'moe.experts_per_token' in moe_fields:
+                try:
+                    result['experts_per_token'] = int(moe_fields['moe.experts_per_token'])
+                except (ValueError, TypeError):
+                    pass
+            if 'moe.router' in moe_fields:
+                result['router'] = moe_fields['moe.router']
+            
+            # Calculate active parameters if we have total params
+            total_params = details.get('total_parameters', 0)
+            if total_params and result.get('num_experts', 0) > 0:
+                experts_per_token = result.get('experts_per_token', 1)
+                active = total_params * experts_per_token / result['num_experts']
+                result['active_params'] = self._format_params(active)
+                result['total_params'] = self._format_params(total_params)
+            
+            return result
+        
+        # Method 2: Architecture-based detection
+        architecture = model_info.get('general.architecture', '').lower()
+        basename = model_info.get('general.basename', '').lower()
+        combined = f"{architecture} {basename}".lower()
+        
+        # Known MoE architectures
+        moe_architectures = ['mixtral', 'qwen2.5-moe', 'deepseek-v3', 'deepseek-v2', 'jamba']
+        for arch in moe_architectures:
+            if arch in combined:
+                return {'is_moe': True, 'architecture': architecture}
+        
+        # Known dense (non-MoE) architectures
+        dense_architectures = ['llama', 'gemma', 'qwen', 'mistral', 'phi', 'granite']
+        for arch in dense_architectures:
+            if arch in combined and 'moe' not in basename:
+                return False
+        
+        # Method 3: Name-based heuristics
+        name_lower = base_name.lower()
+        
+        # Known MoE model patterns
+        moe_patterns = ['mixtral', 'qwen2.5-moe', 'deepseek-v3', 'deepseek-v2', 'jamba']
+        for pattern in moe_patterns:
+            if pattern in name_lower:
+                return {'is_moe': True, 'detected_by': 'name_pattern'}
+        
+        # Known dense model patterns
+        dense_patterns = ['llama', 'gemma', 'qwen3', 'qwen2.5', 'phi', 'granite']
+        for pattern in dense_patterns:
+            if pattern in name_lower and 'moe' not in name_lower:
+                return False
+        
+        # Method 4: Check for MoE-related keys in model_info
+        moe_keywords = ['moe', 'mixture', 'expert', 'router']
+        for key in model_info.keys():
+            if any(kw in key.lower() for kw in moe_keywords):
+                return {'is_moe': True, 'detected_by': 'key_pattern', 'key': key}
+        
+        # Unknown - return None
+        return None
+    
+    def _format_params(self, num_params: int | float) -> str:
+        """Format parameter count for display."""
+        if num_params >= 1e12:
+            return f"{num_params / 1e12:.1f}T"
+        elif num_params >= 1e9:
+            return f"{num_params / 1e9:.1f}B"
+        elif num_params >= 1e6:
+            return f"{num_params / 1e6:.1f}M"
+        elif num_params >= 1e3:
+            return f"{num_params / 1e3:.1f}K"
+        return str(int(num_params))
+    
+    # ========================================================================
+    # Legacy compatibility methods (keep for backward compatibility)
+    # ========================================================================
+    
     def _is_size_tag(self, text: str) -> bool:
         """Check if text is a model size indicator (e.g., '1.5b', '70b', '7b')."""
         if not text:
