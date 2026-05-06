@@ -1,12 +1,15 @@
 """AI-powered analysis module for benchmark results."""
 
 import json
+import logging
 import os
 import time
 from typing import Optional, Dict, List
 
 import requests
 from i18n import get_text, _current_language
+
+logger = logging.getLogger('roo_bench')
 
 
 class AIAnalyzer:
@@ -249,7 +252,15 @@ class AIAnalyzer:
         Returns:
             Optional[str]: Translated text or None if translation fails
         """
+        # Debug: Log input parameters (only at DEBUG level)
+        logger.debug("translate() called:")
+        logger.debug("  target_lang: %s", target_lang)
+        logger.debug("  model_name: %s", model_name or 'default (llama3.2)')
+        logger.debug("  text length: %d chars", len(text))
+        logger.debug("  base_url: %s", self.base_url)
+        
         if target_lang == 'en':
+            logger.debug("Target language is 'en', returning text as-is.")
             return text
 
         lang_name = 'Ukrainian' if target_lang == 'ua' else target_lang
@@ -257,8 +268,11 @@ class AIAnalyzer:
             target_lang=lang_name,
             text=text
         )
+        
+        logger.debug("prompt constructed: %d chars", len(prompt))
 
         use_model = model_name or "llama3.2"
+        logger.debug("using model: %s", use_model)
 
         payload = {
             "model": use_model,
@@ -270,19 +284,52 @@ class AIAnalyzer:
         }
 
         try:
+            logger.debug("Sending translation request to %s/api/generate...", self.base_url)
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
                 headers=self.headers,
                 timeout=self.timeout
             )
+            
+            logger.debug("response status code: %d", response.status_code)
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("response", "").strip()
+                logger.debug("response keys: %s", list(data.keys()))
+                logger.debug("response 'done': %s", data.get('done'))
+                logger.debug("response 'done_reason': %s", data.get('done_reason'))
+                logger.debug("response 'total_duration': %s", data.get('total_duration'))
+                logger.debug("response 'eval_count': %s", data.get('eval_count'))
+                
+                translated = data.get("response", "").strip()
+                logger.debug("translated text length: %d chars", len(translated))
+                
+                if translated:
+                    logger.debug("Translation successful.")
+                    return translated
+                else:
+                    logger.warning("Translation returned empty response.")
+                    logger.debug("full response: %s", json.dumps(data, indent=2)[:500])
+                    return None
             else:
+                error_msg = response.json().get("error", f"HTTP {response.status_code}")
+                logger.warning("Translation failed with HTTP %d: %s", response.status_code, error_msg)
+                logger.debug("response text: %s", response.text[:500])
                 return None
-        except Exception:
+        except requests.exceptions.Timeout as e:
+            logger.warning("Translation request timed out after %d seconds.", self.timeout)
+            logger.debug("timeout error: %s", e)
+            return None
+        except requests.exceptions.ConnectionError as e:
+            logger.warning("Translation request connection error.")
+            logger.debug("connection error: %s", e)
+            logger.debug("Tip: Check if Ollama is running at %s", self.base_url)
+            return None
+        except Exception as e:
+            logger.warning("Translation error: %s", e)
+            logger.debug("exception type: %s", type(e).__name__)
+            logger.debug("exception str: %s", str(e))
             return None
 
 
@@ -451,25 +498,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
         print("=" * 60)
         print(response)
 
-        # Unload model from VRAM after analysis is complete (BEFORE translation)
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            from api.factory import ApiClientFactory
-            analysis_client = ApiClientFactory.create_client(
-                base_url=analyzer.base_url,
-                headers=analyzer.headers,
-                timeout=analyzer.timeout,
-                ssh_host=getattr(ssh_client, 'host', None) if ssh_client else None,
-                ssh_user=getattr(ssh_client, 'user', None) if ssh_client else None,
-                ssh_port=getattr(ssh_client, 'port', 22) if ssh_client else 22,
-                ssh_key=getattr(ssh_client, 'key_path', None) if ssh_client else None
-            )
-            analysis_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
-            print(f"   💡 Tip: Run 'ollama restart' to free VRAM.")
-        
-        # Translate if needed (AFTER unload to avoid conflicts)
+        # Translate if needed (BEFORE unload to avoid model reload)
         if current_lang != 'en':
             print(f"\n" + "=" * 60)
             print(get_text("analysis_raw_response"))
@@ -479,10 +508,43 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
             print(f"\n" + "=" * 60)
             print(get_text("analysis_translated"))
             print("=" * 60)
+            
+            # Debug: Check model is still loaded before translation
+            try:
+                running_models = analyzer.get_available_models()
+                model_in_list = any(model_name in m.get('name', '') for m in running_models)
+                logger.debug("model '%s' in available models: %s", model_name, model_in_list)
+            except Exception as e:
+                logger.debug("could not check model availability: %s", e)
+            
             translated = analyzer.translate(response, current_lang, model_name)
             if translated:
                 print(translated)
             else:
                 print(get_text("translation_unavailable"))
+        
+        # Unload model from VRAM after analysis and translation are complete
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        try:
+            from system.restart_manager import restart_ollama, RestartMethod
+            
+            # Convert string method to RestartMethod enum
+            method_map = {
+                'systemctl': RestartMethod.SYSTEMCTL,
+                'docker': RestartMethod.DOCKER,
+                'kill_start': RestartMethod.KILL_START,
+                'manual': RestartMethod.MANUAL,
+                'ssh': RestartMethod.SSH
+            }
+            restart_method_enum = method_map.get(restart_method, RestartMethod.MANUAL)
+            
+            restart_ollama(
+                method=restart_method_enum,
+                no_restart=no_restart,
+                ssh_client=ssh_client
+            )
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
+            print(f"   💡 Tip: Run 'ollama restart' to free VRAM.")
     except Exception as e:
         print(get_text("analysis_error", error=str(e)))
