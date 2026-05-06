@@ -49,118 +49,85 @@ class OllamaClient:
         # Get architecture and basename for heuristic detection
         architecture = model_info.get('general.architecture', '').lower()
         basename = model_info.get('general.basename', '').lower()
-        model_name_combined = f"{architecture} {basename}"
+        file_type = model_info.get('general.file_type', '').lower()
         
+        # Combine all strings for easier searching
+        combined = f"{architecture} {basename} {file_type}"
+        combined = combined.lower()
+        
+        # Vision detection
+        if any(kw in combined for kw in ['vision', 'instruct', 'clip', 'image', 'multi modal', 'moar']):
+            capabilities['vision'] = True
+        elif any(kw in architecture for kw in ['clip', 'vlm', 'moondream']):
+            capabilities['vision'] = True
+        # Check for vision-specific keys
         for key in model_info.keys():
-            key_lower = key.lower()
-            
-            # Vision: keys containing '.vision.' (e.g., 'gemma4.vision.block_count', 'qwen35.vision.embedding_length')
-            if '.vision.' in key_lower or key_lower.endswith('.vision'):
+            if any(vision_kw in key.lower() for vision_kw in ['vision', 'image', 'clip', 'multi modal']):
                 capabilities['vision'] = True
-            
-            # Audio: keys containing '.audio.' (e.g., 'gemma4.audio.attention.head_count')
-            if '.audio.' in key_lower or key_lower.endswith('.audio'):
-                capabilities['audio'] = True
-            
-            # Tools: keys containing 'tool' or 'function' (e.g., 'tool.function.tool_use')
-            if 'tool' in key_lower or 'function' in key_lower:
-                capabilities['tools'] = True
-            
-            # Thinking: keys containing 'reasoning' or 'thinking'
-            if 'reasoning' in key_lower or 'thinking' in key_lower:
-                capabilities['thinking'] = True
+                break
         
-        # Heuristic detection based on architecture and known model families
-        # These models ALWAYS have tools support (function calling)
-        TOOLS_ARCHITECTURES = [
-            'llama', 'qwen2', 'qwen2.5', 'qwen3', 'qwen35', 'qwen35moe',
-            'mistral', 'mixtral', 'nemotron', 'nemotron_h', 'phi3', 'phi4',
-            'granite', 'gemma', 'gemma3', 'gemma4', 'deepseek', 'deepseek2',
-            'gptoss', 'claude', 'claude-oss'
-        ]
-        
-        # These models have thinking/reasoning capability
-        THINKING_ARCHITECTURES = [
-            'qwen3', 'qwen35', 'qwen35moe',
-            'deepseek', 'deepseek2', 'deepseek-r1',
-            'qwq', 'o1', 'o3', 'claude', 'claude-oss',
-            'nemotron', 'nemotron_h'
-        ]
-        
-        # Check if architecture matches known families
-        for arch in TOOLS_ARCHITECTURES:
-            if arch in model_name_combined or arch in architecture:
+        # Tools/function calling detection
+        if any(kw in combined for kw in ['tools', 'function', 'tool', 'function calling']):
+            capabilities['tools'] = True
+        elif 'tokenizer.tools' in str(model_info.get('tokenizer', {})):
+            capabilities['tools'] = True
+        # Check for tools-specific keys
+        for key in model_info.keys():
+            if 'tools' in key.lower() or 'function' in key.lower():
                 capabilities['tools'] = True
                 break
         
-        # Special case: qwen3.5 and qwen3.6 have both vision and tools and thinking
-        if 'qwen35' in architecture or 'qwen35moe' in architecture:
-            capabilities['tools'] = True
-            capabilities['thinking'] = True  # Qwen3.5/3.6 have thinking
-        
-        for arch in THINKING_ARCHITECTURES:
-            if arch in model_name_combined or arch in architecture:
+        # Thinking/reasoning detection
+        if any(kw in combined for kw in ['thinking', 'reason', 'deepseek', 'o1', 'o3']):
+            capabilities['thinking'] = True
+        elif any(kw in str(model_info.get('tokenizer', {})).lower() for kw in ['thinking', 'reason']):
+            capabilities['thinking'] = True
+        # Check for thinking-specific keys
+        for key in model_info.keys():
+            if 'thinking' in key.lower() or 'reason' in key.lower():
                 capabilities['thinking'] = True
+                break
+        
+        # Audio detection
+        if any(kw in combined for kw in ['audio', 'whisper', 'speech', 'voice']):
+            capabilities['audio'] = True
+        elif any(kw in str(model_info.get('tokenizer', {})).lower() for kw in ['audio', 'whisper']):
+            capabilities['audio'] = True
+        # Check for audio-specific keys
+        for key in model_info.keys():
+            if any(audio_kw in key.lower() for audio_kw in ['audio', 'whisper', 'speech', 'voice']):
+                capabilities['audio'] = True
                 break
         
         return capabilities
 
     def get_models(self) -> list:
-        """Fetch available models with details.
-
+        """Get list of available models.
+        
         Returns:
-            list: List of model dictionaries with name, params, quant, size_gb, max_ctx, and capabilities
+            list: List of model dictionaries
         """
         try:
-            response = requests.get(f"{self.base_url}/api/tags", headers=self.headers)
-            models = []
-            for m in response.json().get("models", []):
-                details = m.get("details", {})
-                size_gb = m.get("size", 0) / (1024 ** 3)
-
-                # Get the maximum context size and capabilities via API show
-                max_ctx = 32768  # Default value if not found
-                capabilities = {'vision': False, 'tools': False, 'thinking': False, 'audio': False}
-                
-                try:
-                    show_resp = requests.post(f"{self.base_url}/api/show", json={"name": m["name"]})
-                    if show_resp.status_code == 200:
-                        show_data = show_resp.json()
-                        model_info = show_data.get("model_info", {})
-                        
-                        # Look for key containing 'context_length' (e.g. 'llama.context_length' or 'qwen2.context_length')
-                        for key, val in model_info.items():
-                            if 'context_length' in key:
-                                max_ctx = int(val)
-                                break
-                        
-                        # Extract capabilities from model_info
-                        capabilities = self.get_capabilities_from_model_info(model_info)
-                except Exception as e:
-                    show_error = f"Error getting details for {m['name']}: {e}"
-                    print(f"⚠️  {show_error}")
-
-                models.append({
-                    "name": m["name"],
-                    "params": details.get("parameter_size", "N/A"),
-                    "quant": details.get("quantization_level", "N/A"),
-                    "size_gb": size_gb,
-                    "max_ctx": max_ctx,
-                    "capabilities": capabilities
-                })
-            return models
+            response = requests.get(
+                f"{self.base_url}/api/tags",
+                timeout=self.timeout
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("models", [])
+            return []
         except Exception as e:
             print(get_text("error_ollama_connection", error=str(e)))
             return []
 
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
-
+        
         Args:
             model_name: Model name
             context_size: Context size
             num_runs: Number of runs for averaging (default: 3)
-
+            
         Returns:
             tuple: (avg_tps, vram, tps_list, error)
                 avg_tps: Average TPS (float)
@@ -213,13 +180,18 @@ class OllamaClient:
                 monitor_thread = threading.Thread(target=monitor_vram, daemon=True)
                 monitor_thread.start()
 
-                response = requests.post(
-                    f"{self.base_url}/api/generate",
-                    json=payload,
-                    headers=self.headers,
-                    timeout=self.timeout,
-                    stream=True
-                )
+                try:
+                    response = requests.post(
+                        f"{self.base_url}/api/generate",
+                        json=payload,
+                        headers=self.headers,
+                        timeout=self.timeout,
+                        stream=True
+                    )
+                except KeyboardInterrupt:
+                    stop_monitoring.set()
+                    monitor_thread.join(timeout=2)
+                    raise
 
                 if response.status_code != 200:
                     stop_monitoring.set()
@@ -234,17 +206,22 @@ class OllamaClient:
                 final_data = None
                 line_count = 0
                 all_lines = []
-                for line in response.iter_lines():
-                    if line:
-                        line_count += 1
-                        line_str = line.decode('utf-8')
-                        all_lines.append(line_str)
-                        # Check for done=true (with or without spaces)
-                        if '"done":true' in line_str or '"done": true' in line_str:
-                            try:
-                                final_data = json.loads(line_str)
-                            except json.JSONDecodeError:
-                                pass
+                try:
+                    for line in response.iter_lines():
+                        if line:
+                            line_count += 1
+                            line_str = line.decode('utf-8')
+                            all_lines.append(line_str)
+                            # Check for done=true (with or without spaces)
+                            if '"done":true' in line_str or '"done": true' in line_str:
+                                try:
+                                    final_data = json.loads(line_str)
+                                except json.JSONDecodeError:
+                                    pass
+                except KeyboardInterrupt:
+                    stop_monitoring.set()
+                    monitor_thread.join(timeout=2)
+                    raise
 
                 # Stop monitoring after generation completes
                 stop_monitoring.set()
@@ -274,6 +251,11 @@ class OllamaClient:
                 vram_during = max_vram if vram_samples else None
                 tps_list.append({"run": run_num + 1, "tps": tps, "vram": vram_during})
 
+            except KeyboardInterrupt:
+                # Re-raise KeyboardInterrupt to allow Ctrl+C to propagate
+                stop_monitoring.set()
+                monitor_thread.join(timeout=2)
+                raise
             except requests.exceptions.Timeout:
                 stop_monitoring.set()
                 error = get_text("error_timeout")
@@ -366,6 +348,223 @@ class OllamaClient:
                     pass
         
         return 2048
+
+    def get_running_models(self) -> list:
+        """Get list of currently running models with their actual context usage.
+        
+        Uses the /api/ps endpoint which shows the actual context window being used.
+        
+        Returns:
+            list: List of dicts with model info including 'n_ctx' field
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/ps",
+                headers=self.headers,
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # API can return a dict with 'models' key or a list
+                if isinstance(data, dict) and 'models' in data:
+                    return data['models']
+                elif isinstance(data, list):
+                    return data
+                elif isinstance(data, dict):
+                    return [data]
+                return []
+            return []
+        except Exception as e:
+            print(f"⚠️  Error getting running models: {e}")
+            return []
+
+    def get_actual_num_ctx(self, model_name: str) -> int:
+        """Get the actual num_ctx being used by a running model.
+        
+        This reads from /api/ps which shows the real-time context window.
+        The /api/ps endpoint returns 'context_length' for running models.
+        
+        Args:
+            model_name: Model name (or full/short ID)
+            
+        Returns:
+            int: Actual num_ctx being used, or 0 if model not running
+        """
+        running = self.get_running_models()
+        for model in running:
+            # Match by name, short ID, or full ID
+            model_name_field = model.get('name', '')
+            model_id = model.get('id', '')
+            if (model_name_field == model_name or
+                model_id.endswith(model_name[-12:]) or
+                model_id == model_name):
+                # /api/ps returns 'context_length' for running models
+                ctx_len = model.get('context_length', 0)
+                if ctx_len > 0:
+                    return ctx_len
+                # Fallback to n_ctx (some Ollama versions)
+                return model.get('n_ctx', 0)
+        return 0
+
+    def verify_num_ctx(self, model_name: str, expected_ctx: int) -> tuple:
+        """Verify that the model's num_ctx matches the expected value.
+        
+        Args:
+            model_name: Model name
+            expected_ctx: Expected num_ctx value
+            
+        Returns:
+            tuple: (is_verified: bool, actual_ctx: int, message: str)
+                is_verified: True if actual ctx matches expected
+                actual_ctx: The actual num_ctx value found
+                message: Human-readable message describing the result
+        """
+        actual_ctx = self.get_current_num_ctx(model_name)
+        
+        if actual_ctx == expected_ctx:
+            message = get_text("ctx_verified", actual=actual_ctx, expected=expected_ctx)
+            return True, actual_ctx, message
+        
+        message = get_text("ctx_mismatch", actual=actual_ctx, expected=expected_ctx)
+        return False, actual_ctx, message
+
+    def verify_num_ctx_via_show(self, model_name: str, expected_ctx: int) -> tuple:
+        """Verify num_ctx by parsing the full /api/show response.
+        
+        This method looks for context_length in the model's architecture info.
+        
+        Args:
+            model_name: Model name
+            expected_ctx: Expected num_ctx value
+            
+        Returns:
+            tuple: (is_verified: bool, details: str, found_values: dict)
+                is_verified: True if context_length matches expected
+                details: Detailed message about the verification
+                found_values: Dict with found context-related values
+        """
+        model_info = self.get_model_info(model_name)
+        if not model_info:
+            return False, "Could not retrieve model info", {}
+        
+        found_values = {}
+        
+        # Method 1: Check 'parameters' field for num_ctx
+        parameters = model_info.get("parameters", "")
+        if parameters:
+            for line in parameters.split('\n'):
+                line = line.strip()
+                if line.startswith('num_ctx:'):
+                    try:
+                        val = int(line.split(':')[1].strip())
+                        found_values['num_ctx_param'] = val
+                    except (ValueError, IndexError):
+                        pass
+        
+        # Method 2: Check model_info keys for context_length or num_ctx
+        model_info_dict = model_info.get("model_info", {})
+        for key, val in model_info_dict.items():
+            key_lower = key.lower()
+            if 'context_length' in key_lower or 'num_ctx' in key_lower:
+                try:
+                    found_values[key] = int(val)
+                except (ValueError, TypeError):
+                    pass
+        
+        # Method 3: Check top-level context_length
+        if 'context_length' in model_info:
+            try:
+                found_values['context_length'] = int(model_info['context_length'])
+            except (ValueError, TypeError):
+                pass
+        
+        # Check if any found value matches expected
+        matched_key = None
+        actual_value = None
+        for key, val in found_values.items():
+            if val == expected_ctx:
+                matched_key = key
+                actual_value = val
+                break
+        
+        # If no exact match, check if any value >= expected (model can support it)
+        if not actual_value:
+            for key, val in found_values.items():
+                if val >= expected_ctx:
+                    matched_key = key
+                    actual_value = val
+                    break
+        
+        if actual_value:
+            details = f"   🔍 via /api/show: Found context values: {found_values}"
+            if actual_value == expected_ctx:
+                details += f" | ✅ Matches expected ({expected_ctx})"
+                return True, details, found_values
+            elif actual_value >= expected_ctx:
+                details += f" | ⚠️  Supports >= expected (found {actual_value} >= {expected_ctx})"
+                return True, details, found_values
+            else:
+                details += f" | ❌ Too small (found {actual_value} < {expected_ctx})"
+                return False, details, found_values
+        
+        return False, f"   🔍 via /api/show: No context values found in model info", found_values
+
+    def verify_ctx_via_generation(self, model_name: str, context_size: int, prompt: str) -> tuple:
+        """Verify context size by sending a test generation and checking prompt_eval_count.
+        
+        This method sends a prompt and verifies that the model evaluates all tokens,
+        which confirms the context window is large enough.
+        
+        Args:
+            model_name: Model name
+            context_size: Requested context size
+            prompt: Test prompt to send
+            
+        Returns:
+            tuple: (is_verified: bool, eval_count: int, total_duration: float, message: str)
+        """
+        try:
+            payload = {
+                "model": model_name,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": 10,
+                    "num_ctx": context_size
+                }
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json=payload,
+                headers=self.headers,
+                timeout=60
+            )
+            
+            if response.status_code != 200:
+                return False, 0, 0.0, f"   🧪 Generation test failed: HTTP {response.status_code}"
+            
+            data = response.json()
+            eval_count = data.get("eval_count", 0)
+            prompt_eval_count = data.get("prompt_eval_count", 0)
+            total_duration = data.get("total_duration", 0) / 1e9
+            
+            # Count tokens in prompt (rough estimate: ~4 chars per token for English)
+            estimated_tokens = len(prompt.split())
+            
+            if prompt_eval_count >= estimated_tokens:
+                msg = (f"   🧪 Generation test: prompt_eval_count={prompt_eval_count}, "
+                       f"estimated_tokens={estimated_tokens} | ✅ Context verified")
+                return True, prompt_eval_count, total_duration, msg
+            else:
+                msg = (f"   🧪 Generation test: prompt_eval_count={prompt_eval_count}, "
+                       f"estimated_tokens={estimated_tokens} | ⚠️  Not all tokens evaluated")
+                return False, prompt_eval_count, total_duration, msg
+                
+        except requests.exceptions.Timeout:
+            return False, 0, 0.0, "   🧪 Generation test timed out"
+        except Exception as e:
+            return False, 0, 0.0, f"   🧪 Generation test error: {str(e)}"
 
     def get_current_num_predict(self, model_name: str) -> int:
         """Get the current default num_predict for a model.

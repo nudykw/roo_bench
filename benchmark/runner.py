@@ -92,12 +92,15 @@ class BenchmarkRunner:
                 ssh_client=self.ssh_client
             )
 
-            # Display current num_ctx after restart
+            # Display model's default num_ctx (informational only)
+            # Actual n_ctx will be verified during generation via /api/ps
             try:
                 current_num_ctx = self.ollama_client.get_current_num_ctx(model_name)
                 print(get_text("current_num_ctx", num_ctx=current_num_ctx))
-            except Exception:
-                pass
+                if current_num_ctx != ctx:
+                    print(get_text("ctx_info_only", actual=current_num_ctx, expected=ctx))
+            except Exception as e:
+                print(f"   ⚠️  Error getting model settings: {e}")
 
             print(get_text("warming_up", ctx=ctx))
             avg_tps, vram, tps_list, error_msg = self.ollama_client.run_generation(
@@ -120,6 +123,18 @@ class BenchmarkRunner:
                 else:
                     vram_str = "N/A"
                 print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
+            
+            # Check n_ctx AFTER generation (to avoid blocking Ctrl+C)
+            try:
+                actual_ctx = self.ollama_client.get_actual_num_ctx(model_name)
+                if actual_ctx > 0:
+                    print(get_text("actual_n_ctx_after_gen", ctx=actual_ctx, expected=ctx))
+                    if actual_ctx == ctx:
+                        print(get_text("ctx_verified_after_gen", actual=actual_ctx, expected=ctx))
+                    else:
+                        print(get_text("ctx_mismatch_after_gen", actual=actual_ctx, expected=ctx))
+            except Exception:
+                pass
 
             # Show summary
             print(get_text("benchmark_summary"))

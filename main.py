@@ -2,6 +2,7 @@
 
 import sys
 import os
+import signal
 import curses
 from i18n import set_language
 from config import OllamaConfig
@@ -45,6 +46,17 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         args: Parsed arguments
     """
     from i18n import get_text
+    
+    try:
+        _run_benchmark_workflow_impl(config, args)
+    except KeyboardInterrupt:
+        print("\n" + get_text("benchmark_interrupted"))
+        sys.exit(0)
+
+
+def _run_benchmark_workflow_impl(config: OllamaConfig, args):
+    """Implementation of benchmark workflow."""
+    from i18n import get_text
 
     print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
     print(get_text("scanning_models"))
@@ -77,10 +89,61 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     
     # Add all discovered models to the cache
     for m in models:
-        caps = m.get("capabilities", {})
+        # Add size_gb from model size (may not be in /api/tags response)
+        size_bytes = m.get("size", 0)
+        m["size_gb"] = round(size_bytes / (1024**3), 1) if size_bytes > 0 else "N/A"
+        
+        # Add params from model details (may not be in /api/tags response)
+        details = m.get("details", {})
+        param_size = details.get("parameter_size", "N/A") if details else "N/A"
+        m["params"] = param_size
+        
+        # Add max_ctx and capabilities from model info
+        try:
+            model_info = ollama_client.get_model_info(m["name"])
+            max_ctx = 131072  # default
+            caps = {'vision': False, 'tools': False, 'thinking': False}
+            if model_info:
+                # Check for top-level 'capabilities' key (new Ollama API format)
+                top_level_caps = model_info.get("capabilities", [])
+                if isinstance(top_level_caps, list) and len(top_level_caps) > 0:
+                    caps_list_str = ' '.join(top_level_caps).lower()
+                    caps = {
+                        'vision': 'vision' in caps_list_str or 'image' in caps_list_str,
+                        'tools': 'tools' in caps_list_str or 'function' in caps_list_str,
+                        'thinking': 'thinking' in caps_list_str or 'reason' in caps_list_str
+                    }
+                else:
+                    # Fallback: extract from model_info dict
+                    model_info_dict = model_info.get("model_info", {})
+                    caps = ollama_client.get_capabilities_from_model_info(model_info_dict)
+                
+                params_str = model_info.get("parameters", "")
+                if params_str:
+                    for line in params_str.split('\n'):
+                        line = line.strip()
+                        if line.startswith('num_ctx:'):
+                            try:
+                                max_ctx = int(line.split(':')[1].strip())
+                            except (ValueError, IndexError):
+                                pass
+                
+                model_info_dict = model_info.get("model_info", {})
+                for key, val in model_info_dict.items():
+                    if 'context_length' in key.lower() or 'num_ctx' in key.lower():
+                        try:
+                            max_ctx = int(val)
+                        except (ValueError, TypeError):
+                            pass
+            m["max_ctx"] = max_ctx
+        except Exception:
+            m["max_ctx"] = 131072  # default on error
+            caps = {'vision': False, 'tools': False, 'thinking': False}
+        
         m["vision"] = "✅" if caps.get("vision", False) else "❌"
         m["tools"] = "✅" if caps.get("tools", False) else "❌"
         m["thinking"] = "✅" if caps.get("thinking", False) else "❌"
+        
         # Add to capabilities fetcher cache
         capabilities_fetcher.add_model_from_api(m["name"], caps)
 
@@ -121,6 +184,7 @@ def run_benchmark_workflow(config: OllamaConfig, args):
         print_model_list(models)
 
         # Interactive model selection with curses
+        # curses.wrapper temporarily replaces SIGINT handler, so re-register after
         try:
             test_models = curses.wrapper(lambda stdscr: interactive_model_select(stdscr, models))
         except curses.error:
@@ -144,6 +208,8 @@ def run_benchmark_workflow(config: OllamaConfig, args):
                 except (ValueError, IndexError):
                     print(get_text("invalid_input"))
                     return
+        # Re-register SIGINT handler after curses.wrapper (curses may reset it)
+        signal.signal(signal.SIGINT, signal_handler)
 
     # Save capabilities cache immediately after all model data is collected
     capabilities_fetcher.save_cache()
@@ -255,5 +321,14 @@ def _main_impl():
     run_benchmark_workflow(config, args)
 
 
+def signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully."""
+    from i18n import get_text
+    print("\n\n⚠️  Перервано користувачем (Ctrl+C)")
+    print(get_text("stopping_tests", model_name="benchmark"))
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
     main()

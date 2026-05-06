@@ -84,7 +84,7 @@ class SSHClient:
         Returns:
             Full SSH command as list
         """
-        cmd = ['ssh', '-t', '-o', 'StrictHostKeyChecking=no',
+        cmd = ['ssh', '-T', '-o', 'StrictHostKeyChecking=no',
                '-o', 'ConnectTimeout=10']
 
         if self.ssh_port != 22:
