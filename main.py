@@ -245,6 +245,89 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     # Print results
     print_results_table(all_results)
 
+    # Print recommendations grouped by mode with top 3 results per mode
+    if all_results:
+        print("\n" + "="*60)
+        print(get_text("recommendations_header"))
+        print("="*60)
+        
+        # Group all results by mode based on context size
+        mode_groups = {
+            get_text('architect_mode'): [],
+            get_text('code_mode'): [],
+            get_text('debug_mode'): [],
+        }
+        
+        for model_name, runs in all_results.items():
+            for run in runs:
+                ctx_val = run['ctx']
+                run_with_model = dict(run)
+                run_with_model['model_name'] = model_name
+                if ctx_val >= 65536:
+                    mode_groups[get_text('architect_mode')].append(run_with_model)
+                elif ctx_val >= 16384:
+                    mode_groups[get_text('code_mode')].append(run_with_model)
+                else:
+                    mode_groups[get_text('debug_mode')].append(run_with_model)
+        
+        # Sort each group by mode-specific criteria and pick top 3 results per mode
+        modes_with_results = []
+        for mode_title, recs in mode_groups.items():
+            if recs:
+                # Sort by mode-specific criteria
+                if 'Architect' in mode_title:
+                    # Architect: sort by context size descending (more context = better)
+                    recs.sort(key=lambda x: x.get('ctx', 0), reverse=True)
+                elif 'Code' in mode_title:
+                    # Code: sort by TPS descending (faster = better)
+                    recs.sort(key=lambda x: x.get('avg_tps', 0), reverse=True)
+                else:
+                    # Debug: sort by balance (combination of context and TPS)
+                    # Score = ctx/1000 + avg_tps*100 - balances context size with speed
+                    recs.sort(key=lambda x: x.get('ctx', 0)/1000 + x.get('avg_tps', 0)*100, reverse=True)
+                
+                # Get all unique results (unique by model_name + ctx combination), sorted by mode criteria
+                seen_keys = set()
+                unique_results = []
+                for rec in recs:
+                    model_name = rec.get('model_name', '')
+                    ctx_val = rec.get('ctx', 0)
+                    key = f"{model_name}_{ctx_val}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        unique_results.append(rec)
+                modes_with_results.append((mode_title, unique_results))
+        
+        # Sort modes: Architect first, then Code, then Debug
+        mode_order = [get_text('architect_mode'), get_text('code_mode'), get_text('debug_mode')]
+        modes_with_results.sort(key=lambda x: mode_order.index(x[0]) if x[0] in mode_order else 999)
+        
+        # Display all modes with their top 3 results
+        item_count = 0
+        for mode_title, recs in modes_with_results:
+            print(f"\n  {mode_title}")
+            for j, rec in enumerate(recs[:3], 1):
+                item_count += 1
+                ctx_str = f"{rec['ctx'] // 1024}K" if rec['ctx'] >= 1024 else str(rec['ctx'])
+                model_name = rec.get('model_name', 'unknown')
+                
+                # Get model info from test_models if available
+                params = 'N/A'
+                size_gb = 'N/A'
+                for m in test_models:
+                    if m['name'] == model_name:
+                        params = m.get('params', 'N/A')
+                        size_gb = m.get('size_gb', 'N/A')
+                        break
+                
+                # Mark the recommended (first/best) option
+                if j == 1:
+                    print(f"  ★ {model_name} ({params}, {size_gb} GB)")
+                    print(f"    {get_text('variant', i=item_count, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
+                else:
+                    print(f"    {model_name} ({params}, {size_gb} GB)")
+                    print(f"      {get_text('variant', i=item_count, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
+
     # Save results to file
     if hasattr(args, 'output') and hasattr(args, 'output_format'):
         save_results(

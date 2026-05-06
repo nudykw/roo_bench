@@ -129,7 +129,7 @@ TRANSLATIONS = {
         "no_successful_runs": "Модель: {model_name} - ❌ Немає успішних прогонів",
         "restart_ollama": "🔄 Очистка пам'яті (перезапуск Ollama)...",
         "current_num_ctx": "   📊 Поточний num_ctx: {num_ctx}",
-        "ctx_info_only": "   ℹ️  Налаштування моделі: {actual}, але запит використовує {expected} (перевірка під час генерації)",
+        "ctx_info_only": "   Встановлюємо контекст {expected}",
         "ctx_verified": "   ✅ Перевірено num_ctx: {actual} == {expected}",
         "ctx_mismatch": "   ⚠️  Невідповідність num_ctx: фактично={actual}, очікувалося={expected}",
         "ctx_fix_attempt": "   🔄 Спроба виправити num_ctx через Modelfile...",
