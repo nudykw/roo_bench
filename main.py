@@ -52,7 +52,11 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     ollama_client = OllamaClient(
         base_url=config.base_url,
         headers=config.get_headers(),
-        timeout=config.timeout
+        timeout=config.timeout,
+        ssh_host=getattr(args, 'ssh_host', None),
+        ssh_user=getattr(args, 'ssh_user', None),
+        ssh_port=getattr(args, 'ssh_port', 22),
+        ssh_key=getattr(args, 'ssh_key', None)
     )
 
     # Fetch models (capabilities are already extracted from model_info)

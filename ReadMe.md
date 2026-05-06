@@ -231,6 +231,32 @@ Roo Bench supports restarting Ollama on a remote machine via SSH. This is useful
 
 **Note:** If `--ssh-key` is not specified, the tool auto-detects keys from `~/.ssh/` (ed25519, rsa, dsa, ecdsa in that order).
 
+#### Remote VRAM Monitoring via SSH
+
+When using `--ssh-host` for remote Ollama instances, Roo Bench automatically monitors VRAM usage on the remote machine via SSH. This provides accurate GPU memory consumption data instead of showing 0 or local machine values.
+
+**How it works:**
+- When `--ssh-host` is specified, VRAM is sampled every 500ms during generation via SSH
+- The tool runs `nvidia-smi` on the remote machine and collects maximum VRAM usage
+- Results are displayed in MiB (e.g., `VRAM: 8294.0 MiB`)
+
+**Example with remote VRAM monitoring:**
+```bash
+./venv/bin/python main.py \
+  --models qwen3.5:9b \
+  --restart-method ssh \
+  --ssh-host nudyk@aorus-cachyos-server \
+  --ollama-url http://aorus-cachyos-server:11434
+```
+
+Expected output:
+```
+=== BENCHMARK RUNS ===
+   Run 1: 11.48 TPS (VRAM: 8294.0 MiB)
+   Run 2: 61.13 TPS (VRAM: 8294.0 MiB)
+   Run 3: 63.63 TPS (VRAM: 8294.0 MiB)
+```
+
 To avoid password prompts, configure NOPASSWD sudo on the remote machine:
 ```bash
 # On remote machine:
@@ -539,6 +565,32 @@ Roo Bench підтримує перезапуск Ollama на віддалені
 ```
 
 **Примітка:** Якщо `--ssh-key` не вказано, інструмент автоматично виявляє ключі з `~/.ssh/` (ed25519, rsa, dsa, ecdsa у цьому порядку).
+
+#### Моніторинг VRAM через SSH
+
+При використанні `--ssh-host` для віддалених екземплярів Ollama, Roo Bench автоматично моніторить використання VRAM на віддаленій машині через SSH. Це забезпечує точні дані про споживання пам'яті GPU замість показу 0 або значень локальної машини.
+
+**Як це працює:**
+- При вказаному `--ssh-host` VRAM опитується кожні 500мс під час генерації через SSH
+- Інструмент виконує `nvidia-smi` на віддаленій машині і збирає максимальне значення VRAM
+- Результати відображаються в MiB (наприклад, `VRAM: 8294.0 MiB`)
+
+**Приклад з моніторингом VRAM:**
+```bash
+./venv/bin/python main.py \
+  --models qwen3.5:9b \
+  --restart-method ssh \
+  --ssh-host nudyk@aorus-cachyos-server \
+  --ollama-url http://aorus-cachyos-server:11434
+```
+
+Очікуваний результат:
+```
+=== ПІДСУМОК БЕНЧМАРКУ ===
+   Run 1: 11.48 TPS (VRAM: 8294.0 MiB)
+   Run 2: 61.13 TPS (VRAM: 8294.0 MiB)
+   Run 3: 63.63 TPS (VRAM: 8294.0 MiB)
+```
 
 Щоб уникнути запитів пароля, налаштуйте NOPASSWD sudo на віддаленій машині:
 ```bash

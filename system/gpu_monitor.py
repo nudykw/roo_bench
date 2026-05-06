@@ -45,7 +45,8 @@ def get_vram_usage() -> int | None:
             capture_output=True, text=True
         )
         if result.returncode == 0 and result.stdout.strip():
-            return int(result.stdout.strip())
+            # nvidia-smi returns value in MiB, convert to bytes
+            return int(result.stdout.strip()) * 1024 * 1024
     except Exception:
         pass
 

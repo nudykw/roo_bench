@@ -76,6 +76,10 @@ TRANSLATIONS = {
         "context": "Context",
         "tps": "TPS",
         "timestamp": "Timestamp",
+        "benchmark_runs_header": "=== BENCHMARK RUNS ===",
+        "benchmark_summary": "=== BENCHMARK SUMMARY ===",
+        "result_row": "  Context: {ctx} | Avg TPS: {avg_tps:.2f} | Min: {min_tps:.2f} | Max: {max_tps:.2f} | StdDev: {std_dev:.2f} | VRAM: {vram}",
+        "results_header": "=== RESULTS FOR {model_name} ===",
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
@@ -148,6 +152,10 @@ TRANSLATIONS = {
         "context": "Контекст",
         "tps": "TPS",
         "timestamp": "Час",
+        "benchmark_runs_header": "=== РЕЗУЛЬТАТИ ПРОГОНІВ ===",
+        "benchmark_summary": "=== ПІДСУМОК БЕНЧМАРКУ ===",
+        "result_row": "  Контекст: {ctx} | Середнє TPS: {avg_tps:.2f} | Мін: {min_tps:.2f} | Макс: {max_tps:.2f} | СтД: {std_dev:.2f} | VRAM: {vram}",
+        "results_header": "=== РЕЗУЛЬТАТИ ДЛЯ {model_name} ===",
     }
 }
 
