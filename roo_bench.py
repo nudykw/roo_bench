@@ -19,14 +19,78 @@ class RestartMethod(Enum):
     MANUAL = "manual"
 
 
-def get_vram_usage():
+def check_gpu_available():
+    """Проверка наличия GPU.
+    
+    Returns:
+        bool: True если GPU доступен, False иначе
+    """
+    # Проверка наличия nvidia-smi
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,nounits,noheader'],
             capture_output=True, text=True
         )
-        return int(result.stdout.strip())
+        if result.returncode == 0 and result.stdout.strip():
+            return True
     except Exception:
-        return 0
+        pass
+    
+    # Проверка наличия /proc/driver/nvidia/gpus/
+    try:
+        import os
+        return os.path.exists('/proc/driver/nvidia/gpus/')
+    except Exception:
+        pass
+    
+    return False
+
+
+def get_vram_usage():
+    """Получение использования VRAM с fallback.
+    
+    Returns:
+        int или None: Использование VRAM в байтах, или None если GPU недоступен
+    """
+    if not check_gpu_available():
+        return None
+    
+    try:
+        result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,nounits,noheader'],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return int(result.stdout.strip())
+    except Exception:
+        pass
+    
+    # Fallback: чтение из /proc/driver/nvidia/gpus/0/mem_used
+    try:
+        import os
+        gpu_path = '/proc/driver/nvidia/gpus/0/mem_used'
+        if os.path.exists(gpu_path):
+            with open(gpu_path, 'r') as f:
+                content = f.read().strip()
+                # Формат: "used: 4500MiB" или "4500 MiB"
+                if ':' in content:
+                    value = content.split(':')[1].strip()
+                else:
+                    value = content
+                # Парсинг значения с MiB/GiB
+                value = value.strip()
+                if value.endswith('GiB'):
+                    return int(value[:-3]) * 1024 * 1024 * 1024
+                elif value.endswith('MiB'):
+                    return int(value[:-3]) * 1024 * 1024
+                elif value.endswith('GB'):
+                    return int(value[:-2]) * 1024 * 1024 * 1024
+                elif value.endswith('MB'):
+                    return int(value[:-2]) * 1024 * 1024
+                else:
+                    return int(value)
+    except Exception:
+        pass
+    
+    return None
 
 def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: bool = False):
     """Перезапуск Ollama с указанным методом.
@@ -140,6 +204,18 @@ def get_models():
         return[]
 
 def run_benchmark(model_name, context_size):
+    """Запуск бенчмарка для модели.
+    
+    Args:
+        model_name: Имя модели
+        context_size: Размер контекста
+        
+    Returns:
+        tuple: (tps, vram, error)
+            tps: токлов в секунду (float)
+            vram: использование VRAM в байтах (int или None если GPU недоступен)
+            error: сообщение об ошибке (str или None)
+    """
     prompt = "Write a comprehensive Python script that implements a multithreaded web server. Explain every line in extreme detail."
     payload = {
         "model": model_name,
@@ -162,13 +238,13 @@ def run_benchmark(model_name, context_size):
                 err_msg = response.json().get("error", f"HTTP {response.status_code}")
             except:
                 err_msg = f"HTTP {response.status_code}: {response.text[:100]}"
-            return 0, 0, get_text("error_ollama_api", error_msg=err_msg)
+            return 0, None, get_text("error_ollama_api", error_msg=err_msg)
             
         try:
             data = response.json()
         except Exception as json_err:
             raw_text = response.text[:200].replace('\n', ' ')
-            return 0, 0, get_text("error_parsing_response", json_err=json_err, raw_text=raw_text)
+            return 0, None, get_text("error_parsing_response", json_err=json_err, raw_text=raw_text)
             
         vram_after = get_vram_usage()
         total_duration = data.get("total_duration", 0) / 1e9
@@ -177,14 +253,14 @@ def run_benchmark(model_name, context_size):
         return tps, vram_after, None
         
     except requests.exceptions.Timeout:
-        return 0, 0, get_text("error_timeout")
+        return 0, None, get_text("error_timeout")
     except requests.exceptions.ConnectionError:
-        return 0, 0, get_text("error_crash")
+        return 0, None, get_text("error_crash")
     except Exception as e:
         err_details = get_text("error_unknown", error_details=str(e))
         if response is not None:
             err_details += f" | Сырой ответ: {response.text[:200]}"
-        return 0, 0, err_details
+        return 0, None, err_details
 
 def get_top_options(runs, min_tps):
     valid = [r for r in runs if r['tps'] >= min_tps]
