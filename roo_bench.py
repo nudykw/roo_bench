@@ -16,15 +16,15 @@ OLLAMA_URL = "http://localhost:11434"
 CONTEXT_SIZES = [8192, 16384, 32768, 65536, 131072, 262144]
 
 def get_context_sizes(args):
-    """Получение списка контекстов из аргументов CLI.
+    """Get list of context sizes from CLI arguments.
     
     Args:
-        args: Пarsed arguments from argparse
+        args: Parsed arguments from argparse
         
     Returns:
-        list: Список размеров контекста
+        list: List of context sizes
     """
-    # Если указан --context-sizes-auto, генерируем геометрическую прогрессию
+    # If --context-sizes-auto is specified, generate a geometric progression
     if args.context_sizes_auto:
         sizes = []
         current = 8192
@@ -33,7 +33,7 @@ def get_context_sizes(args):
             current *= 2
         return sizes
     
-    # Если указан --context-sizes, парсим из строки
+    # If --context-sizes is specified, parse from string
     if args.context_sizes:
         try:
             sizes = [int(x.strip()) for x in args.context_sizes.split(',')]
@@ -46,12 +46,12 @@ def get_context_sizes(args):
             print(get_text("error_invalid_context_size", sizes=args.context_sizes))
             return CONTEXT_SIZES
     
-    # Иначе используем дефолтные
+    # Otherwise use defaults
     return CONTEXT_SIZES
 
 
 class RestartMethod(Enum):
-    """Методы перезапуска Ollama"""
+    """Ollama restart methods"""
     SYSTEMCTL = "systemctl"
     DOCKER = "docker"
     KILL_START = "kill_start"
@@ -59,12 +59,12 @@ class RestartMethod(Enum):
 
 
 def check_gpu_available():
-    """Проверка наличия GPU.
+    """Check if GPU is available.
     
     Returns:
-        bool: True если GPU доступен, False иначе
+        bool: True if GPU is available, False otherwise
     """
-    # Проверка наличия nvidia-smi
+    # Check for nvidia-smi availability
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,nounits,noheader'],
             capture_output=True, text=True
@@ -74,7 +74,7 @@ def check_gpu_available():
     except Exception:
         pass
     
-    # Проверка наличия /proc/driver/nvidia/gpus/
+    # Check for /proc/driver/nvidia/gpus/
     try:
         import os
         return os.path.exists('/proc/driver/nvidia/gpus/')
@@ -85,10 +85,10 @@ def check_gpu_available():
 
 
 def get_vram_usage():
-    """Получение использования VRAM с fallback.
+    """Get VRAM usage with fallback.
     
     Returns:
-        int или None: Использование VRAM в байтах, или None если GPU недоступен
+        int or None: VRAM usage in bytes, or None if GPU is unavailable
     """
     if not check_gpu_available():
         return None
@@ -102,19 +102,19 @@ def get_vram_usage():
     except Exception:
         pass
     
-    # Fallback: чтение из /proc/driver/nvidia/gpus/0/mem_used
+    # Fallback: read from /proc/driver/nvidia/gpus/0/mem_used
     try:
         import os
         gpu_path = '/proc/driver/nvidia/gpus/0/mem_used'
         if os.path.exists(gpu_path):
             with open(gpu_path, 'r') as f:
                 content = f.read().strip()
-                # Формат: "used: 4500MiB" или "4500 MiB"
+                # Format: "used: 4500MiB" or "4500 MiB"
                 if ':' in content:
                     value = content.split(':')[1].strip()
                 else:
                     value = content
-                # Парсинг значения с MiB/GiB
+                # Parse value with MiB/GiB
                 value = value.strip()
                 if value.endswith('GiB'):
                     return int(value[:-3]) * 1024 * 1024 * 1024
@@ -132,11 +132,11 @@ def get_vram_usage():
     return None
 
 def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: bool = False):
-    """Перезапуск Ollama с указанным методом.
+    """Restart Ollama with the specified method.
     
     Args:
-        method: Метод перезапуска (SYSTEMCTL, DOCKER, KILL_START, MANUAL)
-        no_restart: Если True, перезапуск не выполняется
+        method: Restart method (SYSTEMCTL, DOCKER, KILL_START, MANUAL)
+        no_restart: If True, restart is not performed
     """
     if no_restart:
         print(get_text("restart_ollama_disabled"))
@@ -175,30 +175,30 @@ def restart_ollama(method: RestartMethod = RestartMethod.SYSTEMCTL, no_restart: 
         print(get_text("error_restart_unknown", error=str(e)))
 
 def get_capabilities_from_ollama_site(model_name):
-    """Получение capabilities модели из Ollama API или HTML парсинга.
+    """Get model capabilities from Ollama API or HTML parsing.
     
     Args:
-        model_name: Имя модели (например, "llama3.2" или "dev-qwen2")
-        
+        model_name: Model name (e.g., "llama3.2" or "dev-qwen2")
+    
     Returns:
-        tuple: (vision, tools, thinking) - статусы возможностей
+        tuple: (vision, tools, thinking) - capability statuses
     """
     base_name = model_name.split(':')[0]
     if base_name.startswith('dev-'):
         base_name = base_name[4:]
 
-    # Попытка 1: Использование Ollama API
+    # Attempt 1: Use Ollama API
     try:
         api_url = f"https://ollama.com/api/library/{base_name}"
         response = requests.get(api_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         
         if response.status_code == 200:
-            # API возвращает JSON с информацией о модели
+            # API returns JSON with model information
             data = response.json()
             model_info = data.get("model", {})
             
-            # Ищем capabilities в JSON ответе
-            # API может возвращать capabilities в разных форматах
+            # Look for capabilities in JSON response
+            # API may return capabilities in different formats
             capabilities = model_info.get("capabilities", {})
             
             vision = "✅" if capabilities.get("vision") else "❌"
@@ -208,7 +208,7 @@ def get_capabilities_from_ollama_site(model_name):
             if vision != "❌" or tools != "❌" or thinking != "❌":
                 return vision, tools, thinking
             
-            # Если capabilities нет в JSON, пробуем поискать в других полях
+            # If capabilities is not in JSON, try searching in other fields
             model_str = str(model_info).lower()
             if "vision" in model_str:
                 vision = "✅"
@@ -220,16 +220,16 @@ def get_capabilities_from_ollama_site(model_name):
             if vision != "❓" or tools != "❓" or thinking != "❓":
                 return vision, tools, thinking
         
-        # Если API вернул ошибку или не содержит нужной информации, пробуем HTML парсинг
+        # If API returned an error or doesn't contain the needed information, try HTML parsing
         if response.status_code != 200:
-            # Пробуем поиск через search API
+            # Try search via search API
             search_url = f"https://ollama.com/api/search?q={urllib.parse.quote(base_name)}"
             search_resp = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
             if search_resp.status_code == 200:
                 search_data = search_resp.json()
                 for item in search_data.get("results", []):
                     if item.get("name") == base_name:
-                        # Получаем capabilities из search results
+                        # Get capabilities from search results
                         caps = item.get("capabilities", {})
                         vision = "✅" if caps.get("vision") else "❌"
                         tools = "✅" if caps.get("tools") else "❌"
@@ -238,24 +238,24 @@ def get_capabilities_from_ollama_site(model_name):
                 return "❓", "❓", "❌"
     
     except requests.exceptions.Timeout:
-        print(f"⚠️  Timeout при запросе к Ollama API для {base_name}, используем HTML парсинг")
+        print(f"⚠️  Timeout requesting Ollama API for {base_name}, using HTML parsing")
     except requests.exceptions.ConnectionError:
-        print(f"⚠️  ConnectionError при запросе к Ollama API для {base_name}, используем HTML парсинг")
+        print(f"⚠️  ConnectionError requesting Ollama API for {base_name}, using HTML parsing")
     except requests.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code in [404, 500]:
-            print(f"⚠️  HTTP {e.response.status_code} от Ollama API для {base_name}, используем HTML парсинг")
+            print(f"⚠️  HTTP {e.response.status_code} from Ollama API for {base_name}, using HTML parsing")
         else:
             raise
     except Exception as e:
-        print(f"⚠️  Ошибка при запросе к Ollama API для {base_name}: {e}, используем HTML парсинг")
+        print(f"⚠️  Error requesting Ollama API for {base_name}: {e}, using HTML parsing")
 
-    # Fallback: HTML парсинг с более надёжными селекторами
+    # Fallback: HTML parsing with more reliable selectors
     try:
         url = f"https://ollama.com/library/{base_name}"
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         
         if response.status_code != 200:
-            # Пробуем поиск через HTML
+            # Try search via HTML
             search_url = f"https://ollama.com/search?q={urllib.parse.quote(base_name)}"
             search_resp = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
             if search_resp.status_code == 200:
@@ -268,10 +268,10 @@ def get_capabilities_from_ollama_site(model_name):
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Более надёжный парсинг: ищем конкретные элементы
-            # Ищем capabilities section или description с ключевыми словами
+            # More reliable parsing: look for specific elements
+            # Look for capabilities section or description with keywords
             
-            # Метод 1: Поиск через data-атрибуты или специфичные классы
+            # Method 1: Search via data-attributes or specific classes
             capabilities_section = soup.find('div', class_=lambda c: c and 'capabilities' in c.lower())
             if capabilities_section:
                 caps_text = capabilities_section.get_text().lower()
@@ -280,7 +280,7 @@ def get_capabilities_from_ollama_site(model_name):
                 thinking = "✅" if "thinking" in caps_text or "reasoning" in caps_text else "❌"
                 return vision, tools, thinking
             
-            # Метод 2: Поиск через description/summary
+            # Method 2: Search via description/summary
             description = soup.find('div', class_='description') or soup.find('div', class_='summary')
             if description:
                 desc_text = description.get_text().lower()
@@ -289,7 +289,7 @@ def get_capabilities_from_ollama_site(model_name):
                 thinking = "✅" if "thinking" in desc_text or "reasoning" in desc_text else "❌"
                 return vision, tools, thinking
             
-            # Метод 3: Поиск через JSON-LD (если есть)
+            # Method 3: Search via JSON-LD (if available)
             json_ld = soup.find('script', type='application/ld+json')
             if json_ld:
                 try:
@@ -305,7 +305,7 @@ def get_capabilities_from_ollama_site(model_name):
                 except json.JSONDecodeError:
                     pass
             
-            # Метод 4: Поиск через alt-текст изображений (иконки capabilities)
+            # Method 4: Search via alt-text of images (capabilities icons)
             vision_icon = soup.find('img', alt=lambda alt: alt and 'vision' in alt.lower())
             tools_icon = soup.find('img', alt=lambda alt: alt and 'tools' in alt.lower())
             thinking_icon = soup.find('img', alt=lambda alt: alt and 'thinking' in alt.lower() or 'reasoning' in alt.lower())
@@ -317,7 +317,7 @@ def get_capabilities_from_ollama_site(model_name):
             if vision != "❓" or tools != "❓" or thinking != "❓":
                 return vision, tools, thinking
             
-            # Метод 5: Финальный fallback - поиск в тексте страницы
+            # Method 5: Final fallback - search in page text
             page_text = soup.get_text().lower()
             vision = "✅" if "vision" in page_text else "❌"
             tools = "✅" if "tools" in page_text or "tool use" in page_text else "❌"
@@ -326,16 +326,16 @@ def get_capabilities_from_ollama_site(model_name):
             return vision, tools, thinking
             
     except requests.exceptions.Timeout:
-        print(f"⚠️  Timeout при HTML парсинге для {base_name}")
+        print(f"⚠️  Timeout during HTML parsing for {base_name}")
     except requests.exceptions.ConnectionError:
-        print(f"⚠️  ConnectionError при HTML парсинге для {base_name}")
+        print(f"⚠️  ConnectionError during HTML parsing for {base_name}")
     except requests.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code in [404, 500]:
-            print(f"⚠️  HTTP {e.response.status_code} при HTML парсинге для {base_name}")
+            print(f"⚠️  HTTP {e.response.status_code} during HTML parsing for {base_name}")
         else:
             raise
     except Exception as e:
-        print(f"⚠️  Ошибка при HTML парсинге для {base_name}: {e}")
+        print(f"⚠️  Error during HTML parsing for {base_name}: {e}")
 
     return "❓", "❓", "❓"
 
@@ -347,20 +347,20 @@ def get_models():
             details = m.get("details", {})
             size_gb = m.get("size", 0) / (1024 ** 3)
             
-            # Получаем максимальный контекст модели через API show
-            max_ctx = 32768  # Значение по умолчанию, если не удалось найти
+            # Get the maximum context size of the model via API show
+            max_ctx = 32768  # Default value if not found
             show_error = None
             try:
                 show_resp = requests.post(f"{OLLAMA_URL}/api/show", json={"name": m["name"]})
                 if show_resp.status_code == 200:
                     model_info = show_resp.json().get("model_info", {})
-                    # Ищем ключ, содержащий 'context_length' (например 'llama.context_length' или 'qwen2.context_length')
+                    # Look for key containing 'context_length' (e.g. 'llama.context_length' or 'qwen2.context_length')
                     for key, val in model_info.items():
                         if 'context_length' in key:
                             max_ctx = int(val)
                             break
             except Exception as e:
-                show_error = f"Ошибка при получении max_ctx для {m['name']}: {e}"
+                show_error = f"Error getting max_ctx for {m['name']}: {e}"
                 print(f"⚠️  {show_error}")
 
             models.append({
@@ -444,14 +444,14 @@ def run_benchmark(model_name, context_size, num_runs=3):
         except Exception as e:
             err_details = get_text("error_unknown", error_details=str(e))
             if response is not None:
-                err_details += f" | Сырой ответ: {response.text[:200]}"
+                err_details += f" | Raw response: {response.text[:200]}"
             error = err_details
             break
     
-    # Вычисляем среднее TPS
+    # Calculate average TPS
     if tps_list:
         avg_tps = sum(r['tps'] for r in tps_list) / len(tps_list)
-        # Вычисляем стандартное отклонение
+        # Calculate standard deviation
         if len(tps_list) > 1:
             mean = avg_tps
             variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
@@ -459,7 +459,7 @@ def run_benchmark(model_name, context_size, num_runs=3):
         else:
             std_dev = 0.0
         
-        # Возвращаем VRAM из последнего успешного запуска
+        # Return VRAM from the last successful run
         vram = tps_list[-1]['vram'] if tps_list else None
         
         return avg_tps, vram, tps_list, None
@@ -475,20 +475,20 @@ def get_top_options(runs, min_tps):
 
 
 def save_results(results, output_file, output_format, model_names, test_models, args):
-    """Сохранение результатов в JSON или CSV.
+    """Save results to JSON or CSV.
     
     Args:
-        results: Словарь результатов по моделям
-        output_file: Путь к файлу вывода
-        output_format: Формат вывода ('json' или 'csv')
-        model_names: Список названий протестированных моделей
-        test_models: Список объектов моделей
-        args: Пarsed arguments
+        results: Dictionary of results per model
+        output_file: Path to output file
+        output_format: Output format ('json' or 'csv')
+        model_names: List of tested model names
+        test_models: List of model objects
+        args: Parsed arguments
     """
     if not output_file or not output_format:
         return
     
-    # Подготовка данных для экспорта
+    # Prepare data for export
     export_data = []
     current_language = _current_language if '_current_language' in globals() else "en"
     
@@ -513,7 +513,7 @@ def save_results(results, output_file, output_format, model_names, test_models, 
             'timestamp': datetime.now().isoformat()
         }
         
-        # Добавляем результаты для каждого контекста
+        # Add results for each context
         for run in results.get(model_name, []):
             run_data = {
                 'model_name': model_name,
@@ -529,7 +529,7 @@ def save_results(results, output_file, output_format, model_names, test_models, 
             }
             export_data.append(run_data)
     
-    # Сохранение в зависимости от формата
+    # Save based on format
     if output_format == 'json':
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -554,7 +554,7 @@ def save_results(results, output_file, output_format, model_names, test_models, 
 def main():
     global _current_language
     
-    # Инициализация языка по умолчанию
+    # Initialize default language
     if _current_language is None:
         _current_language = "en"
     
@@ -571,7 +571,7 @@ def main():
     parser.add_argument('--output-format', type=str, choices=['json', 'csv'], help=get_text("cli_output_format"))
     args = parser.parse_args()
     
-    # Установка языка
+    # Set language
     set_language(args.lang)
     
     print(get_text("app_title") + " (Context & VRAM Analyzer)\n")
@@ -617,7 +617,7 @@ def main():
     else:
         print(get_text("available_models"))
         for i, m in enumerate(models):
-            # Переводим макс контекст в читаемый формат 'K'
+            # Convert max context to readable format 'K'
             max_ctx_str = f"{m['max_ctx'] // 1024}K" if m['max_ctx'] >= 1024 else str(m['max_ctx'])
             
             print(get_text("model_list_header", 
@@ -655,7 +655,7 @@ def main():
 
     results = {}
 
-    # Получаем список контекстов из аргументов
+    # Get list of context sizes from arguments
     context_sizes = get_context_sizes(args)
     
     for m in test_models:
@@ -667,11 +667,11 @@ def main():
         print(get_text("model_size", size_gb=m['size_gb'], max_ctx_str=max_ctx_str))
         results[model_name] = []
         
-        # Фильтруем контексты: берем только те, что МЕНЬШЕ ИЛИ РАВНЫ максимальному
+        # Filter contexts: take only those that are LESS THAN OR EQUAL to maximum
         valid_contexts = [c for c in context_sizes if c <= max_ctx]
         
-        # Если модель поддерживает какой-то "нестандартный" макс. контекст (например 128000),
-        # которого нет в нашем списке, но он меньше 256K, можем добавить его для теста
+        # If the model supports some "non-standard" max context (e.g. 128000),
+        # which is not in our list, but it's less than 256K, we can add it for testing
         if max_ctx not in valid_contexts and max_ctx > 0 and max_ctx <= 262144:
             valid_contexts.append(max_ctx)
             valid_contexts.sort()
@@ -691,7 +691,7 @@ def main():
                 print(get_text("stopping_tests", model_name=model_name))
                 break
                 
-            # Показываем результаты каждого запуска
+            # Show results of each run
             print(get_text("benchmark_runs_header"))
             for run in tps_list:
                 run_num = run['run']
@@ -701,21 +701,21 @@ def main():
                     vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
                 else:
                     vram_str = "N/A"
-                print(f"   Запуск {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
+                print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
             
-            # Показываем сводку
+            # Show summary
             print(get_text("benchmark_summary"))
-            print(f"   Среднее: {avg_tps:.2f} TPS")
+            print(f"   Average: {avg_tps:.2f} TPS")
             print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
             print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
             
-            # Вычисляем std dev
+            # Calculate std dev
             mean = avg_tps
             variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
             std_dev = math.sqrt(variance)
             print(f"   Std Dev: {std_dev:.2f} TPS")
             
-            # Сохраняем усреднённые результаты
+            # Save averaged results
             results[model_name].append({
                 "ctx": ctx,
                 "avg_tps": avg_tps,
@@ -734,7 +734,7 @@ def main():
             print(get_text("no_successful_runs", model_name=model_name))
             continue
         
-        # Вывод результатов для каждой модели
+        # Output results for each model
         print("\n" + "="*60)
         print(get_text("results_header", model_name=model_name))
         print("="*60)
@@ -757,7 +757,7 @@ def main():
                 std_dev=std_dev,
                 vram=vram_str))
     
-    # Сохранение результатов в файл
+    # Save results to file
     save_results(results, args.output, args.output_format,
                  [m['name'] for m in test_models], test_models, args)
 
