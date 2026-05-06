@@ -258,11 +258,18 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             get_text('debug_mode'): [],
         }
         
+        # Build model size lookup
+        model_size_map = {}
+        for m in test_models:
+            model_size_map[m['name']] = m.get('size_gb', 0)
+        
         for model_name, runs in all_results.items():
+            model_size = model_size_map.get(model_name, 0)
             for run in runs:
                 ctx_val = run['ctx']
                 run_with_model = dict(run)
                 run_with_model['model_name'] = model_name
+                run_with_model['model_size_gb'] = model_size
                 if ctx_val >= 65536:
                     mode_groups[get_text('architect_mode')].append(run_with_model)
                 elif ctx_val >= 16384:
@@ -276,8 +283,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             if recs:
                 # Sort by mode-specific criteria
                 if 'Architect' in mode_title:
-                    # Architect: sort by context size descending (more context = better)
-                    recs.sort(key=lambda x: x.get('ctx', 0), reverse=True)
+                    # Architect: sort by context size descending, then by model size ascending (smaller models preferred)
+                    recs.sort(key=lambda x: (-x.get('ctx', 0), x.get('model_size_gb', 0)))
                 elif 'Code' in mode_title:
                     # Code: sort by TPS descending (faster = better)
                     recs.sort(key=lambda x: x.get('avg_tps', 0), reverse=True)
@@ -303,11 +310,9 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         modes_with_results.sort(key=lambda x: mode_order.index(x[0]) if x[0] in mode_order else 999)
         
         # Display all modes with their top 3 results
-        item_count = 0
         for mode_title, recs in modes_with_results:
             print(f"\n  {mode_title}")
             for j, rec in enumerate(recs[:3], 1):
-                item_count += 1
                 ctx_str = f"{rec['ctx'] // 1024}K" if rec['ctx'] >= 1024 else str(rec['ctx'])
                 model_name = rec.get('model_name', 'unknown')
                 
@@ -323,10 +328,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 # Mark the recommended (first/best) option
                 if j == 1:
                     print(f"  ★ {model_name} ({params}, {size_gb} GB)")
-                    print(f"    {get_text('variant', i=item_count, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
+                    print(f"    {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
                 else:
                     print(f"    {model_name} ({params}, {size_gb} GB)")
-                    print(f"      {get_text('variant', i=item_count, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
+                    print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
 
     # Save results to file
     if hasattr(args, 'output') and hasattr(args, 'output_format'):
