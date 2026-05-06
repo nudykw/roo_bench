@@ -2,6 +2,12 @@ import os
 import json
 from typing import Optional, Dict, Any
 
+try:
+    import json5
+    HAS_JSON5 = True
+except ImportError:
+    HAS_JSON5 = False
+
 
 class OllamaConfig:
     """Ollama server connection configuration"""
@@ -27,8 +33,12 @@ class OllamaConfig:
         if os.path.exists(config_file):
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except json.JSONDecodeError as e:
+                    content = f.read()
+                    # Try JSON5 first (supports comments), fall back to standard JSON
+                    if HAS_JSON5:
+                        return json5.loads(content)
+                    return json.loads(content)
+            except (json.JSONDecodeError, ValueError) as e:
                 print(f"Error reading configuration: {e}")
                 return {}
         return {}

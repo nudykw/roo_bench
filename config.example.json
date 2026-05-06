@@ -1,0 +1,14 @@
+// Ollama server connection configuration
+// Update these values to connect to your remote Ollama server
+{
+  "url": "http://192.168.1.100:11434",
+  "port": 11434,
+  "api_key": null,
+  "timeout": 300,
+  "models": [
+    "llama3.2",
+    "qwen2.5"
+  ],
+  "context_sizes": [8192, 16384, 32768, 65536],
+  "num_runs": 3
+}
