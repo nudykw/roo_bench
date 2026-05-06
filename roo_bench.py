@@ -309,7 +309,8 @@ def get_models():
             size_gb = m.get("size", 0) / (1024 ** 3)
             
             # Получаем максимальный контекст модели через API show
-            max_ctx = 8192 # Значение по умолчанию, если не удалось найти
+            max_ctx = 32768  # Значение по умолчанию, если не удалось найти
+            show_error = None
             try:
                 show_resp = requests.post(f"{OLLAMA_URL}/api/show", json={"name": m["name"]})
                 if show_resp.status_code == 200:
@@ -319,8 +320,9 @@ def get_models():
                         if 'context_length' in key:
                             max_ctx = int(val)
                             break
-            except Exception:
-                pass
+            except Exception as e:
+                show_error = f"Ошибка при получении max_ctx для {m['name']}: {e}"
+                print(f"⚠️  {show_error}")
 
             models.append({
                 "name": m["name"],
@@ -332,7 +334,7 @@ def get_models():
         return models
     except Exception as e:
         print(get_text("error_ollama_connection", error=str(e)))
-        return[]
+        return []
 
 import math
 
