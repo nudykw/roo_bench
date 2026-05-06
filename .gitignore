@@ -1,3 +1,4 @@
 plans/
 .env
 config.json
+__pycache__/
