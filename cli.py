@@ -3,8 +3,35 @@
 import argparse
 import sys
 import os
+import logging
 from i18n import get_text, get_available_languages, _current_language
 from constants import CONTEXT_SIZES
+
+
+logger = logging.getLogger('roo_bench')
+
+
+def setup_logging(verbose_level: int = 0):
+    """Configure logging based on verbose level.
+    
+    Args:
+        verbose_level: 0 = warnings only, 1 = INFO, 2 = DEBUG, 3 = DEBUG with timestamps
+    """
+    if verbose_level == 0:
+        level = logging.WARNING
+    elif verbose_level == 1:
+        level = logging.INFO
+    elif verbose_level == 2:
+        level = logging.DEBUG
+    else:
+        level = logging.DEBUG
+    
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    return logger
 
 
 def parse_args():
@@ -14,6 +41,8 @@ def parse_args():
         argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser(description=get_text("cli_help"))
+    parser.add_argument('-v', '--verbose', action='count', default=0,
+                        help='Increase verbosity level (use -v, -vv, -vvv for more debug output)')
     parser.add_argument('--models', type=str, help=get_text("cli_models"))
     parser.add_argument('--capabilities', '-f', type=str, help=get_text("cli_capabilities"))
     parser.add_argument('--lang', type=str, choices=get_available_languages(),

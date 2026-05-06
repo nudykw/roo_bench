@@ -129,6 +129,11 @@ The project uses a modular architecture. You can run it in two ways:
 # Save results to file
 ./venv/bin/python roo_bench.py --output results.json --output-format json
 ./venv/bin/python roo_bench.py --output results.csv --output-format csv
+
+# Enable verbose/debug output (use -v, -vv, or -vvv for increasing detail)
+./venv/bin/python roo_bench.py -v          # INFO level
+./venv/bin/python roo_bench.py -vv         # DEBUG level
+./venv/bin/python roo_bench.py -vvv        # DEBUG level (maximum detail)
 ```
 
 #### Full Example
@@ -151,6 +156,7 @@ The project uses a modular architecture. You can run it in two ways:
 
 | Argument | Description | Default |
 |----------|-------------|---------|
+| `-v, --verbose` | Increase verbosity level (`-v`, `-vv`, `-vvv` for debug output) | 0 |
 | `--models` | Comma-separated list of model names | All available |
 | `--of` | Filter by capabilities: `v` (vision), `T` (tools), `t` (thinking) | None |
 | `--lang` | Interface language: `en` or `ua` | `en` |
@@ -470,6 +476,11 @@ chmod +x roo_bench.py
 # Зберегти результати у файл
 ./venv/bin/python roo_bench.py --output results.json --output-format json
 ./venv/bin/python roo_bench.py --output results.csv --output-format csv
+
+# Увімкнути детальний вивід (використовуйте -v, -vv або -vvv для різного рівня деталізації)
+./venv/bin/python roo_bench.py -v          # Рівень INFO
+./venv/bin/python roo_bench.py -vv         # Рівень DEBUG
+./venv/bin/python roo_bench.py -vvv        # Рівень DEBUG (максимальна деталізація)
 ```
 
 #### Повний приклад
@@ -492,6 +503,7 @@ chmod +x roo_bench.py
 
 | Аргумент | Опис | За замовчуванням |
 |----------|------|------------------|
+| `-v, --verbose` | Збільшити рівень деталізації (`-v`, `-vv`, `-vvv` для відладки) | 0 |
 | `--models` | Список імен моделей через кому | Усі доступні |
 | `--of` | Фільтр за можливостями: `v` (візіон), `T` (інструменти), `t` (thinking) | None |
 | `--lang` | Мова інтерфейсу: `en` або `ua` | `en` |

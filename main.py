@@ -191,6 +191,10 @@ def main():
     # Parse arguments
     args = parse_args()
 
+    # Setup logging based on verbose level
+    from cli import setup_logging
+    setup_logging(getattr(args, 'verbose', 0))
+
     # Set language
     set_language(args.lang)
 
