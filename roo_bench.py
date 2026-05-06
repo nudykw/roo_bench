@@ -5,6 +5,9 @@ import urllib.parse
 import argparse
 import sys
 import os
+import json
+import csv
+from datetime import datetime
 from enum import Enum
 from bs4 import BeautifulSoup
 from i18n import get_text, set_language, get_available_languages
@@ -470,6 +473,84 @@ def get_top_options(runs, min_tps):
     valid.sort(key=lambda x: (x['ctx'], x['tps']), reverse=True)
     return valid[:3]
 
+
+def save_results(results, output_file, output_format, model_names, test_models, args):
+    """Сохранение результатов в JSON или CSV.
+    
+    Args:
+        results: Словарь результатов по моделям
+        output_file: Путь к файлу вывода
+        output_format: Формат вывода ('json' или 'csv')
+        model_names: Список названий протестированных моделей
+        test_models: Список объектов моделей
+        args: Пarsed arguments
+    """
+    if not output_file or not output_format:
+        return
+    
+    # Подготовка данных для экспорта
+    export_data = []
+    current_language = _current_language if '_current_language' in globals() else "en"
+    
+    for model_name in model_names:
+        if model_name not in results:
+            continue
+        
+        model_obj = next((m for m in test_models if m['name'] == model_name), None)
+        if not model_obj:
+            continue
+        
+        model_info = {
+            'model_name': model_name,
+            'params': model_obj.get('params', 'N/A'),
+            'quant': model_obj.get('quant', 'N/A'),
+            'size_gb': model_obj.get('size_gb', 0),
+            'max_ctx': model_obj.get('max_ctx', 0),
+            'vision': model_obj.get('vision', '❓'),
+            'tools': model_obj.get('tools', '❓'),
+            'thinking': model_obj.get('thinking', '❌'),
+            'language': current_language,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Добавляем результаты для каждого контекста
+        for run in results.get(model_name, []):
+            run_data = {
+                'model_name': model_name,
+                'ctx': run['ctx'],
+                'ctx_str': f"{run['ctx'] // 1024}K" if run['ctx'] >= 1024 else str(run['ctx']),
+                'avg_tps': round(run['avg_tps'], 2),
+                'min_tps': round(run['min_tps'], 2),
+                'max_tps': round(run['max_tps'], 2),
+                'std_dev': round(run['std_dev'], 2),
+                'vram': run['vram'] if run['vram'] else None,
+                'vram_str': f"{run['vram'] / 1024 / 1024:.1f} MiB" if run['vram'] else None,
+                **model_info
+            }
+            export_data.append(run_data)
+    
+    # Сохранение в зависимости от формата
+    if output_format == 'json':
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            print(get_text("output_json", output_file=output_file))
+        except Exception as e:
+            print(get_text("error_unknown", error_details=f"JSON export failed: {e}"))
+    elif output_format == 'csv':
+        try:
+            fieldnames = ['model_name', 'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
+                         'std_dev', 'vram', 'vram_str', 'params', 'quant', 'size_gb',
+                         'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp']
+            
+            with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+                writer.writeheader()
+                writer.writerows(export_data)
+            print(get_text("output_csv", output_file=output_file))
+        except Exception as e:
+            print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
+
 def main():
     global _current_language
     
@@ -675,6 +756,10 @@ def main():
                 max_tps=max_tps,
                 std_dev=std_dev,
                 vram=vram_str))
+    
+    # Сохранение результатов в файл
+    save_results(results, args.output, args.output_format,
+                 [m['name'] for m in test_models], test_models, args)
 
 if __name__ == "__main__":
     main()
