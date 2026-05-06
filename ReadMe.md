@@ -81,19 +81,29 @@ chmod +x roo_bench.py
 
 ### Usage
 
-#### Basic Usage
+The project uses a modular architecture. You can run it in two ways:
+
+#### Running via main.py (Recommended)
 
 ```bash
 # Run benchmark with all available models
-./venv/bin/python roo_bench.py
+./venv/bin/python main.py
 
 # Run with specific models
-./venv/bin/python roo_bench.py --models llama3.2,qwen2.5
+./venv/bin/python main.py --models llama3.2,qwen2.5
 
 # Filter models by capabilities
-./venv/bin/python roo_bench.py --of v  # Only vision models
-./venv/bin/python roo_bench.py --of T  # Only models with tool use
-./venv/bin/python roo_bench.py --of vt  # Vision + Tools
+./venv/bin/python main.py --of v  # Only vision models
+./venv/bin/python main.py --of T  # Only models with tool use
+./venv/bin/python main.py --of vt  # Vision + Tools
+```
+
+#### Running via roo_bench.py (Backward Compatible)
+
+```bash
+# All commands work the same way
+./venv/bin/python roo_bench.py
+./venv/bin/python roo_bench.py --models llama3.2,qwen2.5
 ```
 
 #### Advanced Options
@@ -195,23 +205,76 @@ See `config.example.json` for the configuration file structure.
 
 ### Architecture
 
+The project follows a modular architecture with clear separation of concerns:
+
+```
+roo_bench/
+├── __init__.py
+├── main.py                    # Entry point, orchestration
+├── cli.py                     # CLI argument parsing
+├── config.py                  # Ollama configuration
+├── constants.py               # Configuration constants
+├── i18n.py                    # Internationalization
+│
+├── api/
+│   ├── __init__.py
+│   ├── ollama_client.py       # Ollama API communication
+│   └── capabilities_fetcher.py # Model capabilities fetching
+│
+├── benchmark/
+│   ├── __init__.py
+│   ├── runner.py              # Benchmark execution
+│   └── results.py             # Statistics calculation
+│
+├── system/
+│   ├── __init__.py
+│   ├── gpu_monitor.py         # GPU/VRAM monitoring
+│   └── restart_manager.py     # Ollama restart logic
+│
+├── ui/
+│   ├── __init__.py
+│   ├── curses_selector.py     # Interactive model selection
+│   └── output_formatter.py    # Console output formatting
+│
+└── export/
+    ├── __init__.py
+    └── result_saver.py        # JSON/CSV export
+```
+
+**Module Dependencies:**
+
 ```mermaid
 graph TD
-    A[main] --> B[CLI args parsing]
-    B --> C[Language selection]
-    C --> D[Get local models]
-    D --> E[Get capabilities from Ollama]
-    E --> F[Filter models by --of]
-    F --> G[For each model]
-    G --> H[Restart Ollama]
-    H --> I[Run benchmark with num_runs]
-    I --> J[Calculate avg/min/max TPS]
-    J --> K[Store results]
-    K --> L{Output format?}
-    L -->|JSON| M[Export JSON]
-    L -->|CSV| N[Export CSV]
-    L -->|None| O[Print recommendations]
+    main[main.py] --> cli[cli.py]
+    main --> config[config.py]
+    main --> constants[constants.py]
+    main --> runner[benchmark/runner.py]
+    main --> saver[export/result_saver.py]
+    
+    runner --> ollama_client[api/ollama_client.py]
+    runner --> cap_fetcher[api/capabilities_fetcher.py]
+    runner --> gpu_monitor[system/gpu_monitor.py]
+    runner --> restart_manager[system/restart_manager.py]
+    runner --> output_formatter[ui/output_formatter.py]
+    runner --> results[benchmark/results.py]
+    
+    ollama_client --> gpu_monitor
+    cap_fetcher --> ollama_client
+    saver --> output_formatter
+    
+    cli --> i18n[i18n.py]
+    config --> i18n
+    constants --> i18n
 ```
+
+**Key Design Principles:**
+
+| Aspect | Description |
+|--------|-------------|
+| **Separation of Concerns** | Each module has a single, well-defined responsibility |
+| **Testability** | Modules can be unit tested independently |
+| **Reusability** | Functions can be imported without coupling |
+| **Maintainability** | File size reduced from 1030 to 10-200 lines per file |
 
 ### Contributing
 
@@ -294,19 +357,29 @@ chmod +x roo_bench.py
 
 ### Використання
 
-#### Базове використання
+Проект використовує модульну архітектуру. Запустити можна двома способами:
+
+#### Запуск через main.py (Рекомендовано)
 
 ```bash
 # Запустити бенчмарк з усіма доступними моделями
-./venv/bin/python roo_bench.py
+./venv/bin/python main.py
 
 # Запустити з конкретними моделями
-./venv/bin/python roo_bench.py --models llama3.2,qwen2.5
+./venv/bin/python main.py --models llama3.2,qwen2.5
 
 # Фільтрувати моделі за можливостями
-./venv/bin/python roo_bench.py --of v  # Тільки візіон моделі
-./venv/bin/python roo_bench.py --of T  # Тільки моделі з інструментами
-./venv/bin/python roo_bench.py --of vt  # Візіон + Інструменти
+./venv/bin/python main.py --of v  # Тільки візіон моделі
+./venv/bin/python main.py --of T  # Тільки моделі з інструментами
+./venv/bin/python main.py --of vt  # Візіон + Інструменти
+```
+
+#### Запуск через roo_bench.py (Зворотна сумісність)
+
+```bash
+# Усі команди працюють так само
+./venv/bin/python roo_bench.py
+./venv/bin/python roo_bench.py --models llama3.2,qwen2.5
 ```
 
 #### Розширені опції
@@ -408,23 +481,76 @@ export ROO_BENCH_CONTEXT_SIZES="8192,16384,32768"
 
 ### Архітектура
 
+Проект використовує модульну архітектуру з чітким розділенням відповідальності:
+
+```
+roo_bench/
+├── __init__.py
+├── main.py                    # Точка входу, оркестрація
+├── cli.py                     # Парсинг аргументів CLI
+├── config.py                  # Конфігурація Ollama
+├── constants.py               # Константи конфігурації
+├── i18n.py                    # Інтернаціоналізація
+│
+├── api/
+│   ├── __init__.py
+│   ├── ollama_client.py       # Комунікація з Ollama API
+│   └── capabilities_fetcher.py # Отримання можливостей моделей
+│
+├── benchmark/
+│   ├── __init__.py
+│   ├── runner.py              # Виконання бенчмарку
+│   └── results.py             # Розрахунок статистики
+│
+├── system/
+│   ├── __init__.py
+│   ├── gpu_monitor.py         # Моніторинг GPU/VRAM
+│   └── restart_manager.py     # Логіка перезапуску Ollama
+│
+├── ui/
+│   ├── __init__.py
+│   ├── curses_selector.py     # Інтерактивний вибір моделей
+│   └── output_formatter.py    # Форматування виводу
+│
+└── export/
+    ├── __init__.py
+    └── result_saver.py        # Експорт JSON/CSV
+```
+
+**Залежності модулів:**
+
 ```mermaid
 graph TD
-    A[main] --> B[CLI args parsing]
-    B --> C[Language selection]
-    C --> D[Get local models]
-    D --> E[Get capabilities from Ollama]
-    E --> F[Filter models by --of]
-    F --> G[For each model]
-    G --> H[Restart Ollama]
-    H --> I[Run benchmark with num_runs]
-    I --> J[Calculate avg/min/max TPS]
-    J --> K[Store results]
-    K --> L{Output format?}
-    L -->|JSON| M[Export JSON]
-    L -->|CSV| N[Export CSV]
-    L -->|None| O[Print recommendations]
+    main[main.py] --> cli[cli.py]
+    main --> config[config.py]
+    main --> constants[constants.py]
+    main --> runner[benchmark/runner.py]
+    main --> saver[export/result_saver.py]
+    
+    runner --> ollama_client[api/ollama_client.py]
+    runner --> cap_fetcher[api/capabilities_fetcher.py]
+    runner --> gpu_monitor[system/gpu_monitor.py]
+    runner --> restart_manager[system/restart_manager.py]
+    runner --> output_formatter[ui/output_formatter.py]
+    runner --> results[benchmark/results.py]
+    
+    ollama_client --> gpu_monitor
+    cap_fetcher --> ollama_client
+    saver --> output_formatter
+    
+    cli --> i18n[i18n.py]
+    config --> i18n
+    constants --> i18n
 ```
+
+**Основні принципи дизайну:**
+
+| Аспект | Опис |
+|--------|------|
+| **Розділення відповідальності** | Кожен модуль має чітку, визначену відповідальність |
+| **Тестопридатність** | Модулі можна тестувати незалежно |
+| **Повторне використання** | Функції можна імпортувати без зв'язків |
+| **Підтримуваність** | Розмір файлу зменшено з 1030 до 10-200 рядків на файл |
 
 ### Участь у розробці
 

@@ -3,7 +3,7 @@
 import sys
 import os
 import curses
-from i18n import set_language, _current_language
+from i18n import set_language
 from config import OllamaConfig
 from cli import parse_args, get_context_sizes
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
@@ -170,10 +170,6 @@ def run_benchmark_workflow(config: OllamaConfig, args):
 
 def main():
     """Main entry point function."""
-    # Initialize default language
-    if _current_language is None:
-        _current_language = "en"
-
     # Parse arguments
     args = parse_args()
 
