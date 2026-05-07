@@ -81,6 +81,16 @@ def parse_args():
                         help='Disable thinking mode on all models to prevent reasoning loops (default: enabled)')
     parser.add_argument('--thinking', action='store_false', dest='no_thinking',
                         help='Enable thinking mode on thinking-capable models')
+    parser.add_argument('--independent', action='store_true',
+                        help='Run only independent prompts test mode')
+    parser.add_argument('--chain', type=str, metavar='CHAIN_ID',
+                        help='Run only the specified prompt chain (e.g., chain_rest_api)')
+    parser.add_argument('--prompts-file', type=str, metavar='FILE',
+                        help='Path to prompts.jsonc configuration file')
+    parser.add_argument('--list-chains', action='store_true',
+                        help='List available prompt chains and exit')
+    parser.add_argument('--list-independent', action='store_true',
+                        help='List available independent prompts and exit')
     return parser.parse_args()
 
 

@@ -20,19 +20,21 @@ class ResultSaver:
         self.output_file = output_file
         self.output_format = output_format
 
-    def save(self, results: dict, model_names: list, test_models: list):
+    def save(self, results: dict, model_names: list, test_models: list,
+             prompts_config: dict = None):
         """Save results to file.
 
         Args:
             results: Dictionary of results per model
             model_names: List of tested model names
             test_models: List of model objects
+            prompts_config: Optional prompts configuration to include in export
         """
         if not self.output_file or not self.output_format:
             return
 
         # Prepare data for export
-        export_data = self._prepare_export_data(results, model_names, test_models)
+        export_data = self._prepare_export_data(results, model_names, test_models, prompts_config)
 
         # Save based on format
         if self.output_format == 'json':
@@ -40,18 +42,47 @@ class ResultSaver:
         elif self.output_format == 'csv':
             self._save_csv(export_data)
 
-    def _prepare_export_data(self, results: dict, model_names: list, test_models: list) -> list:
+    def _prepare_export_data(self, results: dict, model_names: list, test_models: list,
+                             prompts_config: dict = None) -> dict:
         """Prepare data for export.
 
         Args:
             results: Dictionary of results per model
             model_names: List of tested model names
             test_models: List of model objects
+            prompts_config: Optional prompts configuration to include in export
 
         Returns:
-            list: List of export data dictionaries
+            dict: Export data with prompts_config at root level
         """
-        export_data = []
+        # Include prompts configuration if provided
+        prompts_section = None
+        if prompts_config:
+            prompts_section = {
+                'independent': {
+                    mode: [{'id': p.get('id'), 'name': p.get('name'), 'prompt': p.get('prompt')}
+                           for p in prompts]
+                    for mode, prompts in prompts_config.get('independent', {}).items()
+                },
+                'chains': [
+                    {
+                        'id': chain.get('id'),
+                        'name': chain.get('name'),
+                        'prompts': {
+                            mode: {
+                                'id': p.get('id'),
+                                'name': p.get('name'),
+                                'prompt': p.get('prompt')
+                            }
+                            for mode, p in chain.get('prompts', {}).items()
+                        }
+                    }
+                    for chain in prompts_config.get('chains', [])
+                ]
+            }
+
+        # Prepare results list
+        results_list = []
 
         for model_name in model_names:
             if model_name not in results:
@@ -71,13 +102,12 @@ class ResultSaver:
                 'tools': model_obj.get('tools', '❓'),
                 'thinking': model_obj.get('thinking', '❌'),
                 'language': _current_language if '_current_language' in globals() else "en",
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
             }
 
             # Add results for each context
             for run in results.get(model_name, []):
                 run_data = {
-                    'model_name': model_name,
                     'ctx': run['ctx'],
                     'ctx_str': f"{run['ctx'] // 1024}K" if run['ctx'] >= 1024 else str(run['ctx']),
                     'avg_tps': round(run['avg_tps'], 2),
@@ -88,11 +118,15 @@ class ResultSaver:
                     'vram_str': f"{run['vram'] / 1024 / 1024:.1f} MiB" if run['vram'] else None,
                     **model_info
                 }
-                export_data.append(run_data)
+                results_list.append(run_data)
 
-        return export_data
+        # Return new structure with prompts_config at root level
+        return {
+            'prompts_config': prompts_section,
+            'results': results_list
+        }
 
-    def _save_json(self, export_data: list):
+    def _save_json(self, export_data: dict):
         """Save results to JSON file.
 
         Args:
@@ -123,11 +157,11 @@ class ResultSaver:
         except Exception as e:
             print(get_text("error_unknown", error_details=f"JSON export failed: {e}"))
 
-    def _save_csv(self, export_data: list):
+    def _save_csv(self, export_data: dict):
         """Save results to CSV file.
 
         Args:
-            export_data: List of result dictionaries
+            export_data: Dictionary with prompts_config and results
         """
         try:
             # Check if file exists and ask for confirmation
@@ -148,6 +182,9 @@ class ResultSaver:
                         print(get_text("save_cancelled"))
                         return
 
+            # Extract results list from export_data
+            results_list = export_data.get('results', [])
+
             fieldnames = ['model_name', 'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
                          'std_dev', 'vram', 'vram_str', 'params', 'quant', 'size_gb',
                          'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp']
@@ -155,7 +192,7 @@ class ResultSaver:
             with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
-                writer.writerows(export_data)
+                writer.writerows(results_list)
             print(get_text("output_csv", output_file=self.output_file))
         except Exception as e:
             print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
@@ -185,6 +222,40 @@ def load_results_from_file(file_path: str) -> tuple:
         if ext == '.json':
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            # Handle new structure with prompts_config at root level
+            if isinstance(data, dict) and 'results' in data:
+                # New structure: {'prompts_config': ..., 'results': [...]}
+                # Flatten results to group by model_name
+                for result in data.get('results', []):
+                    model_name = result.get('model_name', 'unknown')
+                    
+                    # Build model info (first occurrence creates the model entry)
+                    if model_name not in model_data_map:
+                        model_data_map[model_name] = {
+                            'name': model_name,
+                            'params': result.get('params', 'N/A'),
+                            'quant': result.get('quant', 'N/A'),
+                            'size_gb': float(result.get('size_gb', 0)) if result.get('size_gb', '0') != 'N/A' else 'N/A',
+                            'max_ctx': int(result.get('max_ctx', 131072)) if result.get('max_ctx', '0') != 'N/A' else 131072,
+                            'vision': result.get('vision', '❓'),
+                            'tools': result.get('tools', '❓'),
+                            'thinking': result.get('thinking', '❌'),
+                        }
+                    
+                    # Build results per model
+                    if model_name not in all_results:
+                        all_results[model_name] = []
+                    
+                    all_results[model_name].append({
+                        'ctx': result.get('ctx', 0),
+                        'ctx_str': result.get('ctx_str', f"{result.get('ctx', 0) // 1024}K"),
+                        'avg_tps': result.get('avg_tps', 0),
+                        'min_tps': result.get('min_tps', 0),
+                        'max_tps': result.get('max_tps', 0),
+                        'std_dev': result.get('std_dev', 0),
+                        'vram': result.get('vram'),
+                        'vram_str': result.get('vram_str'),
+                    })
         elif ext == '.csv':
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
@@ -197,38 +268,6 @@ def load_results_from_file(file_path: str) -> tuple:
             print(get_text("analyze_file_empty"))
             return None, None
         
-        # Group by model_name and build compatible structures
-        for row in data:
-            model_name = row.get('model_name', 'unknown')
-            
-            # Build model info (first occurrence creates the model entry)
-            if model_name not in model_data_map:
-                model_data_map[model_name] = {
-                    'name': model_name,
-                    'params': row.get('params', 'N/A'),
-                    'quant': row.get('quant', 'N/A'),
-                    'size_gb': float(row.get('size_gb', 0)) if row.get('size_gb', '0') != 'N/A' else 'N/A',
-                    'max_ctx': int(row.get('max_ctx', 131072)) if row.get('max_ctx', '0') != 'N/A' else 131072,
-                    'vision': row.get('vision', '❓'),
-                    'tools': row.get('tools', '❓'),
-                    'thinking': row.get('thinking', '❌'),
-                }
-            
-            # Build results per model
-            if model_name not in all_results:
-                all_results[model_name] = []
-            
-            all_results[model_name].append({
-                'ctx': int(row.get('ctx', 0)),
-                'ctx_str': row.get('ctx_str', f"{int(row.get('ctx', 0)) // 1024}K"),
-                'avg_tps': float(row.get('avg_tps', 0)),
-                'min_tps': float(row.get('min_tps', 0)),
-                'max_tps': float(row.get('max_tps', 0)),
-                'std_dev': float(row.get('std_dev', 0)),
-                'vram': int(row.get('vram', 0)) if row.get('vram', '0') != 'None' else None,
-                'vram_str': row.get('vram_str', None),
-            })
-        
         test_models = list(model_data_map.values())
         return all_results, test_models
         
@@ -238,7 +277,8 @@ def load_results_from_file(file_path: str) -> tuple:
 
 
 def save_results(results: dict, output_file: str, output_format: str,
-                 model_names: list, test_models: list):
+                 model_names: list, test_models: list,
+                 prompts_config: dict = None):
     """Convenience function to save results.
 
     Args:
@@ -247,6 +287,7 @@ def save_results(results: dict, output_file: str, output_format: str,
         output_format: Output format ('json' or 'csv')
         model_names: List of tested model names
         test_models: List of model objects
+        prompts_config: Optional prompts configuration to include in export
     """
     saver = ResultSaver(output_file=output_file, output_format=output_format)
-    saver.save(results, model_names, test_models)
+    saver.save(results, model_names, test_models, prompts_config)

@@ -87,6 +87,11 @@ class OllamaConfig:
             return f"{self.url.replace('localhost', '127.0.0.1')}:11434"
         return self.url
     
+    @property
+    def prompts_file(self) -> str:
+        """Get path to prompts configuration file."""
+        return self._config.get('prompts_file', os.path.join(os.path.dirname(__file__), 'prompts.jsonc'))
+    
     def get_headers(self) -> Dict[str, str]:
         """Get headers for requests"""
         headers = {}

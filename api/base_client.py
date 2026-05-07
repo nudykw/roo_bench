@@ -132,7 +132,9 @@ class BaseApiClient(ABC):
             return []
 
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3,
-                       disable_thinking: bool = True) -> tuple:
+                       disable_thinking: bool = True,
+                       prompt: str = None,
+                       prompt_metadata: dict = None) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
 
         Args:
@@ -140,15 +142,20 @@ class BaseApiClient(ABC):
             context_size: Context size
             num_runs: Number of runs for averaging (default: 3)
             disable_thinking: If True, disables thinking mode to prevent reasoning loops (default: True)
+            prompt: Custom prompt to use. If None, uses default benchmark prompt.
+            prompt_metadata: Metadata about the prompt (id, name, mode, chain info)
 
         Returns:
-            tuple: (avg_tps, vram, tps_list, error)
+            tuple: (avg_tps, vram, tps_list, error, prompt_metadata)
                 avg_tps: Average TPS (float)
                 vram: VRAM usage in bytes (int or None if GPU unavailable)
                 tps_list: List of results for each run (list of dict)
                 error: Error message (str or None)
+                prompt_metadata: The prompt metadata that was used
         """
-        prompt = "Write a comprehensive Python script that implements a multithreaded web server. Explain every line in extreme detail."
+        # Use custom prompt or default
+        if prompt is None:
+            prompt = "Write a comprehensive Python script that implements a multithreaded web server. Explain every line in extreme detail."
 
         tps_list = []
         vram = None
@@ -227,6 +234,15 @@ class BaseApiClient(ABC):
                 stop_monitoring.set()
                 monitor_thread.join(timeout=2)
 
+                # Create run_data with initial values
+                run_data = {
+                    'run': run_num + 1,
+                    'tps': 0,
+                    'vram': None,
+                    'prompt': prompt,
+                    'prompt_metadata': prompt_metadata
+                }
+
                 # Parse final response for TPS data
                 if final_data:
                     total_duration = final_data.get("total_duration", 0) / 1e9
@@ -249,7 +265,11 @@ class BaseApiClient(ABC):
 
                 # Use max VRAM observed during generation
                 vram_during = max_vram_ref[0] if vram_samples else None
-                tps_list.append({"run": run_num + 1, "tps": tps, "vram": vram_during})
+                
+                # Update run_data with actual values
+                run_data['tps'] = tps
+                run_data['vram'] = vram_during
+                tps_list.append(run_data)
 
             except KeyboardInterrupt:
                 # Re-raise KeyboardInterrupt to allow Ctrl+C to propagate
@@ -284,9 +304,9 @@ class BaseApiClient(ABC):
             # Return VRAM from the last successful run
             vram = tps_list[-1]['vram'] if tps_list else None
 
-            return avg_tps, vram, tps_list, None
+            return avg_tps, vram, tps_list, error, prompt_metadata
         else:
-            return 0.0, None, [], error
+            return 0.0, None, [], error, prompt_metadata
 
     def get_model_info(self, model_name: str) -> dict:
         """Get model information including current default parameters.

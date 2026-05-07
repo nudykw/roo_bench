@@ -3,6 +3,7 @@
 import sys
 import os
 import signal
+import logging
 import curses
 from i18n import set_language
 from config import OllamaConfig
@@ -16,6 +17,10 @@ from benchmark.results import calculate_statistics, format_result_row, format_re
 from ui.curses_selector import interactive_model_select
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
+from prompts.loader import PromptLoader
+
+# Setup logging
+logger = logging.getLogger('roo_bench')
 
 
 def get_ollama_config(args) -> OllamaConfig:
@@ -276,6 +281,37 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     # Get context sizes
     context_sizes = get_context_sizes(args)
 
+    # Handle prompt-related flags
+    if args.list_chains:
+        prompt_loader = PromptLoader(args.prompts_file)
+        chains = prompt_loader.get_chains()
+        print("Available chains:")
+        for c in chains:
+            print(f"  - {c['name']} ({c['id']})")
+        return
+
+    if args.list_independent:
+        prompt_loader = PromptLoader(args.prompts_file)
+        modes = prompt_loader.get_all_independent_modes()
+        for mode in modes:
+            prompts = prompt_loader.get_independent_prompts(mode)
+            print(f"\n=== {mode.upper()} ===")
+            for p in prompts:
+                print(f"  - {p['name']} ({p['id']})")
+        return
+
+    # Create prompt loader by default (for saving prompts in results)
+    prompts_file = args.prompts_file or config.prompts_file
+    prompt_loader = PromptLoader(prompts_file)
+    
+    # Log prompts configuration
+    logger.info(f"📝 Loaded prompts from: {prompts_file}")
+    if prompt_loader.data.get('independent'):
+        logger.info(f"📝 Available independent modes: {', '.join(prompt_loader.get_all_independent_modes())}")
+    if prompt_loader.data.get('chains'):
+        chains = prompt_loader.get_chains()
+        logger.info(f"📝 Available chains: {', '.join(chain.get('name') for chain in chains)}")
+
     # Initialize benchmark runner
     benchmark_runner = BenchmarkRunner(
         ollama_client=ollama_client,
@@ -283,18 +319,51 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         num_runs=args.num_runs,
         restart_method=args.restart_method,
         no_restart=args.no_restart,
-        disable_thinking=not args.no_thinking  # no_thinking=True → disable_thinking=False (user wants thinking)
+        disable_thinking=not args.no_thinking,  # no_thinking=True → disable_thinking=False (user wants thinking)
+        prompt_loader=prompt_loader
     )
 
     # Run benchmarks for each model
     all_results = {}
 
-    for m in test_models:
-        model_name, results, error = benchmark_runner.run_for_model(m)
-        all_results[model_name] = results
-
-        if error:
-            continue
+    # Run based on mode
+    if args.independent:
+        # Run independent prompts for all modes
+        for mode in prompt_loader.get_all_independent_modes():
+            for m in test_models:
+                model_name, results, error, prompts_used = benchmark_runner.run_independent_prompts(m, mode)
+                all_results[model_name] = results
+                if error:
+                    continue
+    elif args.chain:
+        # Run specific chain
+        chain = prompt_loader.get_chain_by_id(args.chain)
+        if not chain:
+            print(f"Chain not found: {args.chain}")
+            return
+        for m in test_models:
+            model_name, results, error, chain_responses = benchmark_runner.run_chain(m, chain)
+            all_results[model_name] = results
+            if error:
+                continue
+    else:
+        # Default: run independent prompts by default (using prompts.jsonc)
+        # Check if we have independent prompts available
+        if prompt_loader and prompt_loader.data.get('independent'):
+            print(get_text("using_independent_prompts_default"))
+            for mode in prompt_loader.get_all_independent_modes():
+                for m in test_models:
+                    model_name, results, error, prompts_used = benchmark_runner.run_independent_prompts(m, mode)
+                    all_results[model_name] = results
+                    if error:
+                        continue
+        else:
+            logger.warning("⚠️  No independent prompts found in prompts.jsonc, using default benchmark prompt")
+            for m in test_models:
+                model_name, results, error = benchmark_runner.run_for_model(m)
+                all_results[model_name] = results
+                if error:
+                    continue
 
     # Print results
     print_results_table(all_results)
@@ -394,7 +463,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             args.output,
             args.output_format,
             [m['name'] for m in test_models],
-            test_models
+            test_models,
+            prompts_config=prompt_loader.data if prompt_loader else None
         )
     
     # Post-benchmark interactive workflow (save + AI analysis)

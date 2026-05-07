@@ -1,16 +1,22 @@
 """Core benchmark execution orchestration."""
 
+import logging
 from api.base_client import BaseApiClient
 from system.restart_manager import restart_ollama, RestartMethod
 from benchmark.results import calculate_statistics
 from i18n import get_text
+from prompts.loader import PromptLoader
+
+# Setup logging
+logger = logging.getLogger('roo_bench.benchmark')
 
 
 class BenchmarkRunner:
     """Orchestrates benchmark execution for models."""
 
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
-                 restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True):
+                 restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
+                 prompt_loader=None):
         """Initialize benchmark runner.
 
         Args:
@@ -20,6 +26,7 @@ class BenchmarkRunner:
             restart_method: Ollama restart method
             no_restart: If True, restart is not performed
             disable_thinking: If True, disables thinking mode to prevent reasoning loops
+            prompt_loader: PromptLoader instance for loading prompts
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
@@ -37,6 +44,8 @@ class BenchmarkRunner:
             'ssh': RestartMethod.SSH
         }
         self.restart_method = method_map.get(restart_method, RestartMethod.MANUAL)
+        
+        self.prompt_loader = prompt_loader
 
     def filter_contexts(self, max_ctx: int) -> list:
         """Filter context sizes based on model's maximum context.
@@ -57,6 +66,142 @@ class BenchmarkRunner:
             valid_contexts.sort()
 
         return valid_contexts
+
+    def run_independent_prompts(self, model: dict, mode: str) -> tuple:
+        """Run benchmarks using independent prompts for a specific mode.
+        
+        Args:
+            model: Model dictionary
+            mode: One of 'architect', 'code', 'debug'
+            
+        Returns:
+            tuple: (model_name, results, error, prompts_used)
+        """
+        model_name = model["name"]
+        prompts = self.prompt_loader.get_independent_prompts(mode)
+        results = []
+        prompts_used = []
+        
+        for prompt_data in prompts:
+            prompt = prompt_data['prompt']
+            prompt_id = prompt_data['id']
+            prompt_name = prompt_data['name']
+            prompt_metadata = {
+                'type': 'independent',
+                'mode': mode,
+                'id': prompt_id,
+                'name': prompt_name
+            }
+            
+            logger.info(f"📝 Running prompt: {prompt_name} (ID: {prompt_id})")
+            print(f"   Running prompt: {prompt_name} (ID: {prompt_id})")
+            logger.debug(f"📝 Prompt text: {prompt}")
+            
+            avg_tps, vram, tps_list, error, _ = self.ollama_client.run_generation(
+                model_name,
+                self.context_sizes[0],  # Use first context size
+                self.num_runs,
+                self.disable_thinking,
+                prompt=prompt,
+                prompt_metadata=prompt_metadata
+            )
+            
+            if error:
+                print(f"   Error running prompt {prompt_id}: {error}")
+                continue
+            
+            results.append({
+                'prompt_id': prompt_id,
+                'prompt_name': prompt_name,
+                'ctx': self.context_sizes[0],  # Add context size
+                'avg_tps': avg_tps,
+                'min_tps': min(run['tps'] for run in tps_list),
+                'max_tps': max(run['tps'] for run in tps_list),
+                'std_dev': 0,  # Will be calculated later
+                'vram': vram,
+                'tps_list': tps_list
+            })
+            prompts_used.append(prompt_metadata)
+        
+        return model_name, results, None, prompts_used
+    
+    def run_chain(self, model: dict, chain: dict) -> tuple:
+        """Run benchmarks using a prompt chain (Architect -> Code -> Debug).
+        
+        Args:
+            model: Model dictionary
+            chain: Chain dictionary from prompt loader
+            
+        Returns:
+            tuple: (model_name, results, error, chain_responses)
+        """
+        model_name = model["name"]
+        chain_id = chain.get('id', 'unknown')
+        chain_name = chain.get('name', 'Unknown Chain')
+        
+        print(f"   Running chain: {chain_name} ({chain_id})")
+        
+        # Build chain context
+        chain_prompts = self.prompt_loader.build_chain_context(chain)
+        
+        chain_responses = {}
+        results = []
+        
+        # Run each mode in sequence
+        for mode in ['architect', 'code', 'debug']:
+            if mode not in chain_prompts:
+                continue
+            
+            prompt_data = chain_prompts[mode]
+            prompt = prompt_data['prompt']
+            prompt_id = prompt_data['id']
+            prompt_name = prompt_data['name']
+            
+            prompt_metadata = {
+                'type': 'chain',
+                'chain_id': chain_id,
+                'chain_name': chain_name,
+                'mode': mode,
+                'id': prompt_id,
+                'name': prompt_name
+            }
+            
+            logger.info(f"📝 Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
+            print(f"   Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
+            logger.debug(f"📝 Chain prompt [{mode}]: {prompt}")
+            
+            avg_tps, vram, tps_list, error, _ = self.ollama_client.run_generation(
+                model_name,
+                self.context_sizes[0],
+                self.num_runs,
+                self.disable_thinking,
+                prompt=prompt,
+                prompt_metadata=prompt_metadata
+            )
+            
+            if error:
+                print(f"   Error in chain [{mode}]: {error}")
+                break
+            
+            # Store response for next mode in chain
+            response_length = sum(run.get('response_length', 0) for run in tps_list) if hasattr(tps_list[0], 'response_length') else len(tps_list) * 100
+            
+            chain_responses[mode] = f"[Response from {mode} mode - {response_length} tokens]"
+            
+            results.append({
+                'mode': mode,
+                'prompt_id': prompt_id,
+                'prompt_name': prompt_name,
+                'ctx': self.context_sizes[0],  # Add context size
+                'avg_tps': avg_tps,
+                'min_tps': min(run['tps'] for run in tps_list),
+                'max_tps': max(run['tps'] for run in tps_list),
+                'std_dev': 0,  # Will be calculated later
+                'vram': vram,
+                'tps_list': tps_list
+            })
+        
+        return model_name, results, None, chain_responses
 
     def run_for_model(self, model: dict) -> tuple:
         """Run benchmarks for a single model across valid contexts.
@@ -109,7 +254,7 @@ class BenchmarkRunner:
                 print(f"   ⚠️  Error getting model settings: {e}")
 
             print(get_text("warming_up", ctx=ctx))
-            avg_tps, vram, tps_list, error_msg = self.ollama_client.run_generation(
+            avg_tps, vram, tps_list, error_msg, _ = self.ollama_client.run_generation(
                 model_name, ctx, self.num_runs, self.disable_thinking
             )
 

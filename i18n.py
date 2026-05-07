@@ -130,6 +130,7 @@ TRANSLATIONS = {
         "analysis_model_not_found": "❌ Model '{model_name}' not found in available models.",
         "cli_analyze_file": "Analyze benchmark results from a saved JSON/CSV file",
         "cli_analysis_model": "Model name to use for analysis (used with --analyze-file)",
+        "using_independent_prompts_default": "📝 Using independent prompts from prompts.jsonc by default",
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
@@ -256,6 +257,7 @@ TRANSLATIONS = {
         "analysis_model_not_found": "❌ Модель '{model_name}' не знайдено в доступних моделях.",
         "cli_analyze_file": "Аналізувати результати бенчмарку з збереженого JSON/CSV файлу",
         "cli_analysis_model": "Назва моделі для аналізу (використовується з --analyze-file)",
+        "using_independent_prompts_default": "📝 Використовуються незалежні промти з prompts.jsonc за замовчуванням",
         "cli_no_thinking": "Вимкнути режим міркувань для запобігання зацикленням (за замовчуванням: увімкнено)",
         "cli_thinking": "Увімкнути режим міркувань на моделях, що його підтримують",
     }

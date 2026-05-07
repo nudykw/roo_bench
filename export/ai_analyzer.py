@@ -597,12 +597,20 @@ def save_results_interactive(all_results: dict, test_models: list, base_url: str
 
     # Import and save
     from export.result_saver import save_results
+    from prompts.loader import PromptLoader
+    from config import OllamaConfig
+    
+    # Create config and prompt loader
+    config = OllamaConfig()
+    prompt_loader = PromptLoader(config.prompts_file)
+    
     save_results(
         all_results,
         filename,
         'json',
         [m['name'] for m in test_models],
-        test_models
+        test_models,
+        prompts_config=prompt_loader.data
     )
     return filename
 
