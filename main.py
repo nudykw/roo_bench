@@ -159,7 +159,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                         # Fallback: extract from model_info dict
                         model_info_dict = model_info.get("model_info", {})
                         caps = ollama_client.get_capabilities_from_model_info(model_info_dict)
-                    
+                
                     params_str = model_info.get("parameters", "")
                     if params_str:
                         for line in params_str.split('\n'):
@@ -169,7 +169,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                                     max_ctx = int(line.split(':')[1].strip())
                                 except (ValueError, IndexError):
                                     pass
-                    
+                
                     model_info_dict = model_info.get("model_info", {})
                     for key, val in model_info_dict.items():
                         if 'context_length' in key.lower() or 'num_ctx' in key.lower():
@@ -177,7 +177,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                                 max_ctx = int(val)
                             except (ValueError, TypeError):
                                 pass
-                
+            
                 m["max_ctx"] = max_ctx
                 
                 # Add metadata to cache
@@ -570,7 +570,8 @@ def _main_impl():
             file_path=analyze_file,
             model_name=model_name,
             target_lang=args.lang,
-            ollama_client=ollama_client
+            ollama_client=ollama_client,
+            stream=not getattr(args, 'no_stream', False)  # stream=True по умолчанию
         )
         
         sys.exit(0 if success else 1)

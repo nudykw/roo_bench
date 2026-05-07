@@ -120,7 +120,7 @@ class AIAnalyzer:
         user_prompt = self.prompts['user_prompt_template'].format(results=results_text)
         return user_prompt
 
-    def analyze(self, model_name: str, all_results: dict, test_models: list, ollama_client = None) -> str:
+    def analyze(self, model_name: str, all_results: dict, test_models: list, ollama_client = None, stream: bool = True) -> str:
         """Send request to Ollama and get response.
 
         Args:
@@ -128,6 +128,7 @@ class AIAnalyzer:
             all_results: Dictionary of results per model
             test_models: List of model objects
             ollama_client: BaseApiClient instance for unload_model (same as benchmark runner)
+            stream: If True, use streaming mode with progress display (default: True)
 
         Returns:
             str: Model's analysis response
@@ -135,6 +136,8 @@ class AIAnalyzer:
         Raises:
             Exception: If the API request fails
         """
+        from ui.markdown_renderer import stream_markdown
+        
         prompt = self.generate_prompt(all_results, test_models)
         
         # Calculate required context size (rough estimate: 1 token ~ 3 chars for mixed content)
@@ -152,6 +155,7 @@ class AIAnalyzer:
         logger.debug("  num_predict: -1 (unlimited)")
         logger.debug("  temperature: 0.1 (strict/deterministic)")
         logger.debug("  think: False (disabled)")
+        logger.debug("  stream: %s", stream)
 
         # Try using /api/chat endpoint first (better for complex prompts)
         try:
@@ -167,7 +171,7 @@ class AIAnalyzer:
                         "content": prompt
                     }
                 ],
-                "stream": False,
+                "stream": stream,
                 "think": False,  # Top-level API param to disable thinking mode
                 "options": {
                     "num_predict": -1,
@@ -178,28 +182,53 @@ class AIAnalyzer:
             }
 
             logger.debug("Sending request to /api/chat...")
-            response = requests.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-                headers=self.headers,
-                timeout=self.timeout
-            )
+            if stream:
+                # Stream mode
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    headers=self.headers,
+                    stream=True,
+                    timeout=self.timeout
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                response_text = data.get("message", {}).get("content", "")
-                if response_text:
-                    return response_text
-                
-                # If chat endpoint returns empty, show debug info
-                logger.warning("Chat endpoint returned empty response.")
-                logger.debug("Full response keys: %s", list(data.keys()))
-                logger.debug("'done' field: %s", data.get('done', 'N/A'))
-                logger.debug("'done_reason' field: %s", data.get('done_reason', 'N/A'))
-                logger.debug("prompt_eval_count: %s", data.get('prompt_eval_count', 'N/A'))
-                logger.debug("eval_count: %s", data.get('eval_count', 'N/A'))
-                logger.debug("Full response: %s", json.dumps(data, indent=2)[:800])
-                logger.debug("Trying generate endpoint...")
+                def chunk_generator():
+                    for line in response.iter_lines():
+                        if line:
+                            chunk = json.loads(line)
+                            if not chunk.get("done", False):
+                                yield chunk.get("message", {}).get("content", "")
+                            else:
+                                # Last chunk might have content even with done=True
+                                content = chunk.get("message", {}).get("content", "")
+                                if content:
+                                    yield content
+
+                return stream_markdown(chunk_generator())
+            else:
+                # Non-stream mode
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    headers=self.headers,
+                    timeout=self.timeout
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    response_text = data.get("message", {}).get("content", "")
+                    if response_text:
+                        return response_text
+                    
+                    # If chat endpoint returns empty, show debug info
+                    logger.warning("Chat endpoint returned empty response.")
+                    logger.debug("Full response keys: %s", list(data.keys()))
+                    logger.debug("'done' field: %s", data.get('done', 'N/A'))
+                    logger.debug("'done_reason' field: %s", data.get('done_reason', 'N/A'))
+                    logger.debug("prompt_eval_count: %s", data.get('prompt_eval_count', 'N/A'))
+                    logger.debug("eval_count: %s", data.get('eval_count', 'N/A'))
+                    logger.debug("Full response: %s", json.dumps(data, indent=2)[:800])
+                    logger.debug("Trying generate endpoint...")
         except Exception as e:
             logger.warning("Chat endpoint failed: %s, trying generate endpoint...", str(e))
 
@@ -207,7 +236,7 @@ class AIAnalyzer:
         payload = {
             "model": model_name,
             "prompt": prompt,
-            "stream": False,
+            "stream": stream,
             "think": False,  # Top-level API param to disable thinking mode
             "options": {
                 "num_predict": -1,
@@ -219,31 +248,56 @@ class AIAnalyzer:
 
         try:
             logger.debug("Sending request to /api/generate...")
-            response = requests.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-                headers=self.headers,
-                timeout=self.timeout
-            )
+            if stream:
+                # Stream mode for generate endpoint
+                response = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    headers=self.headers,
+                    stream=True,
+                    timeout=self.timeout
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                response_text = data.get("response", "")
-                if response_text:
-                    return response_text
-                
-                # If still empty, show debug info
-                logger.warning("Generate endpoint also returned empty response.")
-                logger.debug("Full response keys: %s", list(data.keys()))
-                logger.debug("'done' field: %s", data.get('done', 'N/A'))
-                logger.debug("'done_reason' field: %s", data.get('done_reason', 'N/A'))
-                logger.debug("prompt_eval_count: %s", data.get('prompt_eval_count', 'N/A'))
-                logger.debug("eval_count: %s", data.get('eval_count', 'N/A'))
-                logger.debug("Full response: %s", json.dumps(data, indent=2)[:800])
-                return response_text
+                def chunk_generator():
+                    for line in response.iter_lines():
+                        if line:
+                            chunk = json.loads(line)
+                            if not chunk.get("done", False):
+                                yield chunk.get("response", "")
+                            else:
+                                # Last chunk might have content even with done=True
+                                content = chunk.get("response", "")
+                                if content:
+                                    yield content
+
+                return stream_markdown(chunk_generator())
             else:
-                error_msg = response.json().get("error", f"HTTP {response.status_code}")
-                raise Exception(str(error_msg))
+                # Non-stream mode
+                response = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    headers=self.headers,
+                    timeout=self.timeout
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    response_text = data.get("response", "")
+                    if response_text:
+                        return response_text
+                    
+                    # If still empty, show debug info
+                    logger.warning("Generate endpoint also returned empty response.")
+                    logger.debug("Full response keys: %s", list(data.keys()))
+                    logger.debug("'done' field: %s", data.get('done', 'N/A'))
+                    logger.debug("'done_reason' field: %s", data.get('done_reason', 'N/A'))
+                    logger.debug("prompt_eval_count: %s", data.get('prompt_eval_count', 'N/A'))
+                    logger.debug("eval_count: %s", data.get('eval_count', 'N/A'))
+                    logger.debug("Full response: %s", json.dumps(data, indent=2)[:800])
+                    return response_text
+                else:
+                    error_msg = response.json().get("error", f"HTTP {response.status_code}")
+                    raise Exception(str(error_msg))
         except Exception as e:
             raise Exception(f"Analysis request failed: {e}")
 
@@ -356,7 +410,7 @@ class AIAnalyzer:
             logger.debug("exception str: %s", str(e))
             return None
 
-    def analyze_from_file(self, file_path: str, model_name: str, target_lang: str = 'en', ollama_client = None) -> bool:
+    def analyze_from_file(self, file_path: str, model_name: str, target_lang: str = 'en', ollama_client = None, stream: bool = True) -> bool:
         """Analyze benchmark results from a saved file.
 
         Args:
@@ -364,6 +418,7 @@ class AIAnalyzer:
             model_name: Name of the Ollama model to use for analysis
             target_lang: Target language code for translation ('en' or 'ua')
             ollama_client: BaseApiClient instance for unload_model (same as benchmark runner)
+            stream: If True, use streaming mode with progress display (default: True)
 
         Returns:
             bool: True if analysis was successful, False otherwise
@@ -430,7 +485,7 @@ class AIAnalyzer:
         
         try:
             print(f"   \U0001f4a1 Sending analysis request...")
-            response = self.analyze(actual_model_name, all_results, test_models, ollama_client)
+            response = self.analyze(actual_model_name, all_results, test_models, ollama_client, stream=stream)
             
             if not response:
                 print("\n\u26a0\ufe0f  Model returned an empty response.")
@@ -465,26 +520,26 @@ class AIAnalyzer:
                     print(f"   ✅ Translation completed")
                 else:
                     print(get_text("translation_unavailable"))
-            
-            # Unload model after analysis and translation are complete
-            # Same method as benchmark runner: ollama_client.unload_model()
-            print(f"\n   🤹 Unloading model '{actual_model_name}' from VRAM...")
-            try:
-                if ollama_client:
-                    ollama_client.unload_model(actual_model_name)
-                else:
-                    print(f"   ⚠️  Warning: ollama_client not available, skipping unload")
-                print(f"   ✅ Model '{actual_model_name}' unloaded successfully")
-            except Exception as e:
-                print(f"   ⚠️  Warning: Could not unload model: {e}")
-                print(f"   💡 Tip: Run 'ollama stop {actual_model_name}' manually to free VRAM.")
-            
-            return True
-            
+         
         except Exception as e:
             print(get_text("analysis_error", error=str(e)))
             return False
-
+        
+        # Unload model after analysis and translation are complete
+        # Same method as benchmark runner: ollama_client.unload_model()
+        print(f"\n   🤹 Unloading model '{actual_model_name}' from VRAM...")
+        try:
+            if ollama_client:
+                ollama_client.unload_model(actual_model_name)
+            else:
+                print(f"   ⚠️  Warning: ollama_client not available, skipping unload")
+            print(f"   ✅ Model '{actual_model_name}' unloaded successfully")
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
+            print(f"   💡 Tip: Run 'ollama stop {actual_model_name}' manually to free VRAM.")
+        
+        return True
+        
 
 def prompt_user(question: str) -> bool:
     """Ask yes/no question, return True if user agrees.
@@ -553,8 +608,8 @@ def save_results_interactive(all_results: dict, test_models: list, base_url: str
 
 
 def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_models: list, current_lang: str,
-                                 restart_method: str = 'manual', no_restart: bool = False,
-                                 ssh_client = None, ollama_client = None):
+                               restart_method: str = 'manual', no_restart: bool = False,
+                               ssh_client = None, ollama_client = None):
     """Interactive workflow: list models, let user select, run analysis, show results.
 
     Args:
@@ -617,7 +672,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
         logger.debug("Could not check model availability: %s", e)
     
     try:
-        response = analyzer.analyze(model_name, all_results, test_models, ollama_client)
+        response = analyzer.analyze(model_name, all_results, test_models, ollama_client, stream=True)
 
         if not response:
             print("\n\u26a0\ufe0f  Model returned an empty response.")
@@ -659,7 +714,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
                 print(translated)
             else:
                 print(get_text("translation_unavailable"))
-        
+    
         # Unload model after analysis and translation are complete
         # Same method as benchmark runner: ollama_client.unload_model()
         print(f"\n   \U0001f939 Unloading model '{model_name}' from VRAM...")

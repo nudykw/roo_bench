@@ -75,6 +75,8 @@ def parse_args():
                         help=get_text('cli_analyze_file'))
     parser.add_argument('--analysis-model', type=str, default=None,
                         help=get_text('cli_analysis_model'))
+    parser.add_argument('--no-stream', action='store_true', default=False,
+                        help='Disable streaming mode for AI analysis output (default: enabled)')
     parser.add_argument('--no-thinking', action='store_true', default=True,
                         help='Disable thinking mode on all models to prevent reasoning loops (default: enabled)')
     parser.add_argument('--thinking', action='store_false', dest='no_thinking',
