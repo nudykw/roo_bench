@@ -6,3 +6,4 @@ data/capabilities_cache.json
 prompts/analysis_prompt*.json
 benchmark_results.json
 data/model_cache.json
+benchmark_results*.json
