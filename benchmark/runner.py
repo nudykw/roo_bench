@@ -74,6 +74,7 @@ class BenchmarkRunner:
         max_ctx = model["max_ctx"]
         max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
 
+        print("\n\n");
         print(get_text("testing_model", model_name=model_name))
         # Format size_gb: if it's a number, format to 1 decimal; if "N/A", keep as string
         size_gb_val = model['size_gb']

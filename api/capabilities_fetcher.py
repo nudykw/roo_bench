@@ -294,6 +294,7 @@ class CapabilitiesFetcher:
             'active_params': self._extract_active_params(metadata),
             'quant': self._extract_quant(metadata),
             'max_ctx': self._extract_max_ctx(metadata),
+            'architecture': self._extract_architecture(metadata),
             'capabilities': self._extract_capabilities(metadata),
             'moe': self._detect_moe(metadata, base_name),
             'fetched_at': datetime.now(timezone.utc).isoformat()
@@ -370,8 +371,19 @@ class CapabilitiesFetcher:
         """Extract quantization format."""
         details = metadata.get('details', {})
         if details:
+            # Ollama API uses 'quantization_level' (e.g., 'Q4_K_M')
+            quant = details.get('quantization_level', 'N/A')
+            if quant and quant != 'N/A':
+                return quant
+            # Fallback: try 'quantization_format' for older API versions
             return details.get('quantization_format', 'N/A')
         return 'N/A'
+    
+    def _extract_architecture(self, metadata: dict) -> str:
+        """Extract model architecture from model_info."""
+        model_info = metadata.get('model_info', {})
+        architecture = model_info.get('general.architecture', '')
+        return architecture if architecture else 'N/A'
     
     def _extract_max_ctx(self, metadata: dict) -> int:
         """Extract maximum context length."""

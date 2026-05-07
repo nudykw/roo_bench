@@ -107,6 +107,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 m["size_gb"] = cached_size_gb
             m["params"] = cached.get('params', 'N/A')
             m["quant"] = cached.get('quant', 'N/A')
+            m["architecture"] = cached.get('architecture', 'N/A')
             m["max_ctx"] = cached.get('max_ctx', 131072)
             m["moe"] = cached.get('moe', None)
             caps = cached.get('capabilities', {'vision': False, 'tools': False, 'thinking': False, 'audio': False})
@@ -126,8 +127,17 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             m["params"] = param_size
             
             # Add quantization format from model details
-            quant = (details.get("quantization_format") or "N/A") if details else "N/A"
+            # Ollama API uses 'quantization_level' (e.g., 'Q4_K_M')
+            quant = (details.get("quantization_level") or details.get("quantization_format") or "N/A") if details else "N/A"
             m["quant"] = quant
+            
+            # Add architecture from model info
+            try:
+                model_info = ollama_client.get_model_info(m["name"])
+                architecture = model_info.get('model_info', {}).get('general.architecture', 'N/A')
+                m["architecture"] = architecture if architecture else 'N/A'
+            except Exception:
+                m["architecture"] = 'N/A'
             
             # Add max_ctx and capabilities from model info
             try:
