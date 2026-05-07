@@ -242,6 +242,8 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--config` | Path to configuration file | `config.json` |
 | `--update-cache` | Force update capabilities cache from Ollama API | False |
 | `--no-interactive` | Disable interactive post-benchmark prompts | False |
+| `--no-thinking` | Disable thinking mode to prevent reasoning loops | True (thinking disabled) |
+| `--thinking` | Enable thinking mode on thinking-capable models | False |
 
 #### Environment Variables
 
@@ -654,6 +656,8 @@ Roo Bench автоматично кешує можливості моделей 
 | `--config` | Шлях до файлу конфігурації | `config.json` |
 | `--update-cache` | Примусово оновити кеш можливостей з Ollama API | False |
 | `--no-interactive` | Вимкнути інтерактивні підказки після бенчмарку | False |
+| `--no-thinking` | Вимкнути режим міркувань для запобігання зацикленням | True (thinking вимкнено) |
+| `--thinking` | Увімкнути режим міркувань на моделях, що його підтримують | False |
 
 #### Налаштування віддаленого сервера Ollama
 

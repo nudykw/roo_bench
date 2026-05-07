@@ -272,7 +272,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         context_sizes=context_sizes,
         num_runs=args.num_runs,
         restart_method=args.restart_method,
-        no_restart=args.no_restart
+        no_restart=args.no_restart,
+        disable_thinking=not args.no_thinking  # no_thinking=True → disable_thinking=False (user wants thinking)
     )
 
     # Run benchmarks for each model
@@ -441,7 +442,8 @@ def _post_benchmark_workflow(args, all_results, test_models, config):
                 analyzer, all_results, test_models, args.lang,
                 restart_method=getattr(args, 'restart_method', 'manual'),
                 no_restart=False,
-                ssh_client=ollama_client.ssh_client
+                ssh_client=ollama_client.ssh_client,
+                ollama_client=ollama_client  # Pass API client for unload_model
             )
 
 
@@ -529,6 +531,19 @@ def _main_impl():
         config = get_ollama_config(args)
         
         from export.ai_analyzer import AIAnalyzer
+        from api.factory import ApiClientFactory
+        
+        # Create API client for unload_model support
+        ollama_client = ApiClientFactory.create_client(
+            base_url=config.base_url,
+            headers=config.get_headers(),
+            timeout=config.timeout,
+            ssh_host=getattr(args, 'ssh_host', None),
+            ssh_user=getattr(args, 'ssh_user', None),
+            ssh_port=getattr(args, 'ssh_port', 22),
+            ssh_key=getattr(args, 'ssh_key', None)
+        )
+        
         analyzer = AIAnalyzer(
             base_url=config.base_url,
             headers=config.get_headers(),
@@ -544,7 +559,8 @@ def _main_impl():
         success = analyzer.analyze_from_file(
             file_path=analyze_file,
             model_name=model_name,
-            target_lang=args.lang
+            target_lang=args.lang,
+            ollama_client=ollama_client
         )
         
         sys.exit(0 if success else 1)

@@ -131,13 +131,15 @@ class BaseApiClient(ABC):
             print(get_text("error_ollama_connection", error=str(e)))
             return []
 
-    def run_generation(self, model_name: str, context_size: int, num_runs: int = 3) -> tuple:
+    def run_generation(self, model_name: str, context_size: int, num_runs: int = 3,
+                       disable_thinking: bool = True) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
 
         Args:
             model_name: Model name
             context_size: Context size
             num_runs: Number of runs for averaging (default: 3)
+            disable_thinking: If True, disables thinking mode to prevent reasoning loops (default: True)
 
         Returns:
             tuple: (avg_tps, vram, tps_list, error)
@@ -152,6 +154,9 @@ class BaseApiClient(ABC):
         vram = None
         error = None
 
+        # Build payload with optional thinking disable
+        # Note: "think" is a top-level API parameter, NOT inside "options"
+        # See: https://github.com/ollama/ollama/blob/main/docs/api.md
         for run_num in range(num_runs):
             payload = {
                 "model": model_name,
@@ -162,6 +167,8 @@ class BaseApiClient(ABC):
                     "num_ctx": context_size
                 }
             }
+            if disable_thinking:
+                payload["think"] = False
 
             response = None
             max_vram_ref = [0]  # Use list for mutable reference in thread

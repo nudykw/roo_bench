@@ -10,7 +10,7 @@ class BenchmarkRunner:
     """Orchestrates benchmark execution for models."""
 
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
-                 restart_method: str = 'manual', no_restart: bool = False):
+                 restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True):
         """Initialize benchmark runner.
 
         Args:
@@ -19,11 +19,13 @@ class BenchmarkRunner:
             num_runs: Number of runs per configuration
             restart_method: Ollama restart method
             no_restart: If True, restart is not performed
+            disable_thinking: If True, disables thinking mode to prevent reasoning loops
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
         self.num_runs = num_runs
         self.no_restart = no_restart
+        self.disable_thinking = disable_thinking
         self.ssh_client = ollama_client.ssh_client  # Get SSH client from the API client
         
         # Map string method to RestartMethod enum
@@ -107,7 +109,7 @@ class BenchmarkRunner:
 
             print(get_text("warming_up", ctx=ctx))
             avg_tps, vram, tps_list, error_msg = self.ollama_client.run_generation(
-                model_name, ctx, self.num_runs
+                model_name, ctx, self.num_runs, self.disable_thinking
             )
 
             if error_msg:

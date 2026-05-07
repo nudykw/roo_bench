@@ -33,7 +33,25 @@ class RestartManager:
         self.ssh_client = ssh_client
 
     def restart(self):
-        """Restart Ollama using configured method."""
+        """Restart Ollama using configured method.
+
+        NOTE: This is a LOCAL fallback for restarting Ollama.
+        For remote servers, use ollama_client.unload_model() instead,
+        which handles SSH restart automatically via api/base_client.py.
+
+        Restart priority:
+        1. ollama restart (if ollama is in PATH)
+        2. systemctl --user restart ollama (user service)
+        3. sudo systemctl restart ollama (system service)
+
+        For remote servers: use RestartMethod.SSH with ssh_client parameter
+        or call ollama_client.unload_model() from api/base_client.py
+
+        IMPORTANT: During benchmark, use restart_ollama() to unload ALL models
+        (including those loaded by other programs).
+        After analysis/translation, use ollama_client.unload_model() to unload
+        ONLY the specific model.
+        """
         if self.no_restart:
             print(get_text("restart_ollama_disabled"))
             return
@@ -55,37 +73,59 @@ class RestartManager:
                 time.sleep(4)
                 return
 
-            # All local methods use 'ollama restart' to avoid sudo
-            # This works because Ollama runs as a user service for local sessions
-            cmd = ['ollama', 'restart']
+            # Try 'ollama restart' first (works when ollama is in PATH)
+            ollama_success = False
+            try:
+                cmd = ['ollama', 'restart']
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                if result.returncode == 0:
+                    ollama_success = True
+                    print(get_text("restart_success"))
+            except FileNotFoundError:
+                # ollama not in PATH, will try fallbacks below
+                pass
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if result.returncode != 0:
+            if not ollama_success:
                 # Fallback: try systemctl --user (user-level service)
+                fallback_success = False
                 try:
                     result = subprocess.run(
                         ['systemctl', '--user', 'restart', 'ollama'],
                         capture_output=True, text=True, timeout=60
                     )
+                    if result.returncode == 0:
+                        fallback_success = True
+                        print(get_text("restart_success"))
                 except subprocess.TimeoutExpired:
                     print(get_text("error_restart_timeout"))
                     return
                 except FileNotFoundError:
                     pass
-                
-                if result.returncode != 0:
-                    print(get_text("error_restart_command", cmd=' '.join(cmd), stderr=result.stderr or "systemctl --user also failed"))
-                    print(f"   💡 Tip: You can restart Ollama manually by running: ollama restart")
-                else:
-                    print(get_text("restart_success"))
-            else:
-                print(get_text("restart_success"))
+
+                if not fallback_success:
+                    # Fallback: try sudo systemctl (system-level service)
+                    try:
+                        result = subprocess.run(
+                            ['sudo', 'systemctl', 'restart', 'ollama'],
+                            capture_output=True, text=True, timeout=60
+                        )
+                        if result.returncode == 0:
+                            print(get_text("restart_success"))
+                        else:
+                            print(get_text("error_restart_command", cmd='sudo systemctl restart ollama', stderr=result.stderr or "all methods failed"))
+                            print(f"   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
+                    except subprocess.TimeoutExpired:
+                        print(get_text("error_restart_timeout"))
+                        return
+                    except FileNotFoundError:
+                        print(get_text("error_restart_command", cmd='sudo systemctl restart ollama', stderr="systemctl not found"))
+                        print(f"   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
+                    except PermissionError:
+                        print(get_text("error_restart_permission"))
 
             time.sleep(4)
         except subprocess.TimeoutExpired:
             print(get_text("error_restart_timeout"))
-        except FileNotFoundError:
-            print(get_text("error_restart_command_not_found", cmd='ollama restart'))
         except PermissionError:
             print(get_text("error_restart_permission"))
         except Exception as e:
