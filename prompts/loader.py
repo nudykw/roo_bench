@@ -136,6 +136,21 @@ class PromptLoader:
         """
         return list(self.data.get('independent', {}).keys())
     
+    def get_all_independent_prompts_ordered(self) -> List[Dict[str, Any]]:
+        """Get all independent prompts in order: architect → code → debug.
+        
+        Returns:
+            list: List of prompt dictionaries with 'mode', 'id', 'name', 'prompt' keys
+        """
+        all_prompts = []
+        for mode in ['architect', 'code', 'debug']:
+            prompts = self.get_independent_prompts(mode)
+            for prompt in prompts:
+                prompt_with_mode = prompt.copy()
+                prompt_with_mode['mode'] = mode  # Add mode to each prompt
+                all_prompts.append(prompt_with_mode)
+        return all_prompts
+    
     def get_chains(self) -> List[Dict[str, Any]]:
         """Get all prompt chains.
         

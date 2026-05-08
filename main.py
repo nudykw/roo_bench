@@ -328,15 +328,23 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
 
     # Run based on mode
     if args.independent:
-        # Run independent prompts for all modes
-        for mode in prompt_loader.get_all_independent_modes():
-            for m in test_models:
-                model_name, results, error, prompts_used = benchmark_runner.run_independent_prompts(m, mode)
-                all_results[model_name] = results
-                if error:
-                    continue
+        # Run ALL independent prompts for each model
+        for m in test_models:
+            model_name, results, error, prompts_used = benchmark_runner.run_all_independent_prompts(m)
+            all_results[model_name] = results
+            if error:
+                continue
+
+    elif args.chains:
+        # NEW: Run ALL chains for each model
+        for m in test_models:
+            model_name, results, error = benchmark_runner.run_all_chains(m)
+            all_results[model_name] = results
+            if error:
+                continue
+
     elif args.chain:
-        # Run specific chain
+        # Run specific chain for each model
         chain = prompt_loader.get_chain_by_id(args.chain)
         if not chain:
             print(f"Chain not found: {args.chain}")
@@ -346,17 +354,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             all_results[model_name] = results
             if error:
                 continue
+
     else:
-        # Default: run independent prompts by default (using prompts.jsonc)
-        # Check if we have independent prompts available
+        # Default: run ALL independent prompts
         if prompt_loader and prompt_loader.data.get('independent'):
             print(get_text("using_independent_prompts_default"))
-            for mode in prompt_loader.get_all_independent_modes():
-                for m in test_models:
-                    model_name, results, error, prompts_used = benchmark_runner.run_independent_prompts(m, mode)
-                    all_results[model_name] = results
-                    if error:
-                        continue
+            for m in test_models:
+                model_name, results, error, prompts_used = benchmark_runner.run_all_independent_prompts(m)
+                all_results[model_name] = results
+                if error:
+                    continue
         else:
             logger.warning("⚠️  No independent prompts found in prompts.jsonc, using default benchmark prompt")
             for m in test_models:

@@ -83,6 +83,8 @@ def parse_args():
                         help='Enable thinking mode on thinking-capable models')
     parser.add_argument('--independent', action='store_true',
                         help='Run only independent prompts test mode')
+    parser.add_argument('--chains', action='store_true',
+                        help='Run all prompt chains (full lifecycle tests)')
     parser.add_argument('--chain', type=str, metavar='CHAIN_ID',
                         help='Run only the specified prompt chain (e.g., chain_rest_api)')
     parser.add_argument('--prompts-file', type=str, metavar='FILE',

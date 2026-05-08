@@ -59,7 +59,7 @@ class BenchmarkRunner:
             list: Filtered list of valid context sizes (minimum 64K)
         """
         # Filter contexts: take only those >= 64K and <= maximum
-        MIN_CONTEXT = 65536  # 64K minimum
+        MIN_CONTEXT = 32 768  # 32K minimum
         valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
     
         # If the model supports some "non-standard" max context (e.g. 128000),
@@ -459,3 +459,256 @@ class BenchmarkRunner:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
 
         return model_name, results, None
+    
+    def run_all_independent_prompts(self, model: dict, temperature: float = None) -> tuple:
+        """Run ALL independent prompts for a model across contexts and temperatures.
+        
+        Execution order:
+            Model → Contexts → Temperatures → ALL prompts (architect → code → debug)
+        
+        Args:
+            model: Model dictionary with name, max_ctx, etc.
+            temperature: Temperature value to use (None for default)
+        
+        Returns:
+            tuple: (model_name, results, error, prompts_used)
+        """
+        model_name = model["name"]
+        max_ctx = model["max_ctx"]
+        results = []
+        prompts_used = []
+        
+        # Display model name
+        print(f"\n🤖 Testing model: {model_name}")
+        logger.info(f"🤖 Testing model: {model_name}")
+        
+        # Restart Ollama once for the model
+        restart_ollama(
+            self.restart_method,
+            self.no_restart,
+            ssh_client=self.ssh_client
+        )
+        
+        # Filter contexts
+        valid_contexts = self.filter_contexts(max_ctx)
+        
+        # Get temperatures
+        if temperature is None:
+            temps = [1.0, 0.7, 0.3]
+        else:
+            temps = [temperature]
+        
+        # Get ALL prompts in order
+        all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()
+        
+        # NEW ORDER: Contexts → Temperatures → ALL prompts sequentially
+        for ctx in valid_contexts:
+            logger.info(f"   📏 Context size: {ctx}")
+            print(f"   📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"   📏 Context: {ctx}")
+            
+            for temp in temps:
+                logger.info(f"   🌡️  Temperature: {temp:.2f}")
+                print(f"      🌡️  Temperature: {temp:.2f}")
+                
+                # Run ALL prompts in order (architect → code → debug)
+                for prompt_data in all_prompts:
+                    prompt = prompt_data['prompt']
+                    prompt_id = prompt_data['id']
+                    prompt_name = prompt_data['name']
+                    mode = prompt_data['mode']
+                    
+                    prompt_metadata = {
+                        'type': 'independent',
+                        'mode': mode,
+                        'id': prompt_id,
+                        'name': prompt_name
+                    }
+                    
+                    logger.info(f"📝 Running [{mode}] {prompt_name} (ID: {prompt_id})")
+                    print(f"         [{mode}] {prompt_name} (ID: {prompt_id})")
+                    
+                    avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                        model_name,
+                        ctx,
+                        self.num_runs,
+                        self.disable_thinking,
+                        temperature=temp,
+                        prompt=prompt,
+                        prompt_metadata=prompt_metadata
+                    )
+                    
+                    if error:
+                        print(f"         Error: {error}")
+                        continue
+                    
+                    # Calculate std_dev
+                    if len(tps_list) > 1:
+                        mean = avg_tps
+                        variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                        std_dev = variance ** 0.5
+                    else:
+                        std_dev = 0.0
+                    
+                    results.append({
+                        'mode': mode,
+                        'prompt_id': prompt_id,
+                        'prompt_name': prompt_name,
+                        'ctx': ctx,
+                        'temperature': used_temp,
+                        'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
+                        'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
+                        'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
+                        'avg_tps': avg_tps,
+                        'min_tps': min(run['tps'] for run in tps_list),
+                        'max_tps': max(run['tps'] for run in tps_list),
+                        'std_dev': std_dev,
+                        'vram': vram,
+                        'tps_list': tps_list
+                    })
+                    prompts_used.append(prompt_metadata)
+        
+        # Unload model once after all tests
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        try:
+            self.ollama_client.unload_model(model_name)
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        
+        return model_name, results, None, prompts_used
+    
+    def run_all_chains(self, model: dict, temperature: float = None) -> tuple:
+        """Run ALL chains for a model.
+        
+        Execution order:
+            Model → Chains (sequentially) → Contexts → Temperatures → Modes
+        
+        Args:
+            model: Model dictionary with name, max_ctx, etc.
+            temperature: Temperature value to use (None for default)
+        
+        Returns:
+            tuple: (model_name, results, error)
+        """
+        model_name = model["name"]
+        max_ctx = model["max_ctx"]
+        all_results = []
+        
+        # Display model name
+        print(f"\n🤖 Testing model: {model_name}")
+        logger.info(f"🤖 Testing model: {model_name}")
+        
+        # Restart Ollama once for the model
+        restart_ollama(
+            self.restart_method,
+            self.no_restart,
+            ssh_client=self.ssh_client
+        )
+        
+        # Filter contexts
+        valid_contexts = self.filter_contexts(max_ctx)
+        
+        # Get temperatures
+        if temperature is None:
+            temps = [1.0, 0.7, 0.3]
+        else:
+            temps = [temperature]
+        
+        # Get all chains
+        chains = self.prompt_loader.get_chains()
+        
+        # NEW ORDER: Chains → Contexts → Temperatures → Modes (with context flow)
+        for chain in chains:
+            chain_id = chain.get('id', 'unknown')
+            chain_name = chain.get('name', 'Unknown Chain')
+            
+            print(f"\n   🔗 Running chain: {chain_name} ({chain_id})")
+            logger.info(f"🔗 Running chain: {chain_name} ({chain_id})")
+            
+            # Build chain context
+            chain_prompts = self.prompt_loader.build_chain_context(chain)
+            
+            for ctx in valid_contexts:
+                logger.info(f"   📏 Context size: {ctx}")
+                print(f"      📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"      📏 Context: {ctx}")
+                
+                for temp in temps:
+                    logger.info(f"   🌡️  Temperature: {temp:.2f}")
+                    print(f"         🌡️  Temperature: {temp:.2f}")
+                    
+                    chain_responses = {}
+                    
+                    # Run modes in sequence with context flow
+                    for mode in ['architect', 'code', 'debug']:
+                        if mode not in chain_prompts:
+                            continue
+                        
+                        prompt_data = chain_prompts[mode]
+                        prompt = prompt_data['prompt']
+                        prompt_id = prompt_data['id']
+                        prompt_name = prompt_data['name']
+                        
+                        prompt_metadata = {
+                            'type': 'chain',
+                            'chain_id': chain_id,
+                            'chain_name': chain_name,
+                            'mode': mode,
+                            'id': prompt_id,
+                            'name': prompt_name
+                        }
+                        
+                        logger.info(f"📝 Chain [{mode}]: {prompt_name} (ID: {prompt_id})")
+                        print(f"            [{mode}] {prompt_name}")
+                        
+                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                            model_name,
+                            ctx,
+                            self.num_runs,
+                            self.disable_thinking,
+                            temperature=temp,
+                            prompt=prompt,
+                            prompt_metadata=prompt_metadata
+                        )
+                        
+                        if error:
+                            print(f"            Error: {error}")
+                            break
+                        
+                        # Store response for context flow
+                        response_length = sum(run.get('response_length', 0) for run in tps_list) if tps_list and hasattr(tps_list[0], 'get') else len(tps_list) * 100
+                        chain_responses[mode] = f"[Response from {mode} mode - {response_length} tokens]"
+                        
+                        # Calculate std_dev
+                        if len(tps_list) > 1:
+                            mean = avg_tps
+                            variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                            std_dev = variance ** 0.5
+                        else:
+                            std_dev = 0.0
+                        
+                        all_results.append({
+                            'chain_id': chain_id,
+                            'chain_name': chain_name,
+                            'mode': mode,
+                            'prompt_id': prompt_id,
+                            'prompt_name': prompt_name,
+                            'ctx': ctx,
+                            'temperature': used_temp,
+                            'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
+                            'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
+                            'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
+                            'avg_tps': avg_tps,
+                            'min_tps': min(run['tps'] for run in tps_list),
+                            'max_tps': max(run['tps'] for run in tps_list),
+                            'std_dev': std_dev,
+                            'vram': vram,
+                            'tps_list': tps_list
+                        })
+        
+        # Unload model once after all chains
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        try:
+            self.ollama_client.unload_model(model_name)
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        
+        return model_name, all_results, None
