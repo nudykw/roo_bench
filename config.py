@@ -38,7 +38,8 @@ class OllamaConfig:
             'url': 'OLLAMA_URL',
             'port': 'OLLAMA_PORT',
             'api_key': 'OLLAMA_API_KEY',
-            'timeout': 'OLLAMA_TIMEOUT'
+            'timeout': 'OLLAMA_TIMEOUT',
+            'temperature_test_values': 'OLLAMA_TEMPERATURE_TEST_VALUES'
         }
         
         for key, env_name in env_vars.items():
@@ -52,7 +53,8 @@ class OllamaConfig:
             'url': 'ollama_url',
             'port': 'ollama_port',
             'api_key': 'ollama_api_key',
-            'timeout': 'ollama_timeout'
+            'timeout': 'ollama_timeout',
+            'temperature_test_values': 'temperature_test_values'
         }
         
         for key, cli_name in cli_vars.items():
@@ -79,6 +81,19 @@ class OllamaConfig:
     def timeout(self) -> int:
         """Get timeout"""
         return int(self._config.get('timeout', self.DEFAULTS['timeout']))
+    
+    @property
+    def temperature_test_values(self) -> list:
+        """Get temperature test values from config or default"""
+        raw = self._config.get('temperature_test_values')
+        if raw:
+            # Try to parse as JSON list
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # Default values
+        return [0.0, 0.66, 1.0]
     
     @property
     def base_url(self) -> str:

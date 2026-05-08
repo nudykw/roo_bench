@@ -116,6 +116,11 @@ class ResultSaver:
                     'std_dev': round(run['std_dev'], 2),
                     'vram': run['vram'] if run['vram'] else None,
                     'vram_str': f"{run['vram'] / 1024 / 1024:.1f} MiB" if run['vram'] else None,
+                    'prompt_id': run.get('prompt_id', ''),
+                    'duration_sec': run.get('duration_sec', 0),
+                    'prompt_tokens': run.get('prompt_tokens', 0),
+                    'response_tokens': run.get('response_tokens', 0),
+                    'temperature': run.get('temperature', 0),
                     **model_info
                 }
                 results_list.append(run_data)
@@ -185,9 +190,11 @@ class ResultSaver:
             # Extract results list from export_data
             results_list = export_data.get('results', [])
 
+            # Updated fieldnames with new metrics
             fieldnames = ['model_name', 'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
                          'std_dev', 'vram', 'vram_str', 'params', 'quant', 'size_gb',
-                         'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp']
+                         'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp',
+                         'prompt_id', 'duration_sec', 'prompt_tokens', 'response_tokens', 'temperature']
 
             with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
@@ -255,6 +262,11 @@ def load_results_from_file(file_path: str) -> tuple:
                         'std_dev': result.get('std_dev', 0),
                         'vram': result.get('vram'),
                         'vram_str': result.get('vram_str'),
+                        'prompt_id': result.get('prompt_id', ''),
+                        'duration_sec': result.get('duration_sec', 0),
+                        'prompt_tokens': result.get('prompt_tokens', 0),
+                        'response_tokens': result.get('response_tokens', 0),
+                        'temperature': result.get('temperature', 0),
                     })
         elif ext == '.csv':
             with open(file_path, 'r', encoding='utf-8') as f:

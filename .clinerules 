@@ -1,0 +1,21 @@
+# SKILL: Project Memory Bank Management
+
+You are an autonomous AI developer. To avoid losing context between sessions, you must use the "Memory Bank" system located in the `memory-bank/` (or `.roo/`) directory.
+
+## 1. Initialization (At the start of a task)
+Every time the user assigns a new task, your first step is to check for the existence of files in the `memory-bank/` directory. You must read:
+- `.roo/productContext.md` — global architecture, tech stack, and project rules.
+- `.roo/activeTask.md` — the current active task.
+- `.roo/progress.md` — what has been done and what is left.
+
+If these files do not exist, create them based on the current project state before writing any code.
+
+## 2. Updating (During work)
+If you change the architecture, add new dependencies, or make important technical decisions, you MUST update `memory-bank/projectContext.md`.
+
+## 3. Task Completion (Memory Save)
+Before telling the user "Task complete", you must:
+1. Log the summary of completed work in `memory-bank/progress.md`.
+2. Clear or update `memory-bank/activeTask.md` for the next step.
+3. Notify the user: "I have saved the execution context to the Memory Bank."
+4. If necessary, update the ReadMe.md file in the project root directory. Update both the English and Ukrainian versions. First, explain what needs to be done and why. After updating, let us know: “I’ve updated ReadMe.md—I added/removed/updated ...”

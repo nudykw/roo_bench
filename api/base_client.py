@@ -133,6 +133,7 @@ class BaseApiClient(ABC):
 
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3,
                        disable_thinking: bool = True,
+                       temperature: Optional[float] = None,
                        prompt: str = None,
                        prompt_metadata: dict = None) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
@@ -142,16 +143,18 @@ class BaseApiClient(ABC):
             context_size: Context size
             num_runs: Number of runs for averaging (default: 3)
             disable_thinking: If True, disables thinking mode to prevent reasoning loops (default: True)
+            temperature: Temperature value for generation (None uses model default)
             prompt: Custom prompt to use. If None, uses default benchmark prompt.
             prompt_metadata: Metadata about the prompt (id, name, mode, chain info)
 
         Returns:
-            tuple: (avg_tps, vram, tps_list, error, prompt_metadata)
+            tuple: (avg_tps, vram, tps_list, error, prompt_metadata, temperature)
                 avg_tps: Average TPS (float)
                 vram: VRAM usage in bytes (int or None if GPU unavailable)
                 tps_list: List of results for each run (list of dict)
                 error: Error message (str or None)
                 prompt_metadata: The prompt metadata that was used
+                temperature: Temperature value used (or None if default)
         """
         # Use custom prompt or default
         if prompt is None:
@@ -161,7 +164,7 @@ class BaseApiClient(ABC):
         vram = None
         error = None
 
-        # Build payload with optional thinking disable
+        # Build payload with optional thinking disable and temperature
         # Note: "think" is a top-level API parameter, NOT inside "options"
         # See: https://github.com/ollama/ollama/blob/main/docs/api.md
         for run_num in range(num_runs):
@@ -176,6 +179,8 @@ class BaseApiClient(ABC):
             }
             if disable_thinking:
                 payload["think"] = False
+            if temperature is not None:
+                payload["options"]["temperature"] = temperature
 
             response = None
             max_vram_ref = [0]  # Use list for mutable reference in thread
@@ -240,7 +245,8 @@ class BaseApiClient(ABC):
                     'tps': 0,
                     'vram': None,
                     'prompt': prompt,
-                    'prompt_metadata': prompt_metadata
+                    'prompt_metadata': prompt_metadata,
+                    'temperature': temperature
                 }
 
                 # Parse final response for TPS data
@@ -265,10 +271,13 @@ class BaseApiClient(ABC):
 
                 # Use max VRAM observed during generation
                 vram_during = max_vram_ref[0] if vram_samples else None
-                
+
                 # Update run_data with actual values
                 run_data['tps'] = tps
                 run_data['vram'] = vram_during
+                run_data['total_duration'] = final_data.get("total_duration", 0) if final_data else 0
+                run_data['prompt_eval_count'] = final_data.get("prompt_eval_count", 0) if final_data else 0
+                run_data['eval_count'] = final_data.get("eval_count", 0) if final_data else 0
                 tps_list.append(run_data)
 
             except KeyboardInterrupt:
@@ -304,9 +313,43 @@ class BaseApiClient(ABC):
             # Return VRAM from the last successful run
             vram = tps_list[-1]['vram'] if tps_list else None
 
-            return avg_tps, vram, tps_list, error, prompt_metadata
+            return avg_tps, vram, tps_list, error, prompt_metadata, temperature
         else:
-            return 0.0, None, [], error, prompt_metadata
+            return 0.0, None, [], error, prompt_metadata, temperature
+
+    def get_default_temperature(self, model_name: str) -> float:
+        """Get the default temperature for a model.
+
+        Args:
+            model_name: Model name
+
+        Returns:
+            float: Default temperature value (typically 0.1-0.8)
+        """
+        model_info = self.get_model_info(model_name)
+        if not model_info:
+            return 0.1  # Default fallback
+
+        parameters = model_info.get("parameters", "")
+        if parameters:
+            for line in parameters.split('\n'):
+                line = line.strip()
+                if line.startswith('temperature:'):
+                    try:
+                        return float(line.split(':')[1].strip())
+                    except (ValueError, IndexError):
+                        pass
+
+        # Check model_info keys for temperature
+        model_info_dict = model_info.get("model_info", {})
+        for key, val in model_info_dict.items():
+            if 'temperature' in key.lower():
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+
+        return 0.1  # Default fallback
 
     def get_model_info(self, model_name: str) -> dict:
         """Get model information including current default parameters.

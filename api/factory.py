@@ -33,10 +33,10 @@ class ApiClientFactory:
         """Create the appropriate API client based on SSH configuration.
 
         Args:
-            base_url: Ollama API base URL
+            base_url: Ollama API base URL (used for HTTP requests)
             headers: HTTP headers (e.g., authentication)
             timeout: Request timeout in seconds
-            ssh_host: SSH host for remote mode
+            ssh_host: SSH host for remote mode (used only for SSH commands)
             ssh_user: SSH user for remote mode
             ssh_port: SSH port for remote mode
             ssh_key: Path to SSH private key
