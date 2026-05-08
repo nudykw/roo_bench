@@ -1,7 +1,7 @@
 """Core benchmark execution orchestration."""
 
 import logging
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 from api.base_client import BaseApiClient
 from system.restart_manager import restart_ollama, RestartMethod
 from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
@@ -23,7 +23,7 @@ class BenchmarkRunner:
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
-                 num_predict: int = 8192):
+                 num_predict: int = 12000, independent_top: Optional[int] = None):
         """Initialize benchmark runner.
 
         Args:
@@ -36,7 +36,7 @@ class BenchmarkRunner:
             prompt_loader: PromptLoader instance for loading prompts
             temperature_test_values: List of temperature values for testing (default: None)
             expert_evaluator: Optional ExpertEvaluator instance for response quality assessment
-            num_predict: Maximum number of tokens to generate (default: 8192, use -1 for unlimited)
+            num_predict: Maximum number of tokens to generate (default: 12000, use -1 for unlimited)
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
@@ -60,6 +60,7 @@ class BenchmarkRunner:
         self.temperature_test_values = temperature_test_values or DEFAULT_TEMPERATURES
         self.expert_evaluator = expert_evaluator
         self._response_store: List[ExpertEvaluationEntry] = []
+        self.independent_top = independent_top  # Limit prompts per mode for independent tests
 
     def run_expert_evaluation(self) -> None:
         """Run expert evaluation on all stored responses.
@@ -145,6 +146,12 @@ class BenchmarkRunner:
         model_name = model.name
         max_ctx = model.max_ctx
         prompts = self.prompt_loader.get_independent_prompts(mode)
+        
+        # Apply independent_top filter if specified
+        if self.independent_top is not None and self.independent_top > 0:
+            prompts = prompts[:self.independent_top]
+            logger.info("[independent_top] Limited %s prompts to first %d: %d prompts",
+                       mode, self.independent_top, len(prompts))
         
         all_metrics: List[BenchmarkMetrics] = []
         error_message: Optional[str] = None
@@ -678,6 +685,25 @@ class BenchmarkRunner:
             temps = [1.0, 0.7, 0.3, 0.0]
         
         all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()
+        
+        # Apply independent_top filter if specified
+        if self.independent_top is not None and self.independent_top > 0:
+            prompts_by_mode: Dict[str, List[Dict[str, Any]]] = {}
+            for p in all_prompts:
+                mode = p['mode']
+                if mode not in prompts_by_mode:
+                    prompts_by_mode[mode] = []
+                prompts_by_mode[mode].append(p)
+            
+            filtered_prompts = []
+            for mode in ['architect', 'code', 'debug']:
+                mode_prompts = prompts_by_mode.get(mode, [])
+                filtered_prompts.extend(mode_prompts[:self.independent_top])
+            
+            all_prompts = filtered_prompts
+            logger.info("[independent_top] Limited to first %d prompts per mode: %d total prompts",
+                       self.independent_top, len(all_prompts))
+        
         logger.debug(
             "[Expert] run_all_independent_prompts: model=%s all_prompts_count=%d valid_contexts=%s",
             model_name, len(all_prompts), valid_contexts

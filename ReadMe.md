@@ -150,6 +150,7 @@ The project uses a modular architecture. You can run it in two ways:
 ./venv/bin/python roo_bench.py --list-independent  # List all independent prompts
 ./venv/bin/python roo_bench.py --list-chains       # List all prompt chains
 ./venv/bin/python roo_bench.py --independent       # Run only independent prompts
+./venv/bin/python roo_bench.py --independent --independent-top 1  # Run only first prompt per mode
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Run specific chain
 
 # Control generation length (tokens)
@@ -184,6 +185,12 @@ Architect → Code → Debug
 
 # Run independent prompts for all modes
 ./venv/bin/python roo_bench.py --independent
+
+# Run only the first prompt per mode (limit independent prompts)
+./venv/bin/python roo_bench.py --independent --independent-top 1
+
+# Run first two prompts per mode
+./venv/bin/python roo_bench.py --independent --independent-top 2
 
 # Run a specific prompt chain
 ./venv/bin/python roo_bench.py --chain chain_rest_api
@@ -312,9 +319,10 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--list-independent` | List available independent prompts and exit | False |
 | `--list-chains` | List available prompt chains and exit | False |
 | `--independent` | Run only independent prompts test mode | False |
+| `--independent-top` | Limit the number of independent prompts per mode (e.g., `--independent-top 1` runs only the first prompt per mode) | `None` |
 | `--chain` | Run only the specified prompt chain (e.g., `chain_rest_api`) | None |
 | `--prompts-file` | Path to prompts.jsonc configuration file | `prompts.jsonc` |
-| `--num-predict` | Maximum tokens to generate per request (use -1 for unlimited) | `8192` |
+| `--num-predict` | Maximum tokens to generate per request (use -1 for unlimited) | `12000` |
 
 #### Environment Variables
 
@@ -685,6 +693,7 @@ chmod +x roo_bench.py
 ./venv/bin/python roo_bench.py --list-independent  # Список незалежних промтів
 ./venv/bin/python roo_bench.py --list-chains       # Список промт-цепочок
 ./venv/bin/python roo_bench.py --independent       # Тільки незалежні промти
+./venv/bin/python roo_bench.py --independent --independent-top 1  # Тільки перший промт на режим
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Конкретна цепочка
 
 # Контроль довжини генерації (токени)
@@ -847,9 +856,10 @@ Roo Bench автоматично кешує можливості моделей 
 | `--list-independent` | Список доступних незалежних промтів та вихід | False |
 | `--list-chains` | Список доступних промт-цепочок та вихід | False |
 | `--independent` | Запуск тільки незалежних промтів | False |
+| `--independent-top` | Обмежити кількість незалежних промтів на режим (напр., `--independent-top 1` запускає лише перший промт на режим) | `None` |
 | `--chain` | Запуск тільки вказаної промт-цепочки (напр., `chain_rest_api`) | None |
 | `--prompts-file` | Шлях до файлу конфігурації промтів | `prompts.jsonc` |
-| `--num-predict` | Максимальна кількість токенів для генерації (використовуйте -1 для необмежено) | `8192` |
+| `--num-predict` | Максимальна кількість токенів для генерації (використовуйте -1 для необмежено) | `12000` |
 
 #### Налаштування віддаленого сервера Ollama
 

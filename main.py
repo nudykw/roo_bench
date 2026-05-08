@@ -378,7 +378,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
 
     # Initialize benchmark runner
     logger.info("[Expert] Before BenchmarkRunner init: expert_evaluator=%s", expert_evaluator is not None)
-    logger.info("[num_predict] Using num_predict=%d (use --num-predict -1 for unlimited)", getattr(args, 'num_predict', 8192))
+    logger.info("[num_predict] Using num_predict=%d (use --num-predict -1 for unlimited)", getattr(args, 'num_predict', 12000))
     temperature_test_values = get_temperature_test_values(args)
     logger.info("[temperature] Using temperature values: %s", temperature_test_values)
     benchmark_runner = BenchmarkRunner(
@@ -391,7 +391,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         prompt_loader=prompt_loader,
         temperature_test_values=temperature_test_values,
         expert_evaluator=expert_evaluator,
-        num_predict=getattr(args, 'num_predict', 8192)
+        num_predict=getattr(args, 'num_predict', 12000),
+        independent_top=getattr(args, 'independent_top', None)
     )
     logger.info("[Expert] After BenchmarkRunner init: runner.expert_evaluator=%s",
                 benchmark_runner.expert_evaluator is not None)

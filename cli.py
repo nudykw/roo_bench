@@ -93,8 +93,10 @@ def parse_args():
                         help='List available prompt chains and exit')
     parser.add_argument('--list-independent', action='store_true',
                         help='List available independent prompts and exit')
-    parser.add_argument('--num-predict', type=int, default=8192,
-                        help='Maximum number of tokens to predict in generation (default: 8192). Use -1 for unlimited.')
+    parser.add_argument('--independent-top', type=int, default=None, metavar='N',
+                        help=get_text("cli_independent_top"))
+    parser.add_argument('--num-predict', type=int, default=12000,
+                        help='Maximum number of tokens to predict in generation (default: 12000). Use -1 for unlimited.')
     parser.add_argument('--temperature', type=str, default=None,
                         help=get_text("cli_temperature"))
     return parser.parse_args()

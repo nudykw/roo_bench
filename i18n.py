@@ -139,6 +139,7 @@ TRANSLATIONS = {
         "expert_model_selection": "Select an expert model for response evaluation",
         "cli_temperature": "Temperature values to test (comma-separated, e.g., 0.0,0.7,1.0)",
         "error_invalid_temperature": "❌ Invalid temperature values '{values}'. Use comma-separated values between 0.0 and 2.0.",
+        "cli_independent_top": "Limit the number of independent prompts per mode (e.g., --independent-top 1 runs only the first prompt per mode)",
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
@@ -276,6 +277,7 @@ TRANSLATIONS = {
         "expert_model_selection": "Оберіть модель-експерт для оцінки відповідей",
         "cli_temperature": "Значення температури для тестування (через кому, наприклад, 0.0,0.7,1.0)",
         "error_invalid_temperature": "❌ Невірні значення температури '{values}'. Використовуйте значення через кому від 0.0 до 2.0.",
+        "cli_independent_top": "Обмежити кількість незалежних промтів на режим (напр., --independent-top 1 запускає лише перший промт на режим)",
     }
 }
 
