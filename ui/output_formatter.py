@@ -1,6 +1,8 @@
 """Console output formatting and display utilities."""
 
+from typing import List
 from i18n import get_text
+from benchmark.result import BenchmarkResult
 
 
 def _format_moe_display(moe_data) -> str:
@@ -72,18 +74,19 @@ def print_benchmark_progress(model_name: str, context_size: int, tps: float, vra
     print(f"  Context: {ctx_str} | TPS: {tps:.2f} | VRAM: {vram_str}")
 
 
-def print_results_table(results: dict):
+def print_results_table(results: List[BenchmarkResult]):
     """Print formatted results table.
 
     Args:
-        results: Dictionary of results per model
+        results: List of BenchmarkResult objects
     """
     print("\n" + "="*60)
     print(get_text("recommendations_header"))
     print("="*60)
 
-    for model_name, runs in results.items():
-        if not runs:
+    for result in results:
+        model_name = result.model_name
+        if not result.results:
             print(get_text("no_successful_runs", model_name=model_name))
             continue
 
@@ -92,14 +95,14 @@ def print_results_table(results: dict):
         print(get_text("results_header", model_name=model_name))
         print("="*60)
 
-        for run in runs:
-            ctx = run['ctx']
+        for run in result.results:
+            ctx = run.ctx
             ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
-            avg_tps = run['avg_tps']
-            min_tps = run['min_tps']
-            max_tps = run['max_tps']
-            std_dev = run['std_dev']
-            vram = run['vram']
+            avg_tps = run.avg_tps
+            min_tps = run.min_tps
+            max_tps = run.max_tps
+            std_dev = run.std_dev
+            vram = run.vram
             vram_str = f"{vram / 1024 / 1024:.1f} MiB" if vram else "N/A"
 
             print(get_text("result_row",
@@ -111,22 +114,23 @@ def print_results_table(results: dict):
                 vram=vram_str))
 
 
-def print_recommendations(results: dict):
+def print_recommendations(results: List[BenchmarkResult]):
     """Print recommendations output.
 
     Args:
-        results: Dictionary of results per model
+        results: List of BenchmarkResult objects
     """
     print("\n" + "="*60)
     print(get_text("recommendations_header"))
     print("="*60)
 
-    for model_name, runs in results.items():
-        if not runs:
+    for result in results:
+        model_name = result.model_name
+        if not result.results:
             continue
 
         print(f"\nModel: {model_name}")
-        for run in runs:
-            ctx = run['ctx']
+        for run in result.results:
+            ctx = run.ctx
             ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
-            print(f"  Context: {ctx_str} | Avg TPS: {run['avg_tps']:.2f}")
+            print(f"  Context: {ctx_str} | Avg TPS: {run.avg_tps:.2f}")

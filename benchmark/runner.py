@@ -1,9 +1,10 @@
 """Core benchmark execution orchestration."""
 
 import logging
+from typing import Optional, Tuple, List
 from api.base_client import BaseApiClient
 from system.restart_manager import restart_ollama, RestartMethod
-from benchmark.results import calculate_statistics
+from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
 from i18n import get_text
 from prompts.loader import PromptLoader
 
@@ -56,36 +57,37 @@ class BenchmarkRunner:
             max_ctx: Model's maximum context size
     
         Returns:
-            list: Filtered list of valid context sizes (minimum 64K)
+            list: Filtered list of valid context sizes (minimum 32K)
         """
-        # Filter contexts: take only those >= 64K and <= maximum
+        # Filter contexts: take only those >= 32K and <= maximum
         MIN_CONTEXT = 32_768  # 32K minimum
         valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
     
         # If the model supports some "non-standard" max context (e.g. 128000),
-        # which is not in our list, but it's >= 64K and <= 256K, we can add it for testing
+        # which is not in our list, but it's >= 32K and <= 262144, we can add it for testing
         if max_ctx not in valid_contexts and MIN_CONTEXT <= max_ctx <= 262144:
             valid_contexts.append(max_ctx)
             valid_contexts.sort()
     
         return valid_contexts
 
-    def run_independent_prompts(self, model: dict, mode: str, temperature: float = None) -> tuple:
+    def run_independent_prompts(self, model: ModelInfo, mode: str, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
         """Run benchmarks using independent prompts for a specific mode.
-        
+
         Args:
-            model: Model dictionary
-            mode: One of 'architect', 'code', 'debug'
-            temperature: Temperature value to use (None for default)
+            model: ModelInfo instance containing model metadata.
+            mode: One of 'architect', 'code', 'debug'.
+            temperature: Temperature value to use (None for default).
 
         Returns:
-            tuple: (model_name, results, error, prompts_used)
+            tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
         """
-        model_name = model["name"]
-        max_ctx = model["max_ctx"]
+        model_name = model.name
+        max_ctx = model.max_ctx
         prompts = self.prompt_loader.get_independent_prompts(mode)
-        results = []
-        prompts_used = []
+        
+        all_metrics: List[BenchmarkMetrics] = []
+        error_message: Optional[str] = None
         
         # Display model name at the start
         print(f"\n🤖 Testing model: {model_name}")
@@ -98,12 +100,12 @@ class BenchmarkRunner:
             ssh_client=self.ssh_client
         )
         
-        # Filter contexts (from 4K to MaxModelContext)
+        # Filter contexts (from 32K to MaxModelContext)
         valid_contexts = self.filter_contexts(max_ctx)
         
         # Get default temperature if not specified
         if temperature is None:
-            temps = [1.0, 0.7, 0.3]  # High, medium, low creativity
+            temps = [1.0, 0.7, 0.3, 0.0]  # High, medium, low creativity
         else:
             temps = [temperature]
         
@@ -131,56 +133,65 @@ class BenchmarkRunner:
                     print(f"         Running prompt: {prompt_name} (ID: {prompt_id})")
                     logger.debug(f"📝 Prompt text: {prompt}")
                     
-                    avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
-                        model_name,
-                        ctx,  # Use current context size
-                        self.num_runs,
-                        self.disable_thinking,
-                        temperature=temp,
-                        prompt=prompt,
-                        prompt_metadata=prompt_metadata
-                    )
-                    
-                    if error:
-                        print(f"         Error running prompt {prompt_id}: {error}")
-                        continue
-                    
-                    # Log response
-                    if tps_list and tps_list[0].get('response'):
-                        response = tps_list[0]['response']
-                        # Log first part of response
-                        logger.info(f"   🤖 Model response (first 500 chars): {response[:500]}...")
-                    
-                    # Show metrics
-                    duration = tps_list[0].get('total_duration', 0) / 1e9
-                    prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
-                    response_tokens = tps_list[0].get('eval_count', 0)
-                    print(f"            Duration: {duration:.2f}s | Prompt: {prompt_tokens} | Response: {response_tokens}")
-                    
-                    # Calculate std_dev
-                    if len(tps_list) > 1:
-                        mean = avg_tps
-                        variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
-                        std_dev = variance ** 0.5
-                    else:
-                        std_dev = 0.0
-                    
-                    results.append({
-                        'prompt_id': prompt_id,
-                        'prompt_name': prompt_name,
-                        'ctx': ctx,  # Add context size
-                        'temperature': used_temp,
-                        'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
-                        'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
-                        'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
-                        'avg_tps': avg_tps,
-                        'min_tps': min(run['tps'] for run in tps_list),
-                        'max_tps': max(run['tps'] for run in tps_list),
-                        'std_dev': std_dev,
-                        'vram': vram,
-                        'tps_list': tps_list
-                    })
-                    prompts_used.append(prompt_metadata)
+                    try:
+                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                            model_name,
+                            ctx,  # Use current context size
+                            self.num_runs,
+                            self.disable_thinking,
+                            temperature=temp,
+                            prompt=prompt,
+                            prompt_metadata=prompt_metadata
+                        )
+                        
+                        if error:
+                            print(f"         Error running prompt {prompt_id}: {error}")
+                            # Log error but don't stop the entire benchmark
+                            continue
+                        
+                        # Log response
+                        if tps_list and tps_list[0].get('response'):
+                            response = tps_list[0]['response']
+                            logger.info(f"   🤖 Model response (first 500 chars): {response[:500]}...")
+                        
+                        # Show metrics
+                        duration = tps_list[0].get('total_duration', 0) / 1e9
+                        prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
+                        response_tokens = tps_list[0].get('eval_count', 0)
+                        print(f"            Duration: {duration:.2f}s | Prompt: {prompt_tokens} | Response: {response_tokens}")
+                        
+                        # Calculate std_dev
+                        if len(tps_list) > 1:
+                            mean = avg_tps
+                            variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                            std_dev = variance ** 0.5
+                        else:
+                            std_dev = 0.0
+                        
+                        # Create BenchmarkMetrics instance
+                        metrics = BenchmarkMetrics(
+                            prompt_id=prompt_id,
+                            prompt_name=prompt_name,
+                            ctx=ctx,
+                            temperature=used_temp,
+                            duration_sec=duration,
+                            prompt_tokens=prompt_tokens,
+                            response_tokens=response_tokens,
+                            avg_tps=avg_tps,
+                            min_tps=min(run['tps'] for run in tps_list),
+                            max_tps=max(run['tps'] for run in tps_list),
+                            std_dev=std_dev,
+                            vram=vram,
+                            mode=mode,
+                        )
+                        all_metrics.append(metrics)
+                        
+                    except Exception as e:
+                        # Log critical error that stopped the test
+                        error_message = f"Critical error during {prompt_id} testing: {e}"
+                        print(f"         ❌ {error_message}")
+                        # Return error so main.py knows the test failed
+                        return None, error_message
         
         # Unload model from VRAM after all tests
         print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
@@ -189,23 +200,28 @@ class BenchmarkRunner:
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
         
-        return model_name, results, None, prompts_used
+        # Create the final BenchmarkResult object
+        benchmark_result = BenchmarkResult(model=model, results=all_metrics)
+        return benchmark_result, None
     
-    def run_chain(self, model: dict, chain: dict, temperature: float = None) -> tuple:
+    def run_chain(self, model: ModelInfo, chain: dict, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
         """Run benchmarks using a prompt chain (Architect -> Code -> Debug).
-        
+
         Args:
-            model: Model dictionary
-            chain: Chain dictionary from prompt loader
-            temperature: Temperature value to use (None for default)
+            model: ModelInfo instance containing model metadata.
+            chain: Chain dictionary from prompt loader.
+            temperature: Temperature value to use (None for default).
 
         Returns:
-            tuple: (model_name, results, error, chain_responses)
+            tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
         """
-        model_name = model["name"]
-        max_ctx = model["max_ctx"]
+        model_name = model.name
+        max_ctx = model.max_ctx
         chain_id = chain.get('id', 'unknown')
         chain_name = chain.get('name', 'Unknown Chain')
+        
+        all_metrics: List[BenchmarkMetrics] = []
+        error_message: Optional[str] = None
         
         # Display model name at the start
         print(f"\n🤖 Testing model: {model_name}")
@@ -223,19 +239,16 @@ class BenchmarkRunner:
         # Build chain context
         chain_prompts = self.prompt_loader.build_chain_context(chain)
         
-        # Filter contexts (from 4K to MaxModelContext)
+        # Filter contexts
         valid_contexts = self.filter_contexts(max_ctx)
         
         # Get default temperature if not specified
         if temperature is None:
-            temps = [1.0, 0.7, 0.3]  # High, medium, low creativity
+            temps = [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
-        chain_responses = {}
-        results = []
-        
-        # NEW ORDER: Contexts → Temperatures → Chain modes
+        # Contexts → Temperatures → Chain modes
         for ctx in valid_contexts:
             logger.info(f"   📏 Context size: {ctx}")
             print(f"   📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"   📏 Context: {ctx}")
@@ -244,7 +257,6 @@ class BenchmarkRunner:
                 logger.info(f"   🌡️  Temperature: {temp:.2f}")
                 print(f"      🌡️  Temperature: {temp:.2f}")
                 
-                # Run each mode in sequence
                 for mode in ['architect', 'code', 'debug']:
                     if mode not in chain_prompts:
                         continue
@@ -265,51 +277,56 @@ class BenchmarkRunner:
                     
                     logger.info(f"📝 Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                     print(f"         Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
-                    logger.debug(f"📝 Chain prompt [{mode}]: {prompt}")
                     
-                    avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
-                        model_name,
-                        ctx,  # Use current context size
-                        self.num_runs,
-                        self.disable_thinking,
-                        temperature=temp,
-                        prompt=prompt,
-                        prompt_metadata=prompt_metadata
-                    )
-                    
-                    if error:
-                        print(f"         Error in chain [{mode}]: {error}")
-                        break
-                    
-                    # Store response for next mode in chain
-                    response_length = sum(run.get('response_length', 0) for run in tps_list) if hasattr(tps_list[0], 'response_length') else len(tps_list) * 100
-                    
-                    chain_responses[mode] = f"[Response from {mode} mode - {response_length} tokens]"
-                    
-                    # Calculate std_dev
-                    if len(tps_list) > 1:
-                        mean = avg_tps
-                        variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
-                        std_dev = variance ** 0.5
-                    else:
-                        std_dev = 0.0
-                    
-                    results.append({
-                        'mode': mode,
-                        'prompt_id': prompt_id,
-                        'prompt_name': prompt_name,
-                        'ctx': ctx,  # Add context size
-                        'temperature': used_temp,
-                        'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
-                        'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
-                        'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
-                        'avg_tps': avg_tps,
-                        'min_tps': min(run['tps'] for run in tps_list),
-                        'max_tps': max(run['tps'] for run in tps_list),
-                        'std_dev': std_dev,
-                        'vram': vram,
-                        'tps_list': tps_list
-                    })
+                    try:
+                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                            model_name,
+                            ctx,
+                            self.num_runs,
+                            self.disable_thinking,
+                            temperature=temp,
+                            prompt=prompt,
+                            prompt_metadata=prompt_metadata
+                        )
+                        
+                        if error:
+                            print(f"         Error in chain [{mode}]: {error}")
+                            break
+                        
+                        duration = tps_list[0].get('total_duration', 0) / 1e9
+                        prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
+                        response_tokens = tps_list[0].get('eval_count', 0)
+                        
+                        if len(tps_list) > 1:
+                            mean = avg_tps
+                            variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                            std_dev = variance ** 0.5
+                        else:
+                            std_dev = 0.0
+                        
+                        metrics = BenchmarkMetrics(
+                            mode=mode,
+                            prompt_id=prompt_id,
+                            prompt_name=prompt_name,
+                            ctx=ctx,
+                            temperature=used_temp,
+                            duration_sec=duration,
+                            prompt_tokens=prompt_tokens,
+                            response_tokens=response_tokens,
+                            avg_tps=avg_tps,
+                            min_tps=min(run['tps'] for run in tps_list),
+                            max_tps=max(run['tps'] for run in tps_list),
+                            std_dev=std_dev,
+                            vram=vram,
+                            chain_id=chain_id,
+                            chain_name=chain_name,
+                        )
+                        all_metrics.append(metrics)
+                        
+                    except Exception as e:
+                        error_message = f"Critical error during chain [{mode}] testing: {e}"
+                        print(f"         ❌ {error_message}")
+                        return None, error_message
         
         # Unload model from VRAM after all tests
         print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
@@ -318,42 +335,37 @@ class BenchmarkRunner:
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
         
-        return model_name, results, None, chain_responses
+        benchmark_result = BenchmarkResult(model=model, results=all_metrics)
+        return benchmark_result, None
 
-    def run_for_model(self, model: dict, temperature: float = None) -> tuple:
+    def run_for_model(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
         """Run benchmarks for a single model across valid contexts.
 
         Args:
-            model: Model dictionary with name, max_ctx, etc.
-            temperature: Temperature value to use (None for default)
+            model: ModelInfo instance containing model metadata.
+            temperature: Temperature value to use (None for default).
 
         Returns:
-            tuple: (model_name, results, error)
-                model_name: Model name
-                results: List of result dictionaries
-                error: Error message if any
+            tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
         """
-        model_name = model["name"]
-        max_ctx = model["max_ctx"]
+        model_name = model.name
+        max_ctx = model.max_ctx
         max_ctx_str = f"{max_ctx // 1024}K" if max_ctx >= 1024 else str(max_ctx)
 
         print("\n============================================================\n")
-        print(f"🤖 Тестируется модель: {model_name}")
+        print(f"🤖 Testing model: {model_name}")
         print(get_text("testing_model", model_name=model_name))
-        # Format size_gb: if it's a number, format to 1 decimal; if "N/A", keep as string
-        size_gb_val = model['size_gb']
-        if isinstance(size_gb_val, (int, float)):
-            size_gb_str = f"{size_gb_val:.1f}"
-        else:
-            size_gb_str = str(size_gb_val)
+        
+        size_gb_str = f"{model.size_gb:.1f}"
         print(get_text("model_size", size_gb=size_gb_str, max_ctx_str=max_ctx_str))
 
-        results = []
+        all_metrics: List[BenchmarkMetrics] = []
+        error_message: Optional[str] = None
         valid_contexts = self.filter_contexts(max_ctx)
 
         if not valid_contexts:
             print(get_text("skipping_no_contexts"))
-            return model_name, results, None
+            return BenchmarkResult(model=model, results=[]), None
 
         for ctx in valid_contexts:
             restart_ollama(
@@ -362,8 +374,6 @@ class BenchmarkRunner:
                 ssh_client=self.ssh_client
             )
 
-            # Display model's default num_ctx (informational only)
-            # Actual n_ctx will be verified during generation via /api/ps
             try:
                 current_num_ctx = self.ollama_client.get_current_num_ctx(model_name)
                 print(get_text("current_num_ctx", num_ctx=current_num_ctx))
@@ -374,82 +384,81 @@ class BenchmarkRunner:
 
             print(get_text("warming_up", ctx=ctx))
             
-            # Get default temperature if not specified
             if temperature is None:
                 default_temp = self.ollama_client.get_default_temperature(model_name)
                 temps = [default_temp, default_temp * 2/3, default_temp * 1/3]
             else:
                 temps = [temperature]
             
-            # Run for each temperature
             for temp in temps:
                 logger.info(f"   🌡️  Running with temperature: {temp:.2f}")
                 print(f"   🌡️  Temperature: {temp:.2f}")
-                print(f"   📦 Модель: {model_name}")
+                print(f"   📦 Model: {model_name}")
                 
-                avg_tps, vram, tps_list, error_msg, _, used_temp = self.ollama_client.run_generation(
-                    model_name, ctx, self.num_runs, self.disable_thinking, temperature=temp
-                )
-
-                if error_msg:
-                    print(get_text("benchmark_failed", error_msg=error_msg))
-                    print(get_text("stopping_tests", model_name=model_name))
-                    break
-
-                # Show results of each run
-                print(get_text("benchmark_runs_header"))
-                for run in tps_list:
-                    run_num = run['run']
-                    tps = run['tps']
-                    vram_run = run['vram']
-                    if vram_run:
-                        vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
-                    else:
-                        vram_str = "N/A"
-                    print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
-                    # Show metrics
-                    duration = run.get('total_duration', 0) / 1e9
-                    prompt_tokens = run.get('prompt_eval_count', 0)
-                    response_tokens = run.get('eval_count', 0)
-                    print(f"      Duration: {duration:.2f}s | Prompt tokens: {prompt_tokens} | Response tokens: {response_tokens}")
-                
-                # Check n_ctx AFTER generation (to avoid blocking Ctrl+C)
                 try:
-                    actual_ctx = self.ollama_client.get_actual_num_ctx(model_name)
-                    if actual_ctx > 0:
-                        print(get_text("actual_n_ctx_after_gen", ctx=actual_ctx, expected=ctx))
-                        if actual_ctx == ctx:
-                            print(get_text("ctx_verified_after_gen", actual=actual_ctx, expected=ctx))
+                    avg_tps, vram, tps_list, error_msg, _, used_temp = self.ollama_client.run_generation(
+                        model_name, ctx, self.num_runs, self.disable_thinking, temperature=temp
+                    )
+
+                    if error_msg:
+                        print(get_text("benchmark_failed", error_msg=error_msg))
+                        print(get_text("stopping_tests", model_name=model_name))
+                        break
+
+                    print(get_text("benchmark_runs_header"))
+                    for run in tps_list:
+                        run_num = run['run']
+                        tps = run['tps']
+                        vram_run = run['vram']
+                        if vram_run:
+                            vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
                         else:
-                            print(get_text("ctx_mismatch_after_gen", actual=actual_ctx, expected=ctx))
-                except Exception:
-                    pass
+                            vram_str = "N/A"
+                        print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
+                        duration = run.get('total_duration', 0) / 1e9
+                        prompt_tokens = run.get('prompt_eval_count', 0)
+                        response_tokens = run.get('eval_count', 0)
+                        print(f"      Duration: {duration:.2f}s | Prompt tokens: {prompt_tokens} | Response tokens: {response_tokens}")
+                    
+                    try:
+                        actual_ctx = self.ollama_client.get_actual_num_ctx(model_name)
+                        if actual_ctx > 0:
+                            print(get_text("actual_n_ctx_after_gen", ctx=actual_ctx, expected=ctx))
+                            if actual_ctx == ctx:
+                                print(get_text("ctx_verified_after_gen", actual=actual_ctx, expected=ctx))
+                            else:
+                                print(get_text("ctx_mismatch_after_gen", actual=actual_ctx, expected=ctx))
+                    except Exception:
+                        pass
 
-                # Show summary
-                print(get_text("benchmark_summary"))
-                print(f"   Average: {avg_tps:.2f} TPS")
-                print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
-                print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
+                    print(get_text("benchmark_summary"))
+                    print(f"   Average: {avg_tps:.2f} TPS")
+                    print(f"   Min: {min(r['tps'] for r in tps_list):.2f} TPS")
+                    print(f"   Max: {max(r['tps'] for r in tps_list):.2f} TPS")
 
-                # Calculate std dev
-                mean = avg_tps
-                variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
-                std_dev = variance ** 0.5
-                print(f"   Std Dev: {std_dev:.2f} TPS")
+                    mean = avg_tps
+                    variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+                    std_dev = variance ** 0.5
+                    print(f"   Std Dev: {std_dev:.2f} TPS")
 
-                # Save averaged results
-                results.append({
-                    "ctx": ctx,
-                    "temperature": used_temp,
-                    "duration_sec": tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
-                    "prompt_tokens": tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
-                    "response_tokens": tps_list[0].get('eval_count', 0) if tps_list else 0,
-                    "avg_tps": avg_tps,
-                    "min_tps": min(r['tps'] for r in tps_list),
-                    "max_tps": max(r['tps'] for r in tps_list),
-                    "std_dev": std_dev,
-                    "vram": vram
-                })
+                    metrics = BenchmarkMetrics(
+                        ctx=ctx,
+                        temperature=used_temp,
+                        duration_sec=tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
+                        prompt_tokens=tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
+                        response_tokens=tps_list[0].get('eval_count', 0) if tps_list else 0,
+                        avg_tps=avg_tps,
+                        min_tps=min(r['tps'] for r in tps_list),
+                        max_tps=max(r['tps'] for r in tps_list),
+                        std_dev=std_dev,
+                        vram=vram,
+                    )
+                    all_metrics.append(metrics)
+                    
+                except Exception as e:
+                    error_message = f"Critical error during context {ctx} testing: {e}"
+                    print(f"   ❌ {error_message}")
+                    return None, error_message
 
         # Unload model from VRAM after all context tests are done
         print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
@@ -458,50 +467,45 @@ class BenchmarkRunner:
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
 
-        return model_name, results, None
+        benchmark_result = BenchmarkResult(model=model, results=all_metrics)
+        return benchmark_result, None
     
-    def run_all_independent_prompts(self, model: dict, temperature: float = None) -> tuple:
+    def run_all_independent_prompts(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
         """Run ALL independent prompts for a model across contexts and temperatures.
         
         Execution order:
             Model → Contexts → Temperatures → ALL prompts (architect → code → debug)
         
         Args:
-            model: Model dictionary with name, max_ctx, etc.
-            temperature: Temperature value to use (None for default)
+            model: ModelInfo instance containing model metadata.
+            temperature: Temperature value to use (None for default).
         
         Returns:
-            tuple: (model_name, results, error, prompts_used)
+            tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
         """
-        model_name = model["name"]
-        max_ctx = model["max_ctx"]
-        results = []
-        prompts_used = []
+        model_name = model.name
+        max_ctx = model.max_ctx
+        all_metrics: List[BenchmarkMetrics] = []
+        error_message: Optional[str] = None
         
-        # Display model name
         print(f"\n🤖 Testing model: {model_name}")
         logger.info(f"🤖 Testing model: {model_name}")
         
-        # Restart Ollama once for the model
         restart_ollama(
             self.restart_method,
             self.no_restart,
             ssh_client=self.ssh_client
         )
         
-        # Filter contexts
         valid_contexts = self.filter_contexts(max_ctx)
         
-        # Get temperatures
         if temperature is None:
-            temps = [1.0, 0.7, 0.3]
+            temps = [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
-        # Get ALL prompts in order
         all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()
         
-        # NEW ORDER: Contexts → Temperatures → ALL prompts sequentially
         for ctx in valid_contexts:
             logger.info(f"   📏 Context size: {ctx}")
             print(f"   📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"   📏 Context: {ctx}")
@@ -510,7 +514,6 @@ class BenchmarkRunner:
                 logger.info(f"   🌡️  Temperature: {temp:.2f}")
                 print(f"      🌡️  Temperature: {temp:.2f}")
                 
-                # Run ALL prompts in order (architect → code → debug)
                 for prompt_data in all_prompts:
                     prompt = prompt_data['prompt']
                     prompt_id = prompt_data['id']
@@ -527,96 +530,95 @@ class BenchmarkRunner:
                     logger.info(f"📝 Running [{mode}] {prompt_name} (ID: {prompt_id})")
                     print(f"         [{mode}] {prompt_name} (ID: {prompt_id})")
                     
-                    avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
-                        model_name,
-                        ctx,
-                        self.num_runs,
-                        self.disable_thinking,
-                        temperature=temp,
-                        prompt=prompt,
-                        prompt_metadata=prompt_metadata
-                    )
-                    
-                    if error:
-                        print(f"         Error: {error}")
-                        continue
-                    
-                    # Calculate std_dev
-                    if len(tps_list) > 1:
-                        mean = avg_tps
-                        variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
-                        std_dev = variance ** 0.5
-                    else:
-                        std_dev = 0.0
-                    
-                    results.append({
-                        'mode': mode,
-                        'prompt_id': prompt_id,
-                        'prompt_name': prompt_name,
-                        'ctx': ctx,
-                        'temperature': used_temp,
-                        'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
-                        'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
-                        'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
-                        'avg_tps': avg_tps,
-                        'min_tps': min(run['tps'] for run in tps_list),
-                        'max_tps': max(run['tps'] for run in tps_list),
-                        'std_dev': std_dev,
-                        'vram': vram,
-                        'tps_list': tps_list
-                    })
-                    prompts_used.append(prompt_metadata)
+                    try:
+                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                            model_name,
+                            ctx,
+                            self.num_runs,
+                            self.disable_thinking,
+                            temperature=temp,
+                            prompt=prompt,
+                            prompt_metadata=prompt_metadata
+                        )
+                        
+                        if error:
+                            print(f"         Error: {error}")
+                            continue
+                        
+                        if len(tps_list) > 1:
+                            mean = avg_tps
+                            variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                            std_dev = variance ** 0.5
+                        else:
+                            std_dev = 0.0
+                        
+                        metrics = BenchmarkMetrics(
+                            mode=mode,
+                            prompt_id=prompt_id,
+                            prompt_name=prompt_name,
+                            ctx=ctx,
+                            temperature=used_temp,
+                            duration_sec=tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
+                            prompt_tokens=tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
+                            response_tokens=tps_list[0].get('eval_count', 0) if tps_list else 0,
+                            avg_tps=avg_tps,
+                            min_tps=min(run['tps'] for run in tps_list),
+                            max_tps=max(run['tps'] for run in tps_list),
+                            std_dev=std_dev,
+                            vram=vram,
+                        )
+                        all_metrics.append(metrics)
+                        
+                    except Exception as e:
+                        error_message = f"Critical error during prompt {prompt_id} testing: {e}"
+                        print(f"   ❌ {error_message}")
+                        return None, error_message
         
-        # Unload model once after all tests
         print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
         try:
             self.ollama_client.unload_model(model_name)
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
         
-        return model_name, results, None, prompts_used
+        benchmark_result = BenchmarkResult(model=model, results=all_metrics)
+        return benchmark_result, None
     
-    def run_all_chains(self, model: dict, temperature: float = None) -> tuple:
+    def run_all_chains(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
         """Run ALL chains for a model.
         
         Execution order:
             Model → Chains (sequentially) → Contexts → Temperatures → Modes
         
         Args:
-            model: Model dictionary with name, max_ctx, etc.
-            temperature: Temperature value to use (None for default)
+            model: ModelInfo instance containing model metadata.
+            temperature: Temperature value to use (None for default).
         
         Returns:
-            tuple: (model_name, results, error)
+            tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
         """
-        model_name = model["name"]
-        max_ctx = model["max_ctx"]
-        all_results = []
+        model_name = model.name
+        max_ctx = model.max_ctx
+        all_metrics: List[BenchmarkMetrics] = []
+        error_message: Optional[str] = None
         
-        # Display model name
         print(f"\n🤖 Testing model: {model_name}")
         logger.info(f"🤖 Testing model: {model_name}")
         
-        # Restart Ollama once for the model
         restart_ollama(
             self.restart_method,
             self.no_restart,
             ssh_client=self.ssh_client
         )
         
-        # Filter contexts
         valid_contexts = self.filter_contexts(max_ctx)
         
-        # Get temperatures
         if temperature is None:
-            temps = [1.0, 0.7, 0.3]
+            temps = [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
-        # Get all chains
         chains = self.prompt_loader.get_chains()
         
-        # NEW ORDER: Chains → Contexts → Temperatures → Modes (with context flow)
         for chain in chains:
             chain_id = chain.get('id', 'unknown')
             chain_name = chain.get('name', 'Unknown Chain')
@@ -624,7 +626,6 @@ class BenchmarkRunner:
             print(f"\n   🔗 Running chain: {chain_name} ({chain_id})")
             logger.info(f"🔗 Running chain: {chain_name} ({chain_id})")
             
-            # Build chain context
             chain_prompts = self.prompt_loader.build_chain_context(chain)
             
             for ctx in valid_contexts:
@@ -635,9 +636,6 @@ class BenchmarkRunner:
                     logger.info(f"   🌡️  Temperature: {temp:.2f}")
                     print(f"         🌡️  Temperature: {temp:.2f}")
                     
-                    chain_responses = {}
-                    
-                    # Run modes in sequence with context flow
                     for mode in ['architect', 'code', 'debug']:
                         if mode not in chain_prompts:
                             continue
@@ -659,50 +657,55 @@ class BenchmarkRunner:
                         logger.info(f"📝 Chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                         print(f"            [{mode}] {prompt_name}")
                         
-                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
-                            model_name,
-                            ctx,
-                            self.num_runs,
-                            self.disable_thinking,
-                            temperature=temp,
-                            prompt=prompt,
-                            prompt_metadata=prompt_metadata
-                        )
-                        
-                        if error:
-                            print(f"            Error: {error}")
-                            break
-                        
-                        # Store response for context flow
-                        response_length = sum(run.get('response_length', 0) for run in tps_list) if tps_list and hasattr(tps_list[0], 'get') else len(tps_list) * 100
-                        chain_responses[mode] = f"[Response from {mode} mode - {response_length} tokens]"
-                        
-                        # Calculate std_dev
-                        if len(tps_list) > 1:
-                            mean = avg_tps
-                            variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
-                            std_dev = variance ** 0.5
-                        else:
-                            std_dev = 0.0
-                        
-                        all_results.append({
-                            'chain_id': chain_id,
-                            'chain_name': chain_name,
-                            'mode': mode,
-                            'prompt_id': prompt_id,
-                            'prompt_name': prompt_name,
-                            'ctx': ctx,
-                            'temperature': used_temp,
-                            'duration_sec': tps_list[0].get('total_duration', 0) / 1e9 if tps_list else 0,
-                            'prompt_tokens': tps_list[0].get('prompt_eval_count', 0) if tps_list else 0,
-                            'response_tokens': tps_list[0].get('eval_count', 0) if tps_list else 0,
-                            'avg_tps': avg_tps,
-                            'min_tps': min(run['tps'] for run in tps_list),
-                            'max_tps': max(run['tps'] for run in tps_list),
-                            'std_dev': std_dev,
-                            'vram': vram,
-                            'tps_list': tps_list
-                        })
+                        try:
+                            avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                                model_name,
+                                ctx,
+                                self.num_runs,
+                                self.disable_thinking,
+                                temperature=temp,
+                                prompt=prompt,
+                                prompt_metadata=prompt_metadata
+                            )
+                            
+                            if error:
+                                print(f"            Error: {error}")
+                                break
+                            
+                            duration = tps_list[0].get('total_duration', 0) / 1e9
+                            prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
+                            response_tokens = tps_list[0].get('eval_count', 0)
+                            
+                            if len(tps_list) > 1:
+                                mean = avg_tps
+                                variance = sum((run['tps'] - mean) ** 2 for run in tps_list) / len(tps_list)
+                                std_dev = variance ** 0.5
+                            else:
+                                std_dev = 0.0
+                            
+                            metrics = BenchmarkMetrics(
+                                chain_id=chain_id,
+                                chain_name=chain_name,
+                                mode=mode,
+                                prompt_id=prompt_id,
+                                prompt_name=prompt_name,
+                                ctx=ctx,
+                                temperature=used_temp,
+                                duration_sec=duration,
+                                prompt_tokens=prompt_tokens,
+                                response_tokens=response_tokens,
+                                avg_tps=avg_tps,
+                                min_tps=min(run['tps'] for run in tps_list),
+                                max_tps=max(run['tps'] for run in tps_list),
+                                std_dev=std_dev,
+                                vram=vram,
+                            )
+                            all_metrics.append(metrics)
+                            
+                        except Exception as e:
+                            error_message = f"Critical error during chain [{mode}] testing: {e}"
+                            print(f"            ❌ {error_message}")
+                            return None, error_message
         
         # Unload model once after all chains
         print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
@@ -711,4 +714,5 @@ class BenchmarkRunner:
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")
         
-        return model_name, all_results, None
+        benchmark_result = BenchmarkResult(model=model, results=all_metrics)
+        return benchmark_result, None

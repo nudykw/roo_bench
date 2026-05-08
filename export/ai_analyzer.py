@@ -76,58 +76,57 @@ class AIAnalyzer:
         except Exception:
             return []
 
-    def format_results_for_prompt(self, all_results: dict, test_models: list) -> str:
+    def format_results_for_prompt(self, all_results: 'List[BenchmarkResult]') -> str:
         """Format benchmark results for inclusion in the prompt.
 
         Args:
-            all_results: Dictionary of results per model
-            test_models: List of model objects
+            all_results: List of BenchmarkResult objects
 
         Returns:
             str: Formatted results string
         """
+        from typing import List
         lines = []
-        for model_name, runs in all_results.items():
+        for result in all_results:
+            model_name = result.model_name
+            model = result.model
             lines.append(f"\n### {model_name}")
-            model_info = next((m for m in test_models if m['name'] == model_name), {})
-            lines.append(f"- Parameters: {model_info.get('params', 'N/A')}")
-            lines.append(f"- Size: {model_info.get('size_gb', 'N/A')} GB")
-            lines.append(f"- Vision: {model_info.get('vision', 'N/A')}")
-            lines.append(f"- Tools: {model_info.get('tools', 'N/A')}")
-            lines.append(f"- Thinking: {model_info.get('thinking', 'N/A')}")
+            lines.append(f"- Parameters: {model.params}")
+            lines.append(f"- Size: {model.size_gb:.1f} GB")
+            lines.append(f"- Vision: {model.vision_str}")
+            lines.append(f"- Tools: {model.tools_str}")
+            lines.append(f"- Thinking: {model.thinking_str}")
             lines.append("- Results:")
-            for run in runs:
-                ctx_str = f"{run['ctx'] // 1024}K" if run['ctx'] >= 1024 else str(run['ctx'])
+            for run in result.results:
+                ctx_str = f"{run.ctx // 1024}K" if run.ctx >= 1024 else str(run.ctx)
                 lines.append(
                     f"  - Context: {ctx_str} | "
-                    f"Avg: {run['avg_tps']:.2f} TPS | "
-                    f"Min: {run['min_tps']:.2f} TPS | "
-                    f"Max: {run['max_tps']:.2f} TPS | "
-                    f"VRAM: {run.get('vram_str', 'N/A')}"
+                    f"Avg: {run.avg_tps:.2f} TPS | "
+                    f"Min: {run.min_tps:.2f} TPS | "
+                    f"Max: {run.max_tps:.2f} TPS | "
+                    f"VRAM: {run.vram_str}"
                 )
         return "\n".join(lines)
 
-    def generate_prompt(self, all_results: dict, test_models: list) -> str:
+    def generate_prompt(self, all_results: 'List[BenchmarkResult]') -> str:
         """Generate the analysis prompt with benchmark results.
 
         Args:
-            all_results: Dictionary of results per model
-            test_models: List of model objects
+            all_results: List of BenchmarkResult objects
 
         Returns:
             str: Complete prompt string
         """
-        results_text = self.format_results_for_prompt(all_results, test_models)
+        results_text = self.format_results_for_prompt(all_results)
         user_prompt = self.prompts['user_prompt_template'].format(results=results_text)
         return user_prompt
 
-    def analyze(self, model_name: str, all_results: dict, test_models: list, ollama_client = None, stream: bool = True) -> str:
+    def analyze(self, model_name: str, all_results: 'List[BenchmarkResult]', ollama_client = None, stream: bool = True) -> str:
         """Send request to Ollama and get response.
 
         Args:
             model_name: Name of the Ollama model to use
-            all_results: Dictionary of results per model
-            test_models: List of model objects
+            all_results: List of BenchmarkResult objects
             ollama_client: BaseApiClient instance for unload_model (same as benchmark runner)
             stream: If True, use streaming mode with progress display (default: True)
 
@@ -137,7 +136,7 @@ class AIAnalyzer:
         Raises:
             Exception: If the API request fails
         """
-        prompt = self.generate_prompt(all_results, test_models)
+        prompt = self.generate_prompt(all_results)
         
         # Calculate required context size (rough estimate: 1 token ~ 3 chars for mixed content)
         # Add 50% buffer for tokenization overhead and response tokens
@@ -425,12 +424,12 @@ class AIAnalyzer:
         from export.result_saver import load_results_from_file
         
         print(f"\n   \U0001f4da Loading results from: {file_path}")
-        all_results, test_models = load_results_from_file(file_path)
+        all_results, prompts_config = load_results_from_file(file_path)
         
-        if all_results is None or test_models is None:
+        if all_results is None:
             return False
         
-        print(f"   \u2705 Loaded {len(test_models)} models with results")
+        print(f"   \u2705 Loaded {len(all_results)} models with results")
         
         # Get available models and let user select
         models = self.get_available_models()
@@ -484,7 +483,7 @@ class AIAnalyzer:
         
         try:
             print(f"   \U0001f4a1 Sending analysis request...")
-            response = self.analyze(actual_model_name, all_results, test_models, ollama_client, stream=stream)
+            response = self.analyze(actual_model_name, all_results, ollama_client, stream=stream)
             
             if not response:
                 print("\n\u26a0\ufe0f  Model returned an empty response.")
@@ -576,12 +575,11 @@ def prompt_filename(default: str = "benchmark_results.json") -> str:
         return default
 
 
-def save_results_interactive(all_results: dict, test_models: list, base_url: str, headers: dict) -> Optional[str]:
+def save_results_interactive(all_results: 'List[BenchmarkResult]', base_url: str, headers: dict) -> Optional[str]:
     """Interactive workflow: ask to save, get filename, save results.
 
     Args:
-        all_results: Dictionary of results per model
-        test_models: List of model objects
+        all_results: List of BenchmarkResult objects
         base_url: Ollama API base URL
         headers: HTTP headers
 
@@ -607,22 +605,19 @@ def save_results_interactive(all_results: dict, test_models: list, base_url: str
         all_results,
         filename,
         'json',
-        [m['name'] for m in test_models],
-        test_models,
         prompts_config=prompt_loader.data
     )
     return filename
 
 
-def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_models: list, current_lang: str,
+def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[BenchmarkResult]', current_lang: str,
                                restart_method: str = 'manual', no_restart: bool = False,
                                ssh_client = None, ollama_client = None):
     """Interactive workflow: list models, let user select, run analysis, show results.
 
     Args:
         analyzer: AIAnalyzer instance
-        all_results: Dictionary of results per model
-        test_models: List of model objects
+        all_results: List of BenchmarkResult objects
         current_lang: Current language code
         restart_method: Restart method ('systemctl', 'ssh', etc.)
         no_restart: If True, skip restart
@@ -679,7 +674,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
         logger.debug("Could not check model availability: %s", e)
     
     try:
-        response = analyzer.analyze(model_name, all_results, test_models, ollama_client, stream=True)
+        response = analyzer.analyze(model_name, all_results, ollama_client, stream=True)
 
         if not response:
             print("\n\u26a0\ufe0f  Model returned an empty response.")

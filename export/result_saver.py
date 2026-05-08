@@ -4,7 +4,9 @@ import json
 import csv
 import os
 from datetime import datetime
+from typing import List, Optional, Any
 from i18n import get_text, _current_language
+from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
 
 
 class ResultSaver:
@@ -20,21 +22,19 @@ class ResultSaver:
         self.output_file = output_file
         self.output_format = output_format
 
-    def save(self, results: dict, model_names: list, test_models: list,
-             prompts_config: dict = None):
+    def save(self, results: List[BenchmarkResult],
+             prompts_config: Optional[dict] = None):
         """Save results to file.
 
         Args:
-            results: Dictionary of results per model
-            model_names: List of tested model names
-            test_models: List of model objects
+            results: List of BenchmarkResult objects
             prompts_config: Optional prompts configuration to include in export
         """
         if not self.output_file or not self.output_format:
             return
 
         # Prepare data for export
-        export_data = self._prepare_export_data(results, model_names, test_models, prompts_config)
+        export_data = self._prepare_export_data(results, prompts_config)
 
         # Save based on format
         if self.output_format == 'json':
@@ -42,14 +42,12 @@ class ResultSaver:
         elif self.output_format == 'csv':
             self._save_csv(export_data)
 
-    def _prepare_export_data(self, results: dict, model_names: list, test_models: list,
-                             prompts_config: dict = None) -> dict:
+    def _prepare_export_data(self, results: List[BenchmarkResult],
+                             prompts_config: Optional[dict] = None) -> dict:
         """Prepare data for export.
 
         Args:
-            results: Dictionary of results per model
-            model_names: List of tested model names
-            test_models: List of model objects
+            results: List of BenchmarkResult objects
             prompts_config: Optional prompts configuration to include in export
 
         Returns:
@@ -81,49 +79,14 @@ class ResultSaver:
                 ]
             }
 
-        # Prepare results list
+        # Prepare results list - nested structure (one entry = one model)
         results_list = []
-
-        for model_name in model_names:
-            if model_name not in results:
-                continue
-
-            model_obj = next((m for m in test_models if m['name'] == model_name), None)
-            if not model_obj:
-                continue
-
-            model_info = {
-                'model_name': model_name,
-                'params': model_obj.get('params', 'N/A'),
-                'quant': model_obj.get('quant', 'N/A'),
-                'size_gb': model_obj.get('size_gb', 0),
-                'max_ctx': model_obj.get('max_ctx', 0),
-                'vision': model_obj.get('vision', '❓'),
-                'tools': model_obj.get('tools', '❓'),
-                'thinking': model_obj.get('thinking', '❌'),
-                'language': _current_language if '_current_language' in globals() else "en",
-                'timestamp': datetime.now().isoformat(),
+        for result in results:
+            result_dict = {
+                'model': result.model.model_dump(),
+                'results': [m.model_dump() for m in result.results],
             }
-
-            # Add results for each context
-            for run in results.get(model_name, []):
-                run_data = {
-                    'ctx': run['ctx'],
-                    'ctx_str': f"{run['ctx'] // 1024}K" if run['ctx'] >= 1024 else str(run['ctx']),
-                    'avg_tps': round(run['avg_tps'], 2),
-                    'min_tps': round(run['min_tps'], 2),
-                    'max_tps': round(run['max_tps'], 2),
-                    'std_dev': round(run['std_dev'], 2),
-                    'vram': run['vram'] if run['vram'] else None,
-                    'vram_str': f"{run['vram'] / 1024 / 1024:.1f} MiB" if run['vram'] else None,
-                    'prompt_id': run.get('prompt_id', ''),
-                    'duration_sec': run.get('duration_sec', 0),
-                    'prompt_tokens': run.get('prompt_tokens', 0),
-                    'response_tokens': run.get('response_tokens', 0),
-                    'temperature': run.get('temperature', 0),
-                    **model_info
-                }
-                results_list.append(run_data)
+            results_list.append(result_dict)
 
         # Return new structure with prompts_config at root level
         return {
@@ -190,16 +153,57 @@ class ResultSaver:
             # Extract results list from export_data
             results_list = export_data.get('results', [])
 
-            # Updated fieldnames with new metrics
-            fieldnames = ['model_name', 'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
-                         'std_dev', 'vram', 'vram_str', 'params', 'quant', 'size_gb',
-                         'max_ctx', 'vision', 'tools', 'thinking', 'language', 'timestamp',
-                         'prompt_id', 'duration_sec', 'prompt_tokens', 'response_tokens', 'temperature']
+            # Flatten nested structure to flat CSV rows
+            csv_rows = []
+            for result_entry in results_list:
+                model_data = result_entry.get('model', {})
+                metrics_list = result_entry.get('results', [])
+                
+                for metric in metrics_list:
+                    row = {
+                        'model_name': model_data.get('name', ''),
+                        'params': model_data.get('params', 'N/A'),
+                        'quant': model_data.get('quant', 'N/A'),
+                        'size_gb': model_data.get('size_gb', ''),
+                        'max_ctx': model_data.get('max_ctx', ''),
+                        'vision': model_data.get('vision', ''),
+                        'tools': model_data.get('tools', ''),
+                        'thinking': model_data.get('thinking', ''),
+                        'audio': model_data.get('audio', ''),
+                        'architecture': model_data.get('architecture', ''),
+                        'ctx': metric.get('ctx', ''),
+                        'ctx_str': metric.get('ctx_str', ''),
+                        'avg_tps': metric.get('avg_tps', ''),
+                        'min_tps': metric.get('min_tps', ''),
+                        'max_tps': metric.get('max_tps', ''),
+                        'std_dev': metric.get('std_dev', ''),
+                        'vram': metric.get('vram', ''),
+                        'vram_str': metric.get('vram_str', ''),
+                        'prompt_id': metric.get('prompt_id', ''),
+                        'prompt_name': metric.get('prompt_name', ''),
+                        'duration_sec': metric.get('duration_sec', ''),
+                        'prompt_tokens': metric.get('prompt_tokens', ''),
+                        'response_tokens': metric.get('response_tokens', ''),
+                        'temperature': metric.get('temperature', ''),
+                        'mode': metric.get('mode', ''),
+                        'chain_id': metric.get('chain_id', ''),
+                        'chain_name': metric.get('chain_name', ''),
+                    }
+                    csv_rows.append(row)
+
+            # CSV fieldnames
+            fieldnames = ['model_name', 'params', 'quant', 'size_gb', 'max_ctx',
+                         'vision', 'tools', 'thinking', 'audio', 'architecture',
+                         'ctx', 'ctx_str', 'avg_tps', 'min_tps', 'max_tps',
+                         'std_dev', 'vram', 'vram_str',
+                         'prompt_id', 'prompt_name', 'duration_sec',
+                         'prompt_tokens', 'response_tokens', 'temperature',
+                         'mode', 'chain_id', 'chain_name']
 
             with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
-                writer.writerows(results_list)
+                writer.writerows(csv_rows)
             print(get_text("output_csv", output_file=self.output_file))
         except Exception as e:
             print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
@@ -212,7 +216,7 @@ def load_results_from_file(file_path: str) -> tuple:
         file_path: Path to the saved results file
 
     Returns:
-        tuple: (all_results dict, test_models list) compatible with AIAnalyzer
+        tuple: (all_results List[BenchmarkResult], prompts_config dict) compatible with AIAnalyzer
     """
     import csv
     
@@ -221,85 +225,156 @@ def load_results_from_file(file_path: str) -> tuple:
         return None, None
     
     ext = os.path.splitext(file_path)[1].lower()
-    all_results = {}
-    test_models = []
-    model_data_map = {}
+    all_results: List[BenchmarkResult] = []
+    prompts_config = None
     
     try:
         if ext == '.json':
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            # Handle new structure with prompts_config at root level
-            if isinstance(data, dict) and 'results' in data:
-                # New structure: {'prompts_config': ..., 'results': [...]}
-                # Flatten results to group by model_name
-                for result in data.get('results', []):
-                    model_name = result.get('model_name', 'unknown')
+            
+            # Extract prompts_config if present
+            if isinstance(data, dict):
+                prompts_section = data.get('prompts_config')
+                if prompts_section:
+                    prompts_config = {
+                        'independent': prompts_section.get('independent', {}),
+                        'chains': prompts_section.get('chains', [])
+                    }
+                
+                # Load new structure: {'prompts_config': ..., 'results': [...]}
+                for result_data in data.get('results', []):
+                    model_data = result_data.get('model', {})
+                    metrics_list = result_data.get('results', [])
                     
-                    # Build model info (first occurrence creates the model entry)
-                    if model_name not in model_data_map:
-                        model_data_map[model_name] = {
-                            'name': model_name,
-                            'params': result.get('params', 'N/A'),
-                            'quant': result.get('quant', 'N/A'),
-                            'size_gb': float(result.get('size_gb', 0)) if result.get('size_gb', '0') != 'N/A' else 'N/A',
-                            'max_ctx': int(result.get('max_ctx', 131072)) if result.get('max_ctx', '0') != 'N/A' else 131072,
-                            'vision': result.get('vision', '❓'),
-                            'tools': result.get('tools', '❓'),
-                            'thinking': result.get('thinking', '❌'),
-                        }
+                    # Create ModelInfo
+                    model_info = ModelInfo(
+                        name=model_data.get('name', 'unknown'),
+                        size_gb=float(model_data.get('size_gb', 0)) if model_data.get('size_gb') and model_data.get('size_gb') != 'N/A' else 0.0,
+                        params=model_data.get('params', 'N/A'),
+                        quant=model_data.get('quant', 'N/A'),
+                        architecture=model_data.get('architecture', 'N/A'),
+                        max_ctx=int(model_data.get('max_ctx', 131072)) if model_data.get('max_ctx', '0') != 'N/A' else 131072,
+                        moe=model_data.get('moe'),
+                    )
                     
-                    # Build results per model
-                    if model_name not in all_results:
-                        all_results[model_name] = []
+                    # Create BenchmarkMetrics for each run
+                    metrics = []
+                    for m in metrics_list:
+                        metrics.append(BenchmarkMetrics(
+                            ctx=int(m.get('ctx', 0)),
+                            temperature=float(m.get('temperature', 0)),
+                            avg_tps=float(m.get('avg_tps', 0)),
+                            min_tps=float(m.get('min_tps', 0)),
+                            max_tps=float(m.get('max_tps', 0)),
+                            std_dev=float(m.get('std_dev', 0)),
+                            vram=m.get('vram'),
+                            duration_sec=float(m.get('duration_sec', 0)),
+                            prompt_tokens=int(m.get('prompt_tokens', 0)),
+                            response_tokens=int(m.get('response_tokens', 0)),
+                            prompt_id=m.get('prompt_id', ''),
+                        ))
                     
-                    all_results[model_name].append({
-                        'ctx': result.get('ctx', 0),
-                        'ctx_str': result.get('ctx_str', f"{result.get('ctx', 0) // 1024}K"),
-                        'avg_tps': result.get('avg_tps', 0),
-                        'min_tps': result.get('min_tps', 0),
-                        'max_tps': result.get('max_tps', 0),
-                        'std_dev': result.get('std_dev', 0),
-                        'vram': result.get('vram'),
-                        'vram_str': result.get('vram_str'),
-                        'prompt_id': result.get('prompt_id', ''),
-                        'duration_sec': result.get('duration_sec', 0),
-                        'prompt_tokens': result.get('prompt_tokens', 0),
-                        'response_tokens': result.get('response_tokens', 0),
-                        'temperature': result.get('temperature', 0),
-                    })
+                    # Create BenchmarkResult
+                    benchmark_result = BenchmarkResult(
+                        model=model_info,
+                        results=metrics,
+                    )
+                    all_results.append(benchmark_result)
+        
         elif ext == '.csv':
+            # CSV loading - create simple BenchmarkResult from flat CSV data
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                data = list(reader)
+                rows = list(reader)
+            
+            if rows:
+                # Group by model_name
+                model_groups = {}
+                for row in rows:
+                    model_name = row.get('model_name', 'unknown')
+                    if model_name not in model_groups:
+                        size_gb_str = row.get('size_gb', '0')
+                        max_ctx_str = row.get('max_ctx', '131072')
+                        model_groups[model_name] = {
+                            'model': {
+                                'name': model_name,
+                                'params': row.get('params', 'N/A'),
+                                'quant': row.get('quant', 'N/A'),
+                                'size_gb': float(size_gb_str) if size_gb_str and size_gb_str != 'N/A' else 0.0,
+                                'max_ctx': int(max_ctx_str) if max_ctx_str and max_ctx_str != 'N/A' else 131072,
+                            },
+                            'results': []
+                        }
+                    
+                    # Helper to parse values with proper None handling
+                    def parse_float(val, default=0.0):
+                        if not val or val.strip() == '':
+                            return default
+                        try:
+                            return float(val)
+                        except ValueError:
+                            return default
+                    
+                    def parse_int(val, default=0):
+                        if not val or val.strip() == '':
+                            return default
+                        try:
+                            return int(val)
+                        except ValueError:
+                            return default
+                    
+                    def parse_optional_int(val):
+                        if not val or val.strip() == '':
+                            return None
+                        try:
+                            return int(val)
+                        except ValueError:
+                            return None
+                    
+                    model_groups[model_name]['results'].append({
+                        'ctx': parse_int(row.get('ctx', '0')),
+                        'temperature': parse_float(row.get('temperature', '0')),
+                        'avg_tps': parse_float(row.get('avg_tps', '0')),
+                        'min_tps': parse_float(row.get('min_tps', '0')),
+                        'max_tps': parse_float(row.get('max_tps', '0')),
+                        'std_dev': parse_float(row.get('std_dev', '0')),
+                        'vram': parse_optional_int(row.get('vram')),
+                        'duration_sec': parse_float(row.get('duration_sec', '0')),
+                        'prompt_tokens': parse_int(row.get('prompt_tokens', '0')),
+                        'response_tokens': parse_int(row.get('response_tokens', '0')),
+                        'prompt_id': row.get('prompt_id', ''),
+                    })
+                
+                # Create BenchmarkResult for each model
+                for model_name, data in model_groups.items():
+                    model_info = ModelInfo(**data['model'])
+                    metrics = [BenchmarkMetrics(**m) for m in data['results']]
+                    all_results.append(BenchmarkResult(model=model_info, results=metrics))
         else:
             print(get_text("analyze_file_unknown_format", ext=ext))
             return None, None
         
-        if not data:
+        if not all_results:
             print(get_text("analyze_file_empty"))
             return None, None
         
-        test_models = list(model_data_map.values())
-        return all_results, test_models
+        return all_results, prompts_config
         
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(get_text("analyze_file_parse_error", error=str(e)))
         return None, None
 
 
-def save_results(results: dict, output_file: str, output_format: str,
-                 model_names: list, test_models: list,
-                 prompts_config: dict = None):
+def save_results(results: List[BenchmarkResult], output_file: str, output_format: str,
+                 prompts_config: Optional[dict] = None):
     """Convenience function to save results.
 
     Args:
-        results: Dictionary of results per model
+        results: List of BenchmarkResult objects
         output_file: Path to output file
         output_format: Output format ('json' or 'csv')
-        model_names: List of tested model names
-        test_models: List of model objects
         prompts_config: Optional prompts configuration to include in export
     """
     saver = ResultSaver(output_file=output_file, output_format=output_format)
-    saver.save(results, model_names, test_models, prompts_config)
+    saver.save(results, prompts_config)

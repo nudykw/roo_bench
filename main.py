@@ -14,6 +14,7 @@ from system.restart_manager import restart_ollama, RestartMethod
 from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
 from benchmark.results import calculate_statistics, format_result_row, format_recommendations
+from benchmark.result import ModelInfo, BenchmarkResult, Capability
 from ui.curses_selector import interactive_model_select
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
@@ -324,22 +325,53 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     )
 
     # Run benchmarks for each model
-    all_results = {}
+    from benchmark.result import BenchmarkResult
+    all_results: list[BenchmarkResult] = []
 
     # Run based on mode
     if args.independent:
         # Run ALL independent prompts for each model
         for m in test_models:
-            model_name, results, error, prompts_used = benchmark_runner.run_all_independent_prompts(m)
-            all_results[model_name] = results
+            moe_val = m.get('moe')
+            moe_dict = moe_val if isinstance(moe_val, dict) else None
+            model_info = ModelInfo(
+                name=m['name'],
+                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
+                params=m.get('params', 'N/A'),
+                quant=m.get('quant', 'N/A'),
+                architecture=m.get('architecture', 'N/A'),
+                max_ctx=m.get('max_ctx', 131072),
+                moe=moe_dict,
+                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
+                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
+                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            )
+            benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
+            if benchmark_result:
+                all_results.append(benchmark_result)
             if error:
                 continue
 
     elif args.chains:
         # NEW: Run ALL chains for each model
         for m in test_models:
-            model_name, results, error = benchmark_runner.run_all_chains(m)
-            all_results[model_name] = results
+            moe_val = m.get('moe')
+            moe_dict = moe_val if isinstance(moe_val, dict) else None
+            model_info = ModelInfo(
+                name=m['name'],
+                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
+                params=m.get('params', 'N/A'),
+                quant=m.get('quant', 'N/A'),
+                architecture=m.get('architecture', 'N/A'),
+                max_ctx=m.get('max_ctx', 131072),
+                moe=moe_dict,
+                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
+                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
+                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            )
+            benchmark_result, error = benchmark_runner.run_all_chains(model_info)
+            if benchmark_result:
+                all_results.append(benchmark_result)
             if error:
                 continue
 
@@ -350,8 +382,23 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             print(f"Chain not found: {args.chain}")
             return
         for m in test_models:
-            model_name, results, error, chain_responses = benchmark_runner.run_chain(m, chain)
-            all_results[model_name] = results
+            moe_val = m.get('moe')
+            moe_dict = moe_val if isinstance(moe_val, dict) else None
+            model_info = ModelInfo(
+                name=m['name'],
+                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
+                params=m.get('params', 'N/A'),
+                quant=m.get('quant', 'N/A'),
+                architecture=m.get('architecture', 'N/A'),
+                max_ctx=m.get('max_ctx', 131072),
+                moe=moe_dict,
+                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
+                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
+                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            )
+            benchmark_result, error = benchmark_runner.run_chain(model_info, chain)
+            if benchmark_result:
+                all_results.append(benchmark_result)
             if error:
                 continue
 
@@ -360,15 +407,47 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         if prompt_loader and prompt_loader.data.get('independent'):
             print(get_text("using_independent_prompts_default"))
             for m in test_models:
-                model_name, results, error, prompts_used = benchmark_runner.run_all_independent_prompts(m)
-                all_results[model_name] = results
+                # Helper: convert moe value to dict or None
+                moe_val = m.get('moe')
+                moe_dict = moe_val if isinstance(moe_val, dict) else None
+                
+                model_info = ModelInfo(
+                    name=m['name'],
+                    size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
+                    params=m.get('params', 'N/A'),
+                    quant=m.get('quant', 'N/A'),
+                    architecture=m.get('architecture', 'N/A'),
+                    max_ctx=m.get('max_ctx', 131072),
+                    moe=moe_dict,
+                    vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
+                    tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
+                    thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+                )
+                benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
+                if benchmark_result:
+                    all_results.append(benchmark_result)
                 if error:
                     continue
         else:
             logger.warning("⚠️  No independent prompts found in prompts.jsonc, using default benchmark prompt")
             for m in test_models:
-                model_name, results, error = benchmark_runner.run_for_model(m)
-                all_results[model_name] = results
+                moe_val = m.get('moe')
+                moe_dict = moe_val if isinstance(moe_val, dict) else None
+                model_info = ModelInfo(
+                    name=m['name'],
+                    size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
+                    params=m.get('params', 'N/A'),
+                    quant=m.get('quant', 'N/A'),
+                    architecture=m.get('architecture', 'N/A'),
+                    max_ctx=m.get('max_ctx', 131072),
+                    moe=moe_dict,
+                    vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
+                    tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
+                    thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+                )
+                benchmark_result, error = benchmark_runner.run_for_model(model_info)
+                if benchmark_result:
+                    all_results.append(benchmark_result)
                 if error:
                     continue
 
@@ -393,13 +472,17 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         for m in test_models:
             model_size_map[m['name']] = m.get('size_gb', 0)
         
-        for model_name, runs in all_results.items():
+        for result in all_results:
+            model_name = result.model_name
             model_size = model_size_map.get(model_name, 0)
-            for run in runs:
-                ctx_val = run['ctx']
-                run_with_model = dict(run)
-                run_with_model['model_name'] = model_name
-                run_with_model['model_size_gb'] = model_size
+            for run in result.results:
+                ctx_val = run.ctx
+                run_with_model = {
+                    'ctx': ctx_val,
+                    'avg_tps': run.avg_tps,
+                    'model_name': model_name,
+                    'model_size_gb': model_size,
+                }
                 if ctx_val >= 65536:
                     mode_groups[get_text('architect_mode')].append(run_with_model)
                 elif ctx_val >= 16384:
@@ -469,8 +552,6 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             all_results,
             args.output,
             args.output_format,
-            [m['name'] for m in test_models],
-            test_models,
             prompts_config=prompt_loader.data if prompt_loader else None
         )
     
@@ -478,12 +559,12 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     _post_benchmark_workflow(args, all_results, test_models, config)
 
 
-def _post_benchmark_workflow(args, all_results, test_models, config):
+def _post_benchmark_workflow(args, all_results: list[BenchmarkResult], test_models, config):
     """Handle post-benchmark save and analysis prompts.
     
     Args:
         args: Parsed command-line arguments
-        all_results: Dictionary of results per model
+        all_results: List of BenchmarkResult objects
         test_models: List of model objects
         config: OllamaConfig object
     """
@@ -503,7 +584,7 @@ def _post_benchmark_workflow(args, all_results, test_models, config):
     if not hasattr(args, 'output') or not args.output:
         # Step 1: Ask to save results
         saved_file = save_results_interactive(
-            all_results, test_models,
+            all_results,
             config.base_url, config.get_headers()
         )
         
@@ -526,7 +607,7 @@ def _post_benchmark_workflow(args, all_results, test_models, config):
                 ssh_key=getattr(args, 'ssh_key', None)
             )
             analyze_results_interactive(
-                analyzer, all_results, test_models, args.lang,
+                analyzer, all_results, args.lang,
                 restart_method=getattr(args, 'restart_method', 'manual'),
                 no_restart=False,
                 ssh_client=ollama_client.ssh_client,
