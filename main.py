@@ -5,9 +5,9 @@ import os
 import signal
 import logging
 import curses
-from i18n import set_language
+from i18n import set_language, get_text
 from config import OllamaConfig
-from cli import parse_args, get_context_sizes
+from cli import parse_args, get_context_sizes, get_temperature_test_values
 from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
 from api.factory import ApiClientFactory
 from system.restart_manager import restart_ollama, RestartMethod
@@ -15,13 +15,40 @@ from system.gpu_monitor import check_gpu_available, get_vram_usage
 from benchmark.runner import BenchmarkRunner
 from benchmark.results import calculate_statistics, format_result_row, format_recommendations
 from benchmark.result import ModelInfo, BenchmarkResult, Capability
-from ui.curses_selector import interactive_model_select
+from ui.curses_selector import interactive_model_select, select_expert_model
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
 from prompts.loader import PromptLoader
 
 # Setup logging
 logger = logging.getLogger('roo_bench')
+
+
+def validate_expert_prompts() -> bool:
+    """Check if expert evaluation prompts are available.
+
+    Returns:
+        bool: True if prompts file exists and is readable, False otherwise.
+    """
+    if os.path.exists('prompts/analysis_prompt.jsonc'):
+        return True
+    logger.warning(
+        "Expert evaluation prompts not found. Expert-Evaluator will use default templates."
+    )
+    return False
+
+
+def prompt_user(message: str) -> bool:
+    """Prompt user for yes/no confirmation.
+
+    Args:
+        message: Message to display
+
+    Returns:
+        bool: True if user confirms, False otherwise
+    """
+    response = input(f"{message} (y/n): ").strip().lower()
+    return response in ['y', 'yes']
 
 
 def get_ollama_config(args) -> OllamaConfig:
@@ -313,7 +340,47 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         chains = prompt_loader.get_chains()
         logger.info(f"📝 Available chains: {', '.join(chain.get('name') for chain in chains)}")
 
+    # Expert-Evaluator setup
+    expert_evaluator = None
+    expert_model_name = None
+    
+    expert_prompts_valid = validate_expert_prompts()
+    logger.info("[Expert] validate_expert_prompts() returned %s", expert_prompts_valid)
+    
+    if expert_prompts_valid:
+        enable_expert = prompt_user(get_text("ask_enable_expert"))
+        logger.info("[Expert] User answered enable_expert=%s", enable_expert)
+        
+        if enable_expert:
+            logger.info("[Expert] User enabled expert, starting model selection...")
+            try:
+                logger.info("[Expert] Calling curses.wrapper with %d models available", len(models))
+                expert_model_name = curses.wrapper(
+                    lambda stdcr: select_expert_model(stdcr, models)
+                )
+                logger.info("[Expert] Model selection returned: expert_model_name=%r", expert_model_name)
+                if expert_model_name:
+                    from benchmark.expert_evaluator import ExpertEvaluator
+                    logger.info("[Expert] Creating ExpertEvaluator with model=%s", expert_model_name)
+                    expert_evaluator = ExpertEvaluator(ollama_client, expert_model_name)
+                    print(f"✅ Expert evaluator initialized with model: {expert_model_name}")
+                    logger.info("[Expert] ExpertEvaluator created successfully")
+                else:
+                    print("⚠️  No expert model selected.")
+                    logger.info("[Expert] No expert model selected by user (returned None)")
+            except Exception as e:
+                print(f"⚠️  Warning: Expert model selection failed: {e}")
+                expert_model_name = None
+                expert_evaluator = None
+                logger.exception("[Expert] Exception during expert model selection")
+    else:
+        logger.warning("[Expert] validate_expert_prompts() returned False, skipping expert setup")
+
     # Initialize benchmark runner
+    logger.info("[Expert] Before BenchmarkRunner init: expert_evaluator=%s", expert_evaluator is not None)
+    logger.info("[num_predict] Using num_predict=%d (use --num-predict -1 for unlimited)", getattr(args, 'num_predict', 8192))
+    temperature_test_values = get_temperature_test_values(args)
+    logger.info("[temperature] Using temperature values: %s", temperature_test_values)
     benchmark_runner = BenchmarkRunner(
         ollama_client=ollama_client,
         context_sizes=context_sizes,
@@ -321,8 +388,13 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         restart_method=args.restart_method,
         no_restart=args.no_restart,
         disable_thinking=not args.no_thinking,  # no_thinking=True → disable_thinking=False (user wants thinking)
-        prompt_loader=prompt_loader
+        prompt_loader=prompt_loader,
+        temperature_test_values=temperature_test_values,
+        expert_evaluator=expert_evaluator,
+        num_predict=getattr(args, 'num_predict', 8192)
     )
+    logger.info("[Expert] After BenchmarkRunner init: runner.expert_evaluator=%s",
+                benchmark_runner.expert_evaluator is not None)
 
     # Run benchmarks for each model
     from benchmark.result import BenchmarkResult
@@ -450,6 +522,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     all_results.append(benchmark_result)
                 if error:
                     continue
+
+    # Run expert evaluation if enabled
+    logger.info("[Expert] Before run_expert_evaluation: expert_evaluator=%s all_results_count=%d",
+                expert_evaluator is not None, len(all_results))
+    if expert_evaluator and all_results:
+        logger.info("[Expert] Calling benchmark_runner.run_expert_evaluation()")
+        benchmark_runner.run_expert_evaluation()
+    else:
+        logger.warning("[Expert] Skipping: expert_evaluator=%s all_results=%d",
+                       expert_evaluator is not None, len(all_results))
 
     # Print results
     print_results_table(all_results)

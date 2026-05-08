@@ -1,5 +1,0 @@
-{
-  "system_prompt": "You are a performance analysis assistant specialized in evaluating LLM benchmark results for Roo Code workflow optimization.",
-  "user_prompt_template": "Analyze these test results and provide recommendations for the three main Roo Code modes (architect, code, debug). Provide recommendations for each mode separately, along with context and temperature parameters. Requirements for modes: architect - tps can be low, temperature allows for slight creativity to find the best architectural solutions, ctx the more the better; code - architecture preferably MoE, tps as high as possible, ctx medium, temperature strict execution of the architect’s plan, no fantasies or improvisation; debug - architecture: Dense, tps: maximum, temperature: ironclad facts are required, hallucinations in stack traces are unacceptable, ctx: high\n\n{results}",
-  "translation_prompt_template": "Translate the following text to {target_lang}. Output ONLY the translated text:\n\n{text}"
-}

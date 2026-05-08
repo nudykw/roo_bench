@@ -93,6 +93,10 @@ def parse_args():
                         help='List available prompt chains and exit')
     parser.add_argument('--list-independent', action='store_true',
                         help='List available independent prompts and exit')
+    parser.add_argument('--num-predict', type=int, default=8192,
+                        help='Maximum number of tokens to predict in generation (default: 8192). Use -1 for unlimited.')
+    parser.add_argument('--temperature', type=str, default=None,
+                        help=get_text("cli_temperature"))
     return parser.parse_args()
 
 
@@ -129,3 +133,31 @@ def get_context_sizes(args) -> list:
 
     # Otherwise use defaults
     return CONTEXT_SIZES
+
+
+def get_temperature_test_values(args) -> list:
+    """Get list of temperature test values from CLI arguments.
+
+    Args:
+        args: Parsed arguments from argparse
+
+    Returns:
+        list: List of temperature values
+    """
+    DEFAULT_TEMPERATURES = [0.0, 0.66, 1.0]
+    
+    # If --temperature is specified, parse from string
+    if args.temperature:
+        try:
+            values = [float(x.strip()) for x in args.temperature.split(',')]
+            if all(0.0 <= v <= 2.0 for v in values):
+                return sorted(values)
+            else:
+                print(get_text("error_invalid_temperature", values=args.temperature))
+                return DEFAULT_TEMPERATURES
+        except ValueError:
+            print(get_text("error_invalid_temperature", values=args.temperature))
+            return DEFAULT_TEMPERATURES
+
+    # Otherwise use defaults
+    return DEFAULT_TEMPERATURES

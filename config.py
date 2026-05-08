@@ -85,6 +85,7 @@ class OllamaConfig:
     @property
     def temperature_test_values(self) -> list:
         """Get temperature test values from config or default"""
+        from benchmark.runner import DEFAULT_TEMPERATURES
         raw = self._config.get('temperature_test_values')
         if raw:
             # Try to parse as JSON list
@@ -93,7 +94,7 @@ class OllamaConfig:
             except (json.JSONDecodeError, TypeError):
                 pass
         # Default values
-        return [0.0, 0.66, 1.0]
+        return DEFAULT_TEMPERATURES
     
     @property
     def base_url(self) -> str:

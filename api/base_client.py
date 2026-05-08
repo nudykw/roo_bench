@@ -1,6 +1,7 @@
 """Base API client for Ollama API interactions."""
 
 import json
+import logging
 import math
 import threading
 from abc import ABC, abstractmethod
@@ -10,6 +11,8 @@ import requests
 from system.gpu_monitor import get_vram_usage
 from system.ssh_client import SSHClient
 from i18n import get_text
+
+logger = logging.getLogger('roo_bench')
 
 
 class BaseApiClient(ABC):
@@ -135,7 +138,8 @@ class BaseApiClient(ABC):
                        disable_thinking: bool = True,
                        temperature: Optional[float] = None,
                        prompt: str = None,
-                       prompt_metadata: dict = None) -> tuple:
+                       prompt_metadata: dict = None,
+                       num_predict: int = 8192) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
 
         Args:
@@ -146,6 +150,7 @@ class BaseApiClient(ABC):
             temperature: Temperature value for generation (None uses model default)
             prompt: Custom prompt to use. If None, uses default benchmark prompt.
             prompt_metadata: Metadata about the prompt (id, name, mode, chain info)
+            num_predict: Maximum number of tokens to generate (default: 8192, use -1 for unlimited)
 
         Returns:
             tuple: (avg_tps, vram, tps_list, error, prompt_metadata, temperature)
@@ -168,14 +173,18 @@ class BaseApiClient(ABC):
         # Note: "think" is a top-level API parameter, NOT inside "options"
         # See: https://github.com/ollama/ollama/blob/main/docs/api.md
         for run_num in range(num_runs):
+            options = {
+                "num_ctx": context_size
+            }
+            # Only add num_predict if explicitly set (default -1 for unlimited)
+            if num_predict is not None:
+                options["num_predict"] = num_predict
+            
             payload = {
                 "model": model_name,
                 "prompt": prompt,
-                "stream": True,
-                "options": {
-                    "num_predict": 100,
-                    "num_ctx": context_size
-                }
+                "stream": False,
+                "options": options
             }
             if disable_thinking:
                 payload["think"] = False
@@ -188,7 +197,7 @@ class BaseApiClient(ABC):
             vram_samples = []
 
             try:
-                # Start VRAM monitoring thread
+                # Start VRAM monitoring thread before blocking request
                 monitor_thread = threading.Thread(target=self._monitor_vram, args=(stop_monitoring, max_vram_ref, vram_samples), daemon=True)
                 monitor_thread.start()
 
@@ -198,46 +207,53 @@ class BaseApiClient(ABC):
                         json=payload,
                         headers=self.headers,
                         timeout=self.timeout,
-                        stream=True
+                        stream=False
                     )
                 except KeyboardInterrupt:
                     stop_monitoring.set()
                     monitor_thread.join(timeout=2)
                     raise
 
+                # Stop monitoring after response received
+                stop_monitoring.set()
+                monitor_thread.join(timeout=2)
+
                 if response.status_code != 200:
-                    stop_monitoring.set()
                     try:
                         err_msg = response.json().get("error", f"HTTP {response.status_code}")
-                    except:
+                    except Exception:
                         err_msg = f"HTTP {response.status_code}: {response.text[:100]}"
                     error = get_text("error_ollama_api", error_msg=err_msg)
                     break
 
-                # Consume stream and capture final response
-                final_data = None
-                line_count = 0
-                all_lines = []
-                try:
-                    for line in response.iter_lines():
-                        if line:
-                            line_count += 1
-                            line_str = line.decode('utf-8')
-                            all_lines.append(line_str)
-                            # Check for done=true (with or without spaces)
-                            if '"done":true' in line_str or '"done": true' in line_str:
-                                try:
-                                    final_data = json.loads(line_str)
-                                except json.JSONDecodeError:
-                                    pass
-                except KeyboardInterrupt:
-                    stop_monitoring.set()
-                    monitor_thread.join(timeout=2)
-                    raise
+                final_data = response.json()
+                
+                # Debug: Log full response structure for diagnosis
+                logger.debug(
+                    "[DEBUG] API response keys: %s",
+                    list(final_data.keys())
+                )
+                logger.debug(
+                    "[DEBUG] API response fields: eval_count=%d total_duration=%d done_reason=%r",
+                    final_data.get("eval_count", 0),
+                    final_data.get("total_duration", 0),
+                    final_data.get("done_reason")
+                )
+                
+                response_text = final_data.get("response", "")
+                
+                # Check if response is a string (not a list or other type)
+                if not isinstance(response_text, str):
+                    logger.warning(
+                        "[DEBUG] response field is not a string, type=%s, converting to str",
+                        type(response_text).__name__
+                    )
+                    response_text = str(response_text) if response_text else ""
 
-                # Stop monitoring after generation completes
-                stop_monitoring.set()
-                monitor_thread.join(timeout=2)
+                logger.info(
+                    "[Expert] response collection: response_text_len=%d first100=%r",
+                    len(response_text), response_text[:100]
+                )
 
                 # Create run_data with initial values
                 run_data = {
@@ -249,25 +265,10 @@ class BaseApiClient(ABC):
                     'temperature': temperature
                 }
 
-                # Parse final response for TPS data
-                if final_data:
-                    total_duration = final_data.get("total_duration", 0) / 1e9
-                    eval_count = final_data.get("eval_count", 0)
-                    tps = eval_count / total_duration if total_duration > 0 else 0
-                else:
-                    # Fallback: try to parse the last line as it might contain the stats
-                    tps = 0
-                    total_duration = 0
-                    eval_count = 0
-                    if all_lines:
-                        last_line = all_lines[-1]
-                        try:
-                            final_data = json.loads(last_line)
-                            total_duration = final_data.get("total_duration", 0) / 1e9
-                            eval_count = final_data.get("eval_count", 0)
-                            tps = eval_count / total_duration if total_duration > 0 else 0
-                        except json.JSONDecodeError:
-                            pass
+                # Parse TPS from server-side metrics
+                total_duration = final_data.get("total_duration", 0) / 1e9
+                eval_count = final_data.get("eval_count", 0)
+                tps = eval_count / total_duration if total_duration > 0 else 0
 
                 # Use max VRAM observed during generation
                 vram_during = max_vram_ref[0] if vram_samples else None
@@ -278,6 +279,7 @@ class BaseApiClient(ABC):
                 run_data['total_duration'] = final_data.get("total_duration", 0) if final_data else 0
                 run_data['prompt_eval_count'] = final_data.get("prompt_eval_count", 0) if final_data else 0
                 run_data['eval_count'] = final_data.get("eval_count", 0) if final_data else 0
+                run_data['response'] = response_text
                 tps_list.append(run_data)
 
             except KeyboardInterrupt:
@@ -603,8 +605,8 @@ class BaseApiClient(ABC):
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "num_predict": 10,
-                    "num_ctx": context_size
+                    "num_ctx": context_size,
+                    "num_predict": 8192  # Sufficient for most code files
                 }
             }
 

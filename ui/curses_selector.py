@@ -239,3 +239,24 @@ def interactive_model_select(stdscr, models: list) -> list:
                 selected.discard(current_row)
             else:
                 selected.add(current_row)
+
+
+def select_expert_model(stdscr, models: list) -> str:
+   """Select a single expert model using curses interface.
+
+   Args:
+       stdscr: curses standard screen
+       models: List of model dictionaries
+
+   Returns:
+       str: Selected model name, or None to cancel.
+   """
+   if not models:
+       return None
+
+   selected = interactive_model_select(stdscr, models)
+
+   if not selected:
+       return None
+
+   return selected[0]['name']

@@ -135,6 +135,10 @@ TRANSLATIONS = {
         "cli_analyze_file": "Analyze benchmark results from a saved JSON/CSV file",
         "cli_analysis_model": "Model name to use for analysis (used with --analyze-file)",
         "using_independent_prompts_default": "📝 Using independent prompts from prompts.jsonc by default",
+        "ask_enable_expert": "Enable Expert-Evaluator for automatic response quality assessment?",
+        "expert_model_selection": "Select an expert model for response evaluation",
+        "cli_temperature": "Temperature values to test (comma-separated, e.g., 0.0,0.7,1.0)",
+        "error_invalid_temperature": "❌ Invalid temperature values '{values}'. Use comma-separated values between 0.0 and 2.0.",
     },
     "ua": {
         "app_title": "Roo Code Model Benchmark",
@@ -268,6 +272,10 @@ TRANSLATIONS = {
         "using_independent_prompts_default": "📝 Використовуються незалежні промти з prompts.jsonc за замовчуванням",
         "cli_no_thinking": "Вимкнути режим міркувань для запобігання зацикленням (за замовчуванням: увімкнено)",
         "cli_thinking": "Увімкнути режим міркувань на моделях, що його підтримують",
+        "ask_enable_expert": "Увімкнути Експерт-оцінювач для автоматичної оцінки якості відповідей?",
+        "expert_model_selection": "Оберіть модель-експерт для оцінки відповідей",
+        "cli_temperature": "Значення температури для тестування (через кому, наприклад, 0.0,0.7,1.0)",
+        "error_invalid_temperature": "❌ Невірні значення температури '{values}'. Використовуйте значення через кому від 0.0 до 2.0.",
     }
 }
 

@@ -134,6 +134,9 @@ The project uses a modular architecture. You can run it in two ways:
 # Auto-generate context sizes (geometric progression)
 ./venv/bin/python roo_bench.py --context-sizes-auto
 
+# Custom temperature values (comma-separated, default: 0.0,0.66,1.0)
+./venv/bin/python roo_bench.py --temperature 0.0,0.7,1.0
+
 # Save results to file
 ./venv/bin/python roo_bench.py --output results.json --output-format json
 ./venv/bin/python roo_bench.py --output results.csv --output-format csv
@@ -148,6 +151,10 @@ The project uses a modular architecture. You can run it in two ways:
 ./venv/bin/python roo_bench.py --list-chains       # List all prompt chains
 ./venv/bin/python roo_bench.py --independent       # Run only independent prompts
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Run specific chain
+
+# Control generation length (tokens)
+./venv/bin/python roo_bench.py --num-predict 16384  # Generate up to 16384 tokens
+./venv/bin/python roo_bench.py --num-predict -1     # Unlimited generation (until EOS)
 ```
 
 #### Hybrid Prompt System
@@ -307,6 +314,7 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--independent` | Run only independent prompts test mode | False |
 | `--chain` | Run only the specified prompt chain (e.g., `chain_rest_api`) | None |
 | `--prompts-file` | Path to prompts.jsonc configuration file | `prompts.jsonc` |
+| `--num-predict` | Maximum tokens to generate per request (use -1 for unlimited) | `8192` |
 
 #### Environment Variables
 
@@ -661,6 +669,9 @@ chmod +x roo_bench.py
 # Автоматична генерація розмірів контексту (геометрична прогресія)
 ./venv/bin/python roo_bench.py --context-sizes-auto
 
+# Кастомні значення температури (через кому, за замовчуванням: 0.0,0.66,1.0)
+./venv/bin/python roo_bench.py --temperature 0.0,0.7,1.0
+
 # Зберегти результати у файл
 ./venv/bin/python roo_bench.py --output results.json --output-format json
 ./venv/bin/python roo_bench.py --output results.csv --output-format csv
@@ -675,6 +686,10 @@ chmod +x roo_bench.py
 ./venv/bin/python roo_bench.py --list-chains       # Список промт-цепочок
 ./venv/bin/python roo_bench.py --independent       # Тільки незалежні промти
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Конкретна цепочка
+
+# Контроль довжини генерації (токени)
+./venv/bin/python roo_bench.py --num-predict 16384  # Генерувати до 16384 токенів
+./venv/bin/python roo_bench.py --num-predict -1     # Необмежена генерація (до EOS)
 ```
 
 #### Гібридна система промтів
@@ -834,6 +849,7 @@ Roo Bench автоматично кешує можливості моделей 
 | `--independent` | Запуск тільки незалежних промтів | False |
 | `--chain` | Запуск тільки вказаної промт-цепочки (напр., `chain_rest_api`) | None |
 | `--prompts-file` | Шлях до файлу конфігурації промтів | `prompts.jsonc` |
+| `--num-predict` | Максимальна кількість токенів для генерації (використовуйте -1 для необмежено) | `8192` |
 
 #### Налаштування віддаленого сервера Ollama
 

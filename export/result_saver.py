@@ -188,6 +188,7 @@ class ResultSaver:
                         'mode': metric.get('mode', ''),
                         'chain_id': metric.get('chain_id', ''),
                         'chain_name': metric.get('chain_name', ''),
+                        'expert_score': metric.get('expert_score', ''),
                     }
                     csv_rows.append(row)
 
@@ -198,7 +199,7 @@ class ResultSaver:
                          'std_dev', 'vram', 'vram_str',
                          'prompt_id', 'prompt_name', 'duration_sec',
                          'prompt_tokens', 'response_tokens', 'temperature',
-                         'mode', 'chain_id', 'chain_name']
+                         'mode', 'chain_id', 'chain_name', 'expert_score']
 
             with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')

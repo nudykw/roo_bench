@@ -8,3 +8,4 @@ data/model_cache.json
 benchmark_results*.json
 .clinerules 
 .roo/
+tests/temp/

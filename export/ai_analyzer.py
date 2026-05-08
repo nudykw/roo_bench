@@ -12,11 +12,13 @@ from ui.markdown_renderer import display_markdown, stream_markdown
 
 logger = logging.getLogger('roo_bench')
 
+_PROMPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'prompts'))
+
 
 class AIAnalyzer:
     """Handles AI analysis of benchmark results via Ollama."""
 
-    PROMPTS_FILE = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.json'))
+    PROMPTS_FILE = os.path.join(_PROMPTS_DIR, 'analysis_prompt.jsonc')
 
     def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
         """Initialize AI analyzer.
@@ -32,11 +34,12 @@ class AIAnalyzer:
         self.prompts = self._load_prompts()
 
     def _load_prompts(self) -> dict:
-        """Load prompt templates from prompts/analysis_prompt.json."""
+        """Load prompt templates from prompts/analysis_prompt.jsonc."""
         try:
+            import json5
             with open(self.PROMPTS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
+                return json5.load(f)
+        except Exception as e:
             print(f"Warning: Could not load prompts file: {e}. Using fallback.")
             return self._get_fallback_prompts()
 
