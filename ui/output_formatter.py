@@ -134,3 +134,39 @@ def print_recommendations(results: List[BenchmarkResult]):
             ctx = run.ctx
             ctx_str = f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
             print(f"  Context: {ctx_str} | Avg TPS: {run.avg_tps:.2f}")
+
+
+def format_tokens_info(prompt_tokens: int, response_tokens: int) -> str:
+    """Format token information for console output.
+    
+    Args:
+        prompt_tokens: Number of tokens in the prompt
+        response_tokens: Number of tokens in the response
+        
+    Returns:
+        str: Formatted token information string
+    """
+    return f"| 📊 Tokens: {prompt_tokens}/{response_tokens}"
+
+
+def update_tokens_display(prompt_tokens: int, response_tokens: int, estimated_response_tokens: int = 0, response_len: int = 0, indent: str = "         ", is_done: bool = False) -> None:
+    """Update token display in real-time during streaming.
+    
+    This function prints/updates the token count on a single line.
+    During streaming (is_done=False), it shows estimated progress based on response length.
+    When done (is_done=True), it shows real token counts from the API.
+    
+    Args:
+        prompt_tokens: Current number of prompt tokens evaluated (0 during streaming)
+        response_tokens: Current number of response tokens from API (0 during streaming)
+        estimated_response_tokens: Estimated response tokens based on text length
+        response_len: Raw response text length in characters
+        indent: Leading whitespace for alignment
+        is_done: If True, this is the final chunk with real token counts
+    """
+    if is_done:
+        # Show real token counts when done
+        print(f"{indent}📊 Tokens: {prompt_tokens}/{response_tokens}", end="\r", flush=True)
+    elif estimated_response_tokens > 0 or response_len > 0:
+        # Show estimated tokens during streaming with response length
+        print(f"{indent}📊 Tokens: ~{prompt_tokens}/{estimated_response_tokens} (len={response_len})", end="\r", flush=True)

@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, List, Tuple
 
@@ -139,7 +140,8 @@ class BaseApiClient(ABC):
                        temperature: Optional[float] = None,
                        prompt: str = None,
                        prompt_metadata: dict = None,
-                       num_predict: int = 8192) -> tuple:
+                       num_predict: int = 8192,
+                       on_token_update: callable = None) -> tuple:
         """Run benchmark generation for a model with multiple runs for averaging.
 
         Args:
@@ -151,6 +153,7 @@ class BaseApiClient(ABC):
             prompt: Custom prompt to use. If None, uses default benchmark prompt.
             prompt_metadata: Metadata about the prompt (id, name, mode, chain info)
             num_predict: Maximum number of tokens to generate (default: 8192, use -1 for unlimited)
+            on_token_update: Optional callback function(current_prompt_tokens, current_response_tokens) for real-time updates
 
         Returns:
             tuple: (avg_tps, vram, tps_list, error, prompt_metadata, temperature)
@@ -183,7 +186,7 @@ class BaseApiClient(ABC):
             payload = {
                 "model": model_name,
                 "prompt": prompt,
-                "stream": False,
+                "stream": True,
                 "options": options
             }
             if disable_thinking:
@@ -196,29 +199,34 @@ class BaseApiClient(ABC):
             stop_monitoring = threading.Event()
             vram_samples = []
 
+            # Create token update callback for this run (or None)
+            run_on_token_update = on_token_update if on_token_update else None
+            
+            logger.info("[DEBUG] Starting run %d with stream=True, on_token_update=%s", run_num + 1, run_on_token_update is not None)
+
             try:
                 # Start VRAM monitoring thread before blocking request
                 monitor_thread = threading.Thread(target=self._monitor_vram, args=(stop_monitoring, max_vram_ref, vram_samples), daemon=True)
                 monitor_thread.start()
 
                 try:
+                    logger.info("[DEBUG] Sending streaming request to %s", f"{self.base_url}/api/generate")
                     response = requests.post(
                         f"{self.base_url}/api/generate",
                         json=payload,
                         headers=self.headers,
                         timeout=self.timeout,
-                        stream=False
+                        stream=True
                     )
+                    logger.info("[DEBUG] Response status: %d", response.status_code)
                 except KeyboardInterrupt:
                     stop_monitoring.set()
                     monitor_thread.join(timeout=2)
                     raise
 
-                # Stop monitoring after response received
-                stop_monitoring.set()
-                monitor_thread.join(timeout=2)
-
                 if response.status_code != 200:
+                    stop_monitoring.set()
+                    monitor_thread.join(timeout=2)
                     try:
                         err_msg = response.json().get("error", f"HTTP {response.status_code}")
                     except Exception:
@@ -226,21 +234,94 @@ class BaseApiClient(ABC):
                     error = get_text("error_ollama_api", error_msg=err_msg)
                     break
 
-                final_data = response.json()
+                logger.info("[DEBUG] Starting to parse streaming response for run %d", run_num + 1)
                 
+                # Parse streaming response using raw bytes for real-time updates
+                response_text = ""
+                total_duration = 0
+                eval_count = 0
+                prompt_eval_count = 0
+                
+                # Use iter_content for real-time chunk processing
+                buffer = b""
+                chunk_count = 0
+                callback_count = 0
+                last_update_time = 0  # Track last callback time for throttling
+                logger.info("[DEBUG] Starting iter_content loop for run %d", run_num + 1)
+                
+                for chunk in response.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    
+                    chunk_count += 1
+                    buffer += chunk
+                    
+                    # Process complete JSON objects in the buffer
+                    while True:
+                        # Find the next complete JSON object
+                        idx = buffer.find(b"\n")
+                        if idx == -1:
+                            break
+                        
+                        line_bytes = buffer[:idx]
+                        buffer = buffer[idx+1:]
+                        
+                        if not line_bytes.strip():
+                            continue
+                        
+                        try:
+                            data = json.loads(line_bytes.decode('utf-8'))
+                            
+                            # Track response text
+                            if 'response' in data:
+                                response_text += data['response']
+                            
+                            # Track token counts (these accumulate during streaming)
+                            if 'prompt_eval_count' in data:
+                                prompt_eval_count = data['prompt_eval_count']
+                            if 'eval_count' in data:
+                                eval_count = data['eval_count']
+                            
+                            # Track duration
+                            if 'total_duration' in data:
+                                total_duration = data['total_duration']
+                            
+                            # Call token update callback for real-time display
+                            # During streaming (done=False), pass response length as approximate token count
+                            # When done=True, pass real token counts
+                            # Throttle updates to max 1 per second using time-based check
+                            current_time = time.time()
+                            should_update = (data.get('done', False) or
+                                           (current_time - last_update_time) >= 1.0)
+                            
+                            if run_on_token_update and should_update:
+                                callback_count += 1
+                                last_update_time = current_time
+                                # Estimate response tokens from response text length (~4 chars per token)
+                                estimated_response_tokens = len(response_text) // 4 if response_text else 0
+                                response_len = len(response_text)
+                                run_on_token_update(prompt_eval_count, eval_count, estimated_response_tokens, response_len, data.get('done', False))
+                                
+                        except json.JSONDecodeError as e:
+                            continue
+                
+                logger.info("[DEBUG] Finished iter_content loop: %d chunks, %d callbacks", chunk_count, callback_count)
+
+                # Stop monitoring after response received
+                stop_monitoring.set()
+                monitor_thread.join(timeout=2)
+                
+                # Check if we got any meaningful response
+                if not response_text and not eval_count:
+                    logger.warning("[DEBUG] Empty response for run %d", run_num + 1)
+                    # Don't break - allow retry on next run
+
                 # Debug: Log full response structure for diagnosis
                 logger.debug(
-                    "[DEBUG] API response keys: %s",
-                    list(final_data.keys())
+                    "[DEBUG] API response fields: eval_count=%d prompt_eval_count=%d total_duration=%d done_reason=%r",
+                    eval_count, prompt_eval_count, total_duration,
+                    "streaming_complete"
                 )
-                logger.debug(
-                    "[DEBUG] API response fields: eval_count=%d total_duration=%d done_reason=%r",
-                    final_data.get("eval_count", 0),
-                    final_data.get("total_duration", 0),
-                    final_data.get("done_reason")
-                )
-                
-                response_text = final_data.get("response", "")
                 
                 # Check if response is a string (not a list or other type)
                 if not isinstance(response_text, str):
@@ -266,9 +347,8 @@ class BaseApiClient(ABC):
                 }
 
                 # Parse TPS from server-side metrics
-                total_duration = final_data.get("total_duration", 0) / 1e9
-                eval_count = final_data.get("eval_count", 0)
-                tps = eval_count / total_duration if total_duration > 0 else 0
+                total_duration_sec = total_duration / 1e9 if total_duration else 0
+                tps = eval_count / total_duration_sec if total_duration_sec > 0 else 0
 
                 # Use max VRAM observed during generation
                 vram_during = max_vram_ref[0] if vram_samples else None
@@ -276,9 +356,9 @@ class BaseApiClient(ABC):
                 # Update run_data with actual values
                 run_data['tps'] = tps
                 run_data['vram'] = vram_during
-                run_data['total_duration'] = final_data.get("total_duration", 0) if final_data else 0
-                run_data['prompt_eval_count'] = final_data.get("prompt_eval_count", 0) if final_data else 0
-                run_data['eval_count'] = final_data.get("eval_count", 0) if final_data else 0
+                run_data['total_duration'] = total_duration
+                run_data['prompt_eval_count'] = prompt_eval_count
+                run_data['eval_count'] = eval_count
                 run_data['response'] = response_text
                 tps_list.append(run_data)
 

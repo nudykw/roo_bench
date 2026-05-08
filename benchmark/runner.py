@@ -8,6 +8,7 @@ from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
 from i18n import get_text
 from prompts.loader import PromptLoader
+from ui.output_formatter import format_tokens_info, update_tokens_display
 
 # Setup logging
 logger = logging.getLogger('roo_bench.benchmark')
@@ -192,6 +193,14 @@ class BenchmarkRunner:
                     print(f"         Running prompt: {prompt_name} (ID: {prompt_id})")
                     logger.debug(f"📝 Prompt text: {prompt}")
                     
+                    # Create token update callback for this prompt
+                    current_tokens = {'prompt': 0, 'response': 0}
+                    
+                    def token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                        current_tokens['prompt'] = prompt_tokens
+                        current_tokens['response'] = response_tokens
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                    
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
                             model_name,
@@ -201,7 +210,8 @@ class BenchmarkRunner:
                             temperature=temp,
                             prompt=prompt,
                             prompt_metadata=prompt_metadata,
-                            num_predict=self.num_predict
+                            num_predict=self.num_predict,
+                            on_token_update=token_callback
                         )
                         
                         if error:
@@ -218,7 +228,10 @@ class BenchmarkRunner:
                         duration = tps_list[0].get('total_duration', 0) / 1e9
                         prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
                         response_tokens = tps_list[0].get('eval_count', 0)
+                        # Clear the streaming token display and show final metrics
                         print(f"            Duration: {duration:.2f}s | Prompt: {prompt_tokens} | Response: {response_tokens}")
+                        # Move to next line after streaming display
+                        print()
                         
                         # Calculate std_dev
                         if len(tps_list) > 1:
@@ -357,6 +370,10 @@ class BenchmarkRunner:
                     logger.info(f"📝 Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                     print(f"         Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                     
+                    # Create token update callback for this chain
+                    def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                    
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
                             model_name,
@@ -366,7 +383,8 @@ class BenchmarkRunner:
                             temperature=temp,
                             prompt=prompt,
                             prompt_metadata=prompt_metadata,
-                            num_predict=self.num_predict
+                            num_predict=self.num_predict,
+                            on_token_update=chain_token_callback
                         )
                         
                         if error:
@@ -376,6 +394,8 @@ class BenchmarkRunner:
                         duration = tps_list[0].get('total_duration', 0) / 1e9
                         prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
                         response_tokens = tps_list[0].get('eval_count', 0)
+                        # Move to next line after streaming display
+                        print()
                         
                         if len(tps_list) > 1:
                             mean = avg_tps
@@ -501,10 +521,15 @@ class BenchmarkRunner:
                 print(f"   🌡️  Temperature: {temp:.2f}")
                 print(f"   📦 Model: {model_name}")
                 
+                # Create token update callback for run_for_model
+                def run_for_model_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done)
+
                 try:
                     avg_tps, vram, tps_list, error_msg, _, used_temp = self.ollama_client.run_generation(
                         model_name, ctx, self.num_runs, self.disable_thinking, temperature=temp,
-                        num_predict=self.num_predict
+                        num_predict=self.num_predict,
+                        on_token_update=run_for_model_token_callback
                     )
 
                     if error_msg:
@@ -521,11 +546,12 @@ class BenchmarkRunner:
                             vram_str = f"{vram_run / 1024 / 1024:.1f} MiB"
                         else:
                             vram_str = "N/A"
-                        print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str})")
-                        duration = run.get('total_duration', 0) / 1e9
                         prompt_tokens = run.get('prompt_eval_count', 0)
                         response_tokens = run.get('eval_count', 0)
-                        print(f"      Duration: {duration:.2f}s | Prompt tokens: {prompt_tokens} | Response tokens: {response_tokens}")
+                        duration = run.get('total_duration', 0) / 1e9
+                        tokens_info = format_tokens_info(prompt_tokens, response_tokens)
+                        print(f"   Run {run_num}: {tps:.2f} TPS (VRAM: {vram_str}) {tokens_info}")
+                        print(f"      Duration: {duration:.2f}s")
                     
                     try:
                         actual_ctx = self.ollama_client.get_actual_num_ctx(model_name)
@@ -681,6 +707,10 @@ class BenchmarkRunner:
                     logger.info(f"📝 Running [{mode}] {prompt_name} (ID: {prompt_id})")
                     print(f"         [{mode}] {prompt_name} (ID: {prompt_id})")
                     
+                    # Create token update callback for this prompt
+                    def independent_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                    
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
                             model_name,
@@ -690,12 +720,16 @@ class BenchmarkRunner:
                             temperature=temp,
                             prompt=prompt,
                             prompt_metadata=prompt_metadata,
-                            num_predict=self.num_predict
+                            num_predict=self.num_predict,
+                            on_token_update=independent_token_callback
                         )
                         
                         if error:
                             print(f"         Error: {error}")
                             continue
+                        
+                        # Move to next line after streaming display
+                        print()
                         
                         if len(tps_list) > 1:
                             mean = avg_tps
@@ -837,6 +871,10 @@ class BenchmarkRunner:
                         logger.info(f"📝 Chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                         print(f"            [{mode}] {prompt_name}")
                         
+                        # Create token update callback for this chain
+                        def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                            update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done)
+                        
                         try:
                             avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
                                 model_name,
@@ -846,7 +884,8 @@ class BenchmarkRunner:
                                 temperature=temp,
                                 prompt=prompt,
                                 prompt_metadata=prompt_metadata,
-                                num_predict=self.num_predict
+                                num_predict=self.num_predict,
+                                on_token_update=chain_token_callback_2
                             )
                             
                             if error:
@@ -856,6 +895,8 @@ class BenchmarkRunner:
                             duration = tps_list[0].get('total_duration', 0) / 1e9
                             prompt_tokens = tps_list[0].get('prompt_eval_count', 0)
                             response_tokens = tps_list[0].get('eval_count', 0)
+                            # Move to next line after streaming display
+                            print()
                             
                             if len(tps_list) > 1:
                                 mean = avg_tps
