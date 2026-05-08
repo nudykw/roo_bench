@@ -8,6 +8,7 @@ from typing import Optional, Dict, List
 
 import requests
 from i18n import get_text, _current_language
+from ui.markdown_renderer import display_markdown, stream_markdown
 
 logger = logging.getLogger('roo_bench')
 
@@ -136,8 +137,6 @@ class AIAnalyzer:
         Raises:
             Exception: If the API request fails
         """
-        from ui.markdown_renderer import stream_markdown
-        
         prompt = self.generate_prompt(all_results, test_models)
         
         # Calculate required context size (rough estimate: 1 token ~ 3 chars for mixed content)
@@ -494,7 +493,7 @@ class AIAnalyzer:
             print("\n" + "=" * 60)
             print(get_text("analysis_response", model_name=actual_model_name))
             print("=" * 60)
-            print(response)
+            display_markdown(response)
             
             # Translate if needed (BEFORE unloading to avoid model reload)
             if target_lang != 'en':
@@ -516,7 +515,7 @@ class AIAnalyzer:
                 print(f"   🌐 Starting translation...")
                 translated = self.translate(response, target_lang, actual_model_name)
                 if translated:
-                    print(translated)
+                    display_markdown(translated)
                     print(f"   ✅ Translation completed")
                 else:
                     print(get_text("translation_unavailable"))
@@ -701,7 +700,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
         print("\n" + "=" * 60)
         print(get_text("analysis_response", model_name=model_name))
         print("=" * 60)
-        print(response)
+        display_markdown(response)
 
         # Translate if needed (BEFORE unload to avoid model reload)
         if current_lang != 'en':
@@ -719,7 +718,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: dict, test_mo
             
             translated = analyzer.translate(response, current_lang, model_name)
             if translated:
-                print(translated)
+                display_markdown(translated)
             else:
                 print(get_text("translation_unavailable"))
     

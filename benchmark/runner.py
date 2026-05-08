@@ -59,7 +59,7 @@ class BenchmarkRunner:
             list: Filtered list of valid context sizes (minimum 64K)
         """
         # Filter contexts: take only those >= 64K and <= maximum
-        MIN_CONTEXT = 32 768  # 32K minimum
+        MIN_CONTEXT = 32_768  # 32K minimum
         valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
     
         # If the model supports some "non-standard" max context (e.g. 128000),
