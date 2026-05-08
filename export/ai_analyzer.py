@@ -15,7 +15,7 @@ logger = logging.getLogger('roo_bench')
 class AIAnalyzer:
     """Handles AI analysis of benchmark results via Ollama."""
 
-    PROMPTS_FILE = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.json')
+    PROMPTS_FILE = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.json'))
 
     def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
         """Initialize AI analyzer.
