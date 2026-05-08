@@ -131,6 +131,10 @@ The project uses a modular architecture. You can run it in two ways:
 # Custom context sizes (comma-separated)
 ./venv/bin/python roo_bench.py --context-sizes 8192,16384,32768
 
+# Human-readable format (K for kilobytes, M for megabytes)
+./venv/bin/python roo_bench.py --context-sizes 8K,16K,128K,2048K
+./venv/bin/python roo_bench.py --context-sizes 1M,2M
+
 # Auto-generate context sizes (geometric progression)
 ./venv/bin/python roo_bench.py --context-sizes-auto
 
@@ -303,7 +307,7 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--ssh-port` | SSH port | `22` |
 | `--ssh-key` | Path to SSH private key (auto-detected if not specified) | None |
 | `--num-runs` | Number of benchmark runs per context | `3` |
-| `--context-sizes` | Comma-separated context sizes to test | Auto-detect |
+| `--context-sizes` | Comma-separated context sizes to test (supports `8K`, `16K`, `128K`, `1M` formats) | Auto-detect |
 | `--context-sizes-auto` | Auto-generate context sizes | False |
 | `--output` | Output file path | None |
 | `--output-format` | Output format: `json` or `csv` | None |
@@ -840,7 +844,7 @@ Roo Bench автоматично кешує можливості моделей 
 | `--ssh-port` | SSH порт | `22` |
 | `--ssh-key` | Шлях до приватного SSH ключа (авто-виявлення, якщо не вказано) | None |
 | `--num-runs` | Кількість запусків бенчмарку на контекст | `3` |
-| `--context-sizes` | Розміри контексту для тестування через кому | Авто-виявлення |
+| `--context-sizes` | Розміри контексту для тестування через кому (підтримується `8K`, `16K`, `128K`, `1M`) | Авто-виявлення |
 | `--context-sizes-auto` | Авто-генерація розмірів контексту | False |
 | `--output` | Шлях до файлу виводу | None |
 | `--output-format` | Формат виводу: `json` або `csv` | None |

@@ -124,12 +124,16 @@ class BenchmarkRunner:
         MIN_CONTEXT = 32_768  # 32K minimum
         valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
     
+        logger.info(f"[DIAGNOSIS] filter_contexts: input_sizes={self.context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
+    
         # If the model supports some "non-standard" max context (e.g. 128000),
         # which is not in our list, but it's >= 32K and <= 262144, we can add it for testing
         if max_ctx not in valid_contexts and MIN_CONTEXT <= max_ctx <= 262144:
+            logger.info(f"[DIAGNOSIS] Adding max_ctx={max_ctx} to valid_contexts (not in list)")
             valid_contexts.append(max_ctx)
             valid_contexts.sort()
     
+        logger.info(f"[DIAGNOSIS] filter_contexts result: {valid_contexts}")
         return valid_contexts
 
     def run_independent_prompts(self, model: ModelInfo, mode: str, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:

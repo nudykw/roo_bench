@@ -11,6 +11,39 @@ from constants import CONTEXT_SIZES
 logger = logging.getLogger('roo_bench')
 
 
+def parse_context_size(size_str: str) -> int:
+    """Parse a context size string into an integer number of tokens.
+    
+    Supports formats:
+        - Plain number: "131072", "2048"
+        - K suffix: "8K", "16K", "128K", "2048K"
+        - M suffix: "1M" (1048576)
+    
+    Args:
+        size_str: String representation of context size
+        
+    Returns:
+        int: Number of tokens
+        
+    Raises:
+        ValueError: If the string cannot be parsed
+    """
+    size_str = size_str.strip().upper()
+    
+    # Check for K suffix (kilobytes)
+    if size_str.endswith('K'):
+        num = float(size_str[:-1])
+        return int(num * 1024)
+    
+    # Check for M suffix (megabytes)
+    if size_str.endswith('M'):
+        num = float(size_str[:-1])
+        return int(num * 1024 * 1024)
+    
+    # Plain number
+    return int(size_str)
+
+
 def setup_logging(verbose_level: int = 0):
     """Configure logging based on verbose level.
     
@@ -123,7 +156,7 @@ def get_context_sizes(args) -> list:
     # If --context-sizes is specified, parse from string
     if args.context_sizes:
         try:
-            sizes = [int(x.strip()) for x in args.context_sizes.split(',')]
+            sizes = [parse_context_size(x.strip()) for x in args.context_sizes.split(',')]
             if all(s > 0 for s in sizes):
                 return sorted(sizes)
             else:
