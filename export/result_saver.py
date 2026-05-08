@@ -4,9 +4,60 @@ import json
 import csv
 import os
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from i18n import get_text, _current_language
 from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
+
+
+def analyze_existing_file(file_path: str) -> dict:
+    """Analyze existing results file to determine append strategy.
+
+    Returns:
+        dict with keys:
+        - 'exists': bool
+        - 'size': int (bytes)
+        - 'created': datetime
+        - 'modified': datetime
+        - 'executed_prompts': list of prompt_ids
+        - 'models': list of model names
+    """
+    result = {
+        'exists': False,
+        'size': 0,
+        'created': None,
+        'modified': None,
+        'executed_prompts': [],
+        'models': []
+    }
+    
+    if not os.path.exists(file_path):
+        return result
+    
+    result['exists'] = True
+    result['size'] = os.path.getsize(file_path)
+    
+    stat = os.stat(file_path)
+    result['created'] = datetime.fromtimestamp(stat.st_ctime)
+    result['modified'] = datetime.fromtimestamp(stat.st_mtime)
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Extract executed prompts from new format
+        executed = data.get('executed_prompts', [])
+        if isinstance(executed, list):
+            result['executed_prompts'] = [p.get('id') if isinstance(p, dict) else p for p in executed]
+        
+        # Extract models
+        for result_entry in data.get('results', []):
+            model_data = result_entry.get('model', {})
+            if model_data.get('name'):
+                result['models'].append(model_data['name'])
+    except (json.JSONDecodeError, KeyError):
+        pass
+    
+    return result
 
 
 class ResultSaver:
@@ -33,14 +84,87 @@ class ResultSaver:
         if not self.output_file or not self.output_format:
             return
 
-        # Prepare data for export
-        export_data = self._prepare_export_data(results, prompts_config)
-
-        # Save based on format
-        if self.output_format == 'json':
-            self._save_json(export_data)
-        elif self.output_format == 'csv':
+        # For CSV, always overwrite (no append support)
+        if self.output_format == 'csv':
+            export_data = self._prepare_export_data(results, prompts_config)
             self._save_csv(export_data)
+            return
+
+        # For JSON, check if file exists and handle append/overwrite
+        if self.output_format == 'json' and os.path.exists(self.output_file):
+            new_executed = prompts_config.get('executed', []) if prompts_config else []
+            if self.should_append(self.output_file, new_executed):
+                self._append_results(results, prompts_config)
+            else:
+                # Ask for overwrite confirmation
+                self._save_json(self._prepare_export_data(results, prompts_config), ask_overwrite=True)
+        else:
+            # Save as new file
+            export_data = self._prepare_export_data(results, prompts_config)
+            self._save_json(export_data)
+
+    def should_append(self, existing_file_path: str, new_executed_prompts: List[dict]) -> bool:
+        """Check if new results can be appended to existing file.
+
+        Comparison is based ONLY on prompt_id.
+        Full intersection is required (same prompt_ids, order may differ).
+
+        Args:
+            existing_file_path: Path to existing results file
+            new_executed_prompts: List of executed prompts from current run
+
+        Returns:
+            bool: True if file can be appended (full intersection of prompt_ids)
+        """
+        if not new_executed_prompts:
+            return False
+        
+        try:
+            with open(existing_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            existing_executed = data.get('executed_prompts', [])
+            if isinstance(existing_executed, list):
+                existing_ids = set(p.get('id') if isinstance(p, dict) else p for p in existing_executed)
+            else:
+                existing_ids = set()
+            
+            new_ids = set(p.get('id') if isinstance(p, dict) else p for p in new_executed_prompts)
+            
+            # Full intersection required
+            return existing_ids == new_ids and len(existing_ids) > 0
+        except (json.JSONDecodeError, KeyError):
+            return False
+
+    def _append_results(self, results: List[BenchmarkResult],
+                        prompts_config: Optional[dict] = None) -> None:
+        """Append new results to existing JSON file.
+
+        Args:
+            results: List of BenchmarkResult objects to append
+            prompts_config: Optional prompts configuration
+        """
+        try:
+            with open(self.output_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            data = {'prompts_config': None, 'results': []}
+        
+        # Add new results
+        for result in results:
+            result_dict = {
+                'model': result.model.model_dump(),
+                'results': [m.model_dump() for m in result.results],
+            }
+            data['results'].append(result_dict)
+        
+        # Update executed prompts
+        if prompts_config and 'executed' in prompts_config:
+            data['executed_prompts'] = prompts_config['executed']
+        
+        with open(self.output_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(get_text("output_json", output_file=self.output_file))
 
     def _prepare_export_data(self, results: List[BenchmarkResult],
                              prompts_config: Optional[dict] = None) -> dict:
@@ -55,29 +179,37 @@ class ResultSaver:
         """
         # Include prompts configuration if provided
         prompts_section = None
+        executed_section = []
+        
         if prompts_config:
-            prompts_section = {
-                'independent': {
-                    mode: [{'id': p.get('id'), 'name': p.get('name'), 'prompt': p.get('prompt')}
-                           for p in prompts]
-                    for mode, prompts in prompts_config.get('independent', {}).items()
-                },
-                'chains': [
-                    {
-                        'id': chain.get('id'),
-                        'name': chain.get('name'),
-                        'prompts': {
-                            mode: {
-                                'id': p.get('id'),
-                                'name': p.get('name'),
-                                'prompt': p.get('prompt')
+            # Check if this is the new 'executed' format
+            if 'executed' in prompts_config:
+                executed_section = prompts_config['executed']
+                prompts_section = None  # Old format not used
+            else:
+                # Old format - full prompts config
+                prompts_section = {
+                    'independent': {
+                        mode: [{'id': p.get('id'), 'name': p.get('name'), 'prompt': p.get('prompt')}
+                               for p in prompts]
+                        for mode, prompts in prompts_config.get('independent', {}).items()
+                    },
+                    'chains': [
+                        {
+                            'id': chain.get('id'),
+                            'name': chain.get('name'),
+                            'prompts': {
+                                mode: {
+                                    'id': p.get('id'),
+                                    'name': p.get('name'),
+                                    'prompt': p.get('prompt')
+                                }
+                                for mode, p in chain.get('prompts', {}).items()
                             }
-                            for mode, p in chain.get('prompts', {}).items()
                         }
-                    }
-                    for chain in prompts_config.get('chains', [])
-                ]
-            }
+                        for chain in prompts_config.get('chains', [])
+                    ]
+                }
 
         # Prepare results list - nested structure (one entry = one model)
         results_list = []
@@ -91,18 +223,20 @@ class ResultSaver:
         # Return new structure with prompts_config at root level
         return {
             'prompts_config': prompts_section,
+            'executed_prompts': executed_section,
             'results': results_list
         }
 
-    def _save_json(self, export_data: dict):
+    def _save_json(self, export_data: dict, ask_overwrite: bool = True):
         """Save results to JSON file.
 
         Args:
-            export_data: List of result dictionaries
+            export_data: Dictionary with results data
+            ask_overwrite: Whether to ask for confirmation before overwriting
         """
         try:
             # Check if file exists and ask for confirmation
-            if os.path.exists(self.output_file):
+            if ask_overwrite and os.path.exists(self.output_file):
                 file_size = os.path.getsize(self.output_file)
                 print(get_text("output_file_exists",
                               output_file=self.output_file,
@@ -242,6 +376,11 @@ def load_results_from_file(file_path: str) -> tuple:
                         'independent': prompts_section.get('independent', {}),
                         'chains': prompts_section.get('chains', [])
                     }
+                
+                # Also extract executed_prompts if present (new format)
+                executed_prompts = data.get('executed_prompts', [])
+                if executed_prompts and not prompts_config:
+                    prompts_config = {'executed': executed_prompts}
                 
                 # Load new structure: {'prompts_config': ..., 'results': [...]}
                 for result_data in data.get('results', []):

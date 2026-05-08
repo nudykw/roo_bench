@@ -422,6 +422,18 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
             if benchmark_result:
                 all_results.append(benchmark_result)
+                # Save results after each model with executed prompts
+                if hasattr(args, 'output') and hasattr(args, 'output_format'):
+                    save_results(
+                        all_results,
+                        args.output,
+                        args.output_format,
+                        prompts_config={
+                            'executed': benchmark_runner._executed_prompts
+                        }
+                    )
+                    # Clear executed prompts for next model
+                    benchmark_runner._clear_executed_prompts()
             if error:
                 continue
 
@@ -445,6 +457,18 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             benchmark_result, error = benchmark_runner.run_all_chains(model_info)
             if benchmark_result:
                 all_results.append(benchmark_result)
+                # Save results after each model with executed prompts
+                if hasattr(args, 'output') and hasattr(args, 'output_format'):
+                    save_results(
+                        all_results,
+                        args.output,
+                        args.output_format,
+                        prompts_config={
+                            'executed': benchmark_runner._executed_prompts
+                        }
+                    )
+                    # Clear executed prompts for next model
+                    benchmark_runner._clear_executed_prompts()
             if error:
                 continue
 
@@ -472,6 +496,17 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             benchmark_result, error = benchmark_runner.run_chain(model_info, chain)
             if benchmark_result:
                 all_results.append(benchmark_result)
+                # Save results after each model with executed prompts
+                if hasattr(args, 'output') and hasattr(args, 'output_format'):
+                    save_results(
+                        all_results,
+                        args.output,
+                        args.output_format,
+                        prompts_config={
+                            'executed': benchmark_runner._executed_prompts
+                        }
+                    )
+                    benchmark_runner._clear_executed_prompts()
             if error:
                 continue
 
@@ -499,6 +534,17 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
                 if benchmark_result:
                     all_results.append(benchmark_result)
+                    # Save results after each model with executed prompts
+                    if hasattr(args, 'output') and hasattr(args, 'output_format'):
+                        save_results(
+                            all_results,
+                            args.output,
+                            args.output_format,
+                            prompts_config={
+                                'executed': benchmark_runner._executed_prompts
+                            }
+                        )
+                        benchmark_runner._clear_executed_prompts()
                 if error:
                     continue
         else:
@@ -630,13 +676,19 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
 
     # Save results to file (if --output flag specified)
+    # Only save if not already saved after each model
     if hasattr(args, 'output') and hasattr(args, 'output_format'):
-        save_results(
-            all_results,
-            args.output,
-            args.output_format,
-            prompts_config=prompt_loader.data if prompt_loader else None
-        )
+        # Check if we already saved after each model (all_results would be empty or already saved)
+        # If there are results but no output was specified during model testing, save now
+        if all_results and not hasattr(args, 'output') or not args.output:
+            save_results(
+                all_results,
+                args.output,
+                args.output_format,
+                prompts_config={
+                    'executed': benchmark_runner._executed_prompts if hasattr(benchmark_runner, '_executed_prompts') else []
+                }
+            )
     
     # Post-benchmark interactive workflow (save + AI analysis)
     _post_benchmark_workflow(args, all_results, test_models, config)

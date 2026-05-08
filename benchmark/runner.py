@@ -61,6 +61,7 @@ class BenchmarkRunner:
         self.expert_evaluator = expert_evaluator
         self._response_store: List[ExpertEvaluationEntry] = []
         self.independent_top = independent_top  # Limit prompts per mode for independent tests
+        self._executed_prompts: List[dict] = []  # Track successfully executed prompts
 
     def run_expert_evaluation(self) -> None:
         """Run expert evaluation on all stored responses.
@@ -110,6 +111,20 @@ class BenchmarkRunner:
             len(entry.response), entry.metrics_ref is not None
         )
         self._response_store.append(entry)
+
+    def _record_executed_prompt(self, prompt_data: dict) -> None:
+        """Record a prompt that was successfully executed.
+
+        Args:
+            prompt_data: Dictionary with prompt metadata (id, name, mode, type, ctx, temperature)
+        """
+        self._executed_prompts.append(prompt_data)
+        logger.info("[Prompt] Recorded executed prompt: id=%s mode=%s", prompt_data.get('id'), prompt_data.get('mode'))
+
+    def _clear_executed_prompts(self) -> None:
+        """Clear executed prompts list for the next model."""
+        self._executed_prompts = []
+        logger.info("[Prompt] Cleared executed prompts list for next model")
 
     def filter_contexts(self, max_ctx: int) -> list:
         """Filter context sizes based on model's maximum context.
@@ -269,6 +284,16 @@ class BenchmarkRunner:
                             mode=mode,
                         )
                         all_metrics.append(metrics)
+                        
+                        # Record this prompt as successfully executed
+                        self._record_executed_prompt({
+                            'id': prompt_id,
+                            'name': prompt_name,
+                            'mode': mode,
+                            'type': 'independent',
+                            'ctx': ctx,
+                            'temperature': used_temp,
+                        })
                         
                         if tps_list and tps_list[0].get('response'):
                             response = tps_list[0]['response']
@@ -433,6 +458,18 @@ class BenchmarkRunner:
                             chain_name=chain_name,
                         )
                         all_metrics.append(metrics)
+                        
+                        # Record this prompt as successfully executed
+                        self._record_executed_prompt({
+                            'id': prompt_id,
+                            'name': prompt_name,
+                            'mode': mode,
+                            'type': 'chain',
+                            'chain_id': chain_id,
+                            'chain_name': chain_name,
+                            'ctx': ctx,
+                            'temperature': used_temp,
+                        })
                         
                         if tps_list and tps_list[0].get('response'):
                             response = tps_list[0]['response']
@@ -785,6 +822,16 @@ class BenchmarkRunner:
                         )
                         all_metrics.append(metrics)
                         
+                        # Record this prompt as successfully executed
+                        self._record_executed_prompt({
+                            'id': prompt_id,
+                            'name': prompt_name,
+                            'mode': mode,
+                            'type': 'independent',
+                            'ctx': ctx,
+                            'temperature': used_temp,
+                        })
+                        
                         _resp_val_ai = tps_list[0].get('response') if tps_list else None
                         logger.info(
                             "[Expert] run_all_ind check: prompt_id=%r tps_list_len=%d response_present=%s response_len=%d",
@@ -953,6 +1000,18 @@ class BenchmarkRunner:
                                 vram=vram,
                             )
                             all_metrics.append(metrics)
+                            
+                            # Record this prompt as successfully executed
+                            self._record_executed_prompt({
+                                'id': prompt_id,
+                                'name': prompt_name,
+                                'mode': mode,
+                                'type': 'chain',
+                                'chain_id': chain_id,
+                                'chain_name': chain_name,
+                                'ctx': ctx,
+                                'temperature': used_temp,
+                            })
                             
                             if tps_list and tps_list[0].get('response'):
                                 response = tps_list[0]['response']
