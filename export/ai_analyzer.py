@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 import requests
 from i18n import get_text, _current_language
 from ui.markdown_renderer import display_markdown, stream_markdown
+from prompts.analysis_prompt_loader import AnalysisPromptLoader
 
 logger = logging.getLogger('roo_bench')
 
@@ -17,8 +18,6 @@ _PROMPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'p
 
 class AIAnalyzer:
     """Handles AI analysis of benchmark results via Ollama."""
-
-    PROMPTS_FILE = os.path.join(_PROMPTS_DIR, 'analysis_prompt.jsonc')
 
     def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
         """Initialize AI analyzer.
@@ -31,14 +30,13 @@ class AIAnalyzer:
         self.base_url = base_url
         self.headers = headers or {}
         self.timeout = timeout
-        self.prompts = self._load_prompts()
+        self._prompt_loader = AnalysisPromptLoader()
+        self.prompts = self._prompt_loader.load()
 
     def _load_prompts(self) -> dict:
-        """Load prompt templates from prompts/analysis_prompt.jsonc."""
+        """Load prompt templates using AnalysisPromptLoader."""
         try:
-            import json5
-            with open(self.PROMPTS_FILE, 'r', encoding='utf-8') as f:
-                return json5.load(f)
+            return self._prompt_loader.load()
         except Exception as e:
             print(f"Warning: Could not load prompts file: {e}. Using fallback.")
             return self._get_fallback_prompts()
@@ -426,13 +424,13 @@ class AIAnalyzer:
         """
         from export.result_saver import load_results_from_file
         
-        print(f"\n   \U0001f4da Loading results from: {file_path}")
+        print(f"\n   📚 Loading results from: {file_path}")
         all_results, prompts_config = load_results_from_file(file_path)
         
         if all_results is None:
             return False
         
-        print(f"   \u2705 Loaded {len(all_results)} models with results")
+        print(f"   ✅ Loaded {len(all_results)} models with results")
         
         # Get available models and let user select
         models = self.get_available_models()
@@ -471,7 +469,7 @@ class AIAnalyzer:
                 return False
         
         actual_model_name = selected_model.get('name', 'unknown')
-        print(f"   \U0001f4e4 Using model: {actual_model_name}")
+        print(f"   📤 Using model: {actual_model_name}")
         
         # Check if model is already loaded in VRAM
         try:
@@ -485,11 +483,11 @@ class AIAnalyzer:
             logger.debug("Could not check model availability: %s", e)
         
         try:
-            print(f"   \U0001f4a1 Sending analysis request...")
+            print(f"   💡 Sending analysis request...")
             response = self.analyze(actual_model_name, all_results, ollama_client, stream=stream)
             
             if not response:
-                print("\n\u26a0\ufe0f  Model returned an empty response.")
+                print("\n⚠️  Model returned an empty response.")
                 return False
             
             print("\n" + "=" * 60)
@@ -521,7 +519,7 @@ class AIAnalyzer:
                     print(f"   ✅ Translation completed")
                 else:
                     print(get_text("translation_unavailable"))
-         
+        
         except Exception as e:
             print(get_text("analysis_error", error=str(e)))
             return False
@@ -554,9 +552,9 @@ def prompt_user(question: str) -> bool:
     while True:
         try:
             response = input(f"\n{question} (y/n): ").strip().lower()
-            if response in ('y', 'yes', '\u0442\u0430\u043a', '\u0442', '\u0434\u0430', '\u0434'):
+            if response in ('y', 'yes', 'так', 'т', 'да', 'д'):
                 return True
-            elif response in ('n', 'no', '\u043d', '\u043d\u0456', '\u043d\u0435', '\u043d\u0435\u0442', '\u043d'):
+            elif response in ('n', 'no', 'н', 'ні', 'нет', 'не', 'н'):
                 return False
         except (EOFError, KeyboardInterrupt):
             return False
@@ -680,18 +678,18 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
         response = analyzer.analyze(model_name, all_results, ollama_client, stream=True)
 
         if not response:
-            print("\n\u26a0\ufe0f  Model returned an empty response.")
-            print("\n\U0001f50d Possible causes:")
+            print("\n⚠️  Model returned an empty response.")
+            print("\n🔍 Possible causes:")
             print("  1. Prompt is too large for the model's context window")
             print("  2. The model doesn't support the /api/chat or /api/generate format")
             print("  3. The model encountered an internal error (check Ollama logs)")
             print("  4. The model's num_ctx setting is too small")
-            print("\n\U0001f4a1 Troubleshooting steps:")
+            print("\n💡 Troubleshooting steps:")
             print("  - Check Ollama logs: journalctl -u ollama --follow")
             print("  - Try a larger model (e.g., qwen2.5:32b or larger)")
             print("  - Try reducing the benchmark results (fewer models/tests)")
             print("  - Ensure the model supports the chat format (use models with 'chat' in name)")
-            print("\n\U0001f4cb You can also try running the analysis with --no-interactive flag")
+            print("\n📋 You can also try running the analysis with --no-interactive flag")
             print("   and specify an output file to skip this step.")
             return
 
@@ -722,15 +720,15 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
     
         # Unload model after analysis and translation are complete
         # Same method as benchmark runner: ollama_client.unload_model()
-        print(f"\n   \U0001f939 Unloading model '{model_name}' from VRAM...")
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
         try:
             if ollama_client:
                 ollama_client.unload_model(model_name)
             else:
-                print(f"   \u26a0\ufe0f  Warning: ollama_client not available, skipping unload")
-            print(f"   \u2705 Model '{model_name}' unloaded successfully")
+                print(f"   ⚠️  Warning: ollama_client not available, skipping unload")
+            print(f"   ✅ Model '{model_name}' unloaded successfully")
         except Exception as e:
-            print(f"   \u26a0\ufe0f  Warning: Could not unload model: {e}")
-            print(f"   \U0001f4a1 Tip: Run 'ollama stop {model_name}' manually to free VRAM.")
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
+            print(f"   💡 Tip: Run 'ollama stop {model_name}' manually to free VRAM.")
     except Exception as e:
         print(get_text("analysis_error", error=str(e)))

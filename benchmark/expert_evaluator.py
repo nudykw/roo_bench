@@ -1,11 +1,11 @@
 """Expert model-based response evaluation module."""
 
 import logging
-import json5
 import requests
 from typing import List, Optional
 from api.base_client import BaseApiClient
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
+from prompts.analysis_prompt_loader import AnalysisPromptLoader
 
 logger = logging.getLogger('roo_bench.benchmark')
 
@@ -25,15 +25,15 @@ class ExpertEvaluator:
         self.prompts = self._load_prompts()
 
     def _load_prompts(self) -> dict:
-        """Load expert evaluation prompts from JSON5 file.
+        """Load expert evaluation prompts using AnalysisPromptLoader.
 
         Returns:
             Dict with prompt templates. Returns defaults if file not found.
         """
         try:
-            with open('prompts/analysis_prompt.jsonc', 'r', encoding='utf-8') as f:
-                data = json5.load(f)
-            logger.debug("[Expert] Prompts loaded from analysis_prompt.jsonc, keys: %s", list(data.keys()))
+            loader = AnalysisPromptLoader()
+            data = loader.load()
+            logger.debug("[Expert] Prompts loaded from %s, keys: %s", loader.prompts_file, list(data.keys()))
             return data
         except FileNotFoundError:
             logger.warning("Prompts file not found, using default templates")

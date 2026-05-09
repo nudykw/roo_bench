@@ -7,18 +7,46 @@ from typing import Dict, List, Any, Optional
 
 
 class PromptLoader:
-    """Load and manage benchmark prompts from JSONC file."""
+    """Load and manage benchmark prompts from file."""
     
-    DEFAULT_PROMPTS_FILE = os.path.join(os.path.dirname(__file__), '..', 'prompts.jsonc')
+    DEFAULT_PROMPTS_FILE = os.path.join(os.path.dirname(__file__), 'prompts.md')
+    DEFAULT_JSONC_FALLBACK = os.path.join(os.path.dirname(__file__), 'prompts.jsonc')
     
     def __init__(self, prompts_file: Optional[str] = None):
         """Initialize prompt loader.
         
         Args:
-            prompts_file: Path to prompts.jsonc file. If None, uses default.
+            prompts_file: Path to prompts file (.md, .jsonc, or .json). If None, uses default.
         """
-        self.prompts_file = prompts_file or self.DEFAULT_PROMPTS_FILE
+        self._custom_prompts_file = prompts_file
+        self.prompts_file = self._resolve_prompts_file(prompts_file)
         self._data: Optional[Dict] = None
+    
+    def _resolve_prompts_file(self, prompts_file: Optional[str]) -> str:
+        """Resolve the prompts file path with priority: .md > .jsonc > custom.
+        
+        Args:
+            prompts_file: Custom prompts file path or None
+            
+        Returns:
+            str: Resolved file path
+        """
+        # If custom file specified, use it directly
+        if prompts_file:
+            return prompts_file
+        
+        # Check for .md file first (priority)
+        md_path = self.DEFAULT_PROMPTS_FILE
+        if os.path.exists(md_path):
+            return md_path
+        
+        # Fallback to .jsonc file
+        jsonc_path = self.DEFAULT_JSONC_FALLBACK
+        if os.path.exists(jsonc_path):
+            return jsonc_path
+        
+        # Return default (will raise FileNotFoundError on load)
+        return md_path
     
     def _strip_comments(self, jsonc: str) -> str:
         """Remove comments from JSONC content.
@@ -89,8 +117,229 @@ class PromptLoader:
         
         return ''.join(result)
     
+    def _parse_markdown(self, md_content: str) -> Dict[str, Any]:
+        """Parse markdown file to extract prompt sections.
+        
+        Supports two formats:
+        1. JSON array format: Content starts with '['
+        2. Named prompt format: ### id headers with **Name:** and **Prompt:** fields
+        
+        Args:
+            md_content: Markdown content
+            
+        Returns:
+            dict: Parsed structure with sections
+        """
+        result = {}
+        lines = md_content.split('\n')
+        current_section = None
+        current_subsection = None
+        current_prompt_id = None
+        current_content = []
+        in_html_comment = False
+        
+        for line in lines:
+            # Track HTML comment state
+            if '<!--' in line:
+                in_html_comment = True
+            if '-->' in line:
+                in_html_comment = False
+                continue
+            
+            # Skip content inside HTML comments
+            if in_html_comment:
+                continue
+            
+            # Check for main section (# heading)
+            main_match = re.match(r'^#\s+(\w+)$', line)
+            if main_match:
+                # Save previous content
+                self._save_prompt_content(
+                    result, current_section, current_subsection, 
+                    current_prompt_id, current_content
+                )
+                
+                current_section = main_match.group(1)
+                current_subsection = None
+                current_prompt_id = None
+                current_content = []
+                result[current_section] = {}
+                continue
+            
+            # Check for subsection (## heading)
+            sub_match = re.match(r'^##\s+(\w+)$', line)
+            if sub_match:
+                # Save previous content
+                self._save_prompt_content(
+                    result, current_section, current_subsection,
+                    current_prompt_id, current_content
+                )
+                
+                current_subsection = sub_match.group(1)
+                current_prompt_id = None
+                current_content = []
+                # Ensure section is a dict for subsections
+                if not isinstance(result[current_section], dict):
+                    result[current_section] = {}
+                continue
+            
+            # Check for prompt ID (### heading)
+            prompt_match = re.match(r'^###\s+(\w+)$', line)
+            if prompt_match:
+                # Save previous content
+                self._save_prompt_content(
+                    result, current_section, current_subsection,
+                    current_prompt_id, current_content
+                )
+                
+                current_prompt_id = prompt_match.group(1)
+                current_content = []
+                continue
+            
+            # Add content
+            current_content.append(line)
+        
+        # Save last content
+        self._save_prompt_content(
+            result, current_section, current_subsection,
+            current_prompt_id, current_content
+        )
+        
+        return result
+    
+    def _save_prompt_content(self, result: Dict, section: Optional[str], 
+                             subsection: Optional[str], prompt_id: Optional[str],
+                             content: List[str]) -> None:
+        """Save prompt content to result structure.
+        
+        Args:
+            result: Result dictionary to update
+            section: Current section name
+            subsection: Current subsection name
+            prompt_id: Current prompt ID (if parsing named prompts)
+            content: Content lines to save
+        """
+        if not content or not section:
+            return
+        
+        content_str = '\n'.join(content).strip()
+        if not content_str:
+            return
+        
+        # Check if content is JSON array format
+        if content_str.startswith('['):
+            try:
+                parsed = json.loads(content_str)
+                if subsection:
+                    result[section][subsection] = parsed
+                else:
+                    result[section] = parsed
+                return
+            except json.JSONDecodeError:
+                pass
+        
+        # Parse named prompt format
+        if prompt_id and subsection:
+            prompt_data = self._parse_named_prompt(content_str, prompt_id)
+            if prompt_data:
+                if subsection not in result[section]:
+                    result[section][subsection] = []
+                result[section][subsection].append(prompt_data)
+    
+    def _parse_named_prompt(self, content: str, prompt_id: str) -> Optional[Dict[str, str]]:
+        """Parse a named prompt from markdown content.
+        
+        Format:
+        **Name:** Prompt name
+        **Prompt:** Prompt content
+        
+        Args:
+            content: Content string
+            prompt_id: The prompt ID from the ### heading
+            
+        Returns:
+            dict with 'id', 'name', 'prompt' keys or None
+        """
+        name_match = re.search(r'\*\*Name:\*\*\s*(.+)', content)
+        prompt_match = re.search(r'\*\*Prompt:\*\*\s*(.+)', content, re.DOTALL)
+        
+        if name_match and prompt_match:
+            return {
+                'id': prompt_id,
+                'name': name_match.group(1).strip(),
+                'prompt': prompt_match.group(1).strip()
+            }
+        return None
+    
+    def _load_and_validate(self, file_path: str, expected_structure: Dict[str, Any]) -> Dict[str, Any]:
+        """Load and validate prompts file.
+        
+        Args:
+            file_path: Path to the file to load
+            expected_structure: Expected structure definition (not used currently, reserved for future)
+            
+        Returns:
+            dict: Loaded and validated data
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            json.JSONDecodeError: If JSON is invalid
+            ValueError: If structure validation fails
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        if ext == '.md':
+            data = self._parse_markdown(content)
+        else:
+            json_content = self._strip_comments(content)
+            data = json.loads(json_content)
+        
+        self._validate_structure(data)
+        return data
+    
+    def _validate_structure(self, data: Dict[str, Any]) -> None:
+        """Validate the structure of loaded prompts data.
+        
+        Supports two formats:
+        1. analysis_prompt format (has system_prompt at top level)
+        2. prompts.jsonc format (has independent and chains)
+        
+        Args:
+            data: Parsed prompts data
+            
+        Raises:
+            ValueError: If required fields are missing
+        """
+        # Check if this is analysis_prompt format (has system_prompt at top level)
+        if 'system_prompt' in data:
+            # Analysis prompt format
+            required_fields = ['system_prompt', 'user_prompt_template', 'translation_prompt_template', 'expert']
+            for field in required_fields:
+                if field not in data:
+                    raise ValueError(f"Missing required field: {field}")
+            
+            if 'expert' in data:
+                expert_fields = ['system_prompt', 'architect_eval', 'code_eval', 'debug_eval']
+                for field in expert_fields:
+                    if field not in data['expert']:
+                        raise ValueError(f"Missing required field in expert: {field}")
+        else:
+            # Standard prompts.jsonc format - check for independent and chains
+            if 'independent' not in data:
+                raise ValueError("Missing required field: independent")
+            if 'chains' not in data:
+                raise ValueError("Missing required field: chains")
+    
+    def _get_file_extension(self) -> str:
+        """Get the file extension of the prompts file."""
+        _, ext = os.path.splitext(self.prompts_file)
+        return ext.lower()
+    
     def load(self) -> Dict[str, Any]:
-        """Load prompts from JSONC file.
+        """Load prompts from file (.md, .jsonc, or .json).
         
         Returns:
             dict: Parsed prompts configuration
@@ -98,15 +347,24 @@ class PromptLoader:
         Raises:
             FileNotFoundError: If prompts file doesn't exist
             json.JSONDecodeError: If JSON is invalid (after comment removal)
+            ValueError: If structure validation fails
         """
+        ext = self._get_file_extension()
+        
         with open(self.prompts_file, 'r', encoding='utf-8') as f:
-            jsonc_content = f.read()
+            content = f.read()
         
-        # Strip comments
-        json_content = self._strip_comments(jsonc_content)
+        if ext == '.md':
+            # Parse markdown
+            self._data = self._parse_markdown(content)
+        else:
+            # Handle .jsonc and .json
+            json_content = self._strip_comments(content)
+            self._data = json.loads(json_content)
         
-        # Parse JSON
-        self._data = json.loads(json_content)
+        # Validate structure
+        self._validate_structure(self._data)
+        
         return self._data
     
     @property

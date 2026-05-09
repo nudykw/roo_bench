@@ -205,26 +205,94 @@ Architect → Code → Debug
 
 **Prompt Configuration:**
 
-Prompts are stored in `prompts.jsonc` (JSONC format with comment support):
+Prompts are stored in the `prompts/` directory with support for multiple formats. The system uses a priority-based resolution:
 
-```jsonc
+1. **`.md` file** (`prompts/prompts.md`) — Default, highest priority
+2. **`.jsonc` file** (`prompts/prompts.jsonc`) — Fallback
+3. **Custom file** — Specified via `--prompts-file`
+
+**Directory Structure:**
+
+```
+prompts/
+├── prompts.md           # Markdown format (default, priority 1)
+├── prompts.jsonc        # JSONC format (fallback, priority 2)
+└── analysis_prompt.md   # Analysis prompt (separate use)
+```
+
+**Supported Formats:**
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| Markdown | `.md` | Markdown with HTML comments for sections (default) |
+| JSONC | `.jsonc` | JSON with comments (fallback) |
+| JSON | `.json` | Standard JSON (comments stripped) |
+
+**Markdown Format (`prompts/prompts.md`):**
+
+The markdown format uses HTML comments `<!-- -->` for metadata and `#` headings for sections:
+
+```markdown
+<!--
+  Prompts for Roo Bench benchmark system
+  Contains independent prompts and chains for different modes
+-->
+# independent
+<!--
+  Independent prompts - each runs without context from other modes
+-->
+## architect
+[{"id": "arch_test", "name": "Test", "prompt": "..."}]
+
+# chains
+[{"id": "chain_rest_api", "name": "REST API Server", "description": "..."}]
+```
+
+**Using Custom Prompt Files:**
+
+```bash
+# Use default prompts.md (recommended)
+./venv/bin/python roo_bench.py
+
+# Use JSONC format explicitly
+./venv/bin/python roo_bench.py --prompts-file prompts/prompts.jsonc
+
+# Use Markdown format
+./venv/bin/python roo_bench.py --prompts-file prompts/prompts.md
+
+# Use a custom prompts file
+./venv/bin/python roo_bench.py --prompts-file custom_prompts.jsonc
+```
+
+**Prompt Structure:**
+
+The prompt configuration supports two types of prompts:
+
+**Independent Prompts:** Each prompt runs independently without context from other modes.
+
+```json
 {
-  // Independent prompts for each mode
   "independent": {
-    "architect": [...],
-    "code": [...],
-    "debug": [...]
-  },
-  // Prompt chains with context flow
+    "architect": [{"id": "...", "name": "...", "prompt": "..."}],
+    "code": [{"id": "...", "name": "...", "prompt": "..."}],
+    "debug": [{"id": "...", "name": "...", "prompt": "..."}]
+  }
+}
+```
+
+**Prompt Chains:** Full lifecycle testing with context flow between modes.
+
+```json
+{
   "chains": [
     {
       "id": "chain_rest_api",
       "name": "REST API Server",
       "description": "Full lifecycle: design -> implement -> debug",
       "prompts": {
-        "architect": {...},
-        "code": {...},
-        "debug": {...}
+        "architect": {"id": "...", "name": "...", "prompt": "..."},
+        "code": {"id": "...", "name": "...", "prompt": "..."},
+        "debug": {"id": "...", "name": "...", "prompt": "..."}
       }
     }
   ]
@@ -470,8 +538,9 @@ roo_bench/
 │
 ├── prompts/
 │   ├── __init__.py
-│   ├── loader.py              # JSONC prompt loader
-│   └── prompts.jsonc          # Prompt configuration (JSONC format)
+│   ├── loader.py              # Prompt loader (supports .md, .jsonc, .json)
+│   ├── prompts.md           # Prompt configuration (Markdown format, default)
+│   └── prompts.jsonc        # Prompt configuration (JSONC format, fallback)
 │
 └── data/
     └── capabilities_cache.json # Model capabilities cache

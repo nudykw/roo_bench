@@ -30,7 +30,7 @@ def validate_expert_prompts() -> bool:
     Returns:
         bool: True if prompts file exists and is readable, False otherwise.
     """
-    if os.path.exists('prompts/analysis_prompt.jsonc'):
+    if os.path.exists('prompts/analysis_prompt.md'):
         return True
     logger.warning(
         "Expert evaluation prompts not found. Expert-Evaluator will use default templates."
@@ -49,6 +49,28 @@ def prompt_user(message: str) -> bool:
     """
     response = input(f"{message} (y/n): ").strip().lower()
     return response in ['y', 'yes']
+
+
+def display_benchmark_parameters(temperatures: list, context_sizes: list, prompts_file: str, models: list, expert_model: str = None):
+    """Display benchmark parameters before starting the benchmark.
+
+    Args:
+        temperatures: List of temperature values to test
+        context_sizes: List of context sizes to test
+        prompts_file: Path to the prompts file
+        models: List of models to test
+        expert_model: Expert model name (optional)
+    """
+    from i18n import get_text
+    
+    print("\n" + get_text("benchmark_params_header"))
+    print(get_text("param_temperatures", temperatures=", ".join(str(t) for t in temperatures)))
+    print(get_text("param_context_sizes", context_sizes=", ".join(str(c) for c in context_sizes)))
+    print(get_text("param_prompts_file", prompts_file=prompts_file))
+    print(get_text("param_models", models=", ".join(m["name"] for m in models)))
+    if expert_model:
+        print(get_text("param_expert_model", expert_model=expert_model))
+    print()
 
 
 def get_ollama_config(args) -> OllamaConfig:
@@ -381,6 +403,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     logger.info("[num_predict] Using num_predict=%d (use --num-predict -1 for unlimited)", getattr(args, 'num_predict', 12000))
     temperature_test_values = get_temperature_test_values(args)
     logger.info("[temperature] Using temperature values: %s", temperature_test_values)
+    
+    # Display benchmark parameters before starting
+    display_benchmark_parameters(
+        temperatures=temperature_test_values,
+        context_sizes=context_sizes,
+        prompts_file=prompts_file,
+        models=test_models,
+        expert_model=expert_model_name
+    )
+    
     benchmark_runner = BenchmarkRunner(
         ollama_client=ollama_client,
         context_sizes=context_sizes,
@@ -548,7 +580,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 if error:
                     continue
         else:
-            logger.warning("⚠️  No independent prompts found in prompts.jsonc, using default benchmark prompt")
+            logger.warning("⚠️  No independent prompts found in prompts.md, using default benchmark prompt")
             for m in test_models:
                 moe_val = m.get('moe')
                 moe_dict = moe_val if isinstance(moe_val, dict) else None
