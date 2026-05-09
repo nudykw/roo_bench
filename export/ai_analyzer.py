@@ -1,5 +1,6 @@
 """AI-powered analysis module for benchmark results."""
 
+import curses
 import json
 import logging
 import os
@@ -9,6 +10,7 @@ from typing import Optional, Dict, List
 import requests
 from i18n import get_text, _current_language
 from ui.markdown_renderer import display_markdown, stream_markdown
+from ui.model_selector import select_models, SelectionType
 from prompts.analysis_prompt_loader import AnalysisPromptLoader
 
 logger = logging.getLogger('roo_bench')
@@ -432,43 +434,60 @@ class AIAnalyzer:
         
         print(f"   ✅ Loaded {len(all_results)} models with results")
         
-        # Get available models and let user select
+        # Get available models and let user select using curses interface
         models = self.get_available_models()
         if not models:
             print(get_text("no_models_for_analysis"))
             return False
         
-        # Show model list
-        print("\n" + "=" * 60)
-        print(get_text("ask_select_model"))
-        print("=" * 60)
-        for i, model in enumerate(models, 1):
-            name = model.get('name', 'unknown')
-            size = model.get('size', 0) / (1024**3)
-            details = model.get('details', {})
-            param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
-            print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
-        print(f"  0. Cancel")
-        print("=" * 60)
-        
-        # Get user selection
+        # Use curses interface for model selection
         try:
-            selection = input("> ").strip()
-            idx = int(selection) - 1
-            if idx < 0 or idx >= len(models):
+            selected = curses.wrapper(
+                lambda stdscr: select_models(
+                    stdscr,
+                    models,
+                    SelectionType.SINGLE,
+                    title="Select Model for Analysis",
+                    columns=[
+                        {'key': 'name', 'header': 'Model', 'width': 30},
+                        {'key': 'size', 'header': 'Size', 'width': 12, 'formatter': lambda x: f"{x/(1024**3):.1f}GB" if x else "0.0GB"},
+                    ]
+                )
+            )
+            if not selected:
                 print("Cancelled.")
                 return False
-            selected_model = models[idx]
-        except ValueError:
-            # Try matching by name
-            name_match = next((m for m in models if model_name in m.get('name', '')), None)
-            if name_match:
-                selected_model = name_match
-            else:
-                print(f"Model '{model_name}' not found.")
-                return False
+            actual_model_name = selected[0].get('name', 'unknown')
+        except Exception:
+            # Fallback to numeric input if curses fails
+            print("\n" + "=" * 60)
+            print(get_text("ask_select_model"))
+            print("=" * 60)
+            for i, model in enumerate(models, 1):
+                name = model.get('name', 'unknown')
+                size = model.get('size', 0) / (1024**3)
+                details = model.get('details', {})
+                param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
+                print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
+            print(f"  0. Cancel")
+            print("=" * 60)
+            
+            try:
+                selection = input("> ").strip()
+                idx = int(selection) - 1
+                if idx < 0 or idx >= len(models):
+                    print("Cancelled.")
+                    return False
+                selected_model = models[idx]
+                actual_model_name = selected_model.get('name', 'unknown')
+            except ValueError:
+                name_match = next((m for m in models if model_name in m.get('name', '')), None)
+                if name_match:
+                    actual_model_name = name_match.get('name', 'unknown')
+                else:
+                    print(f"Model '{model_name}' not found.")
+                    return False
         
-        actual_model_name = selected_model.get('name', 'unknown')
         print(f"   📤 Using model: {actual_model_name}")
         
         # Check if model is already loaded in VRAM
@@ -630,37 +649,50 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
         print(get_text("no_models_for_analysis"))
         return
 
-    # Show model list
-    print("\n" + "=" * 60)
-    print(get_text("ask_select_model"))
-    print("=" * 60)
-    for i, model in enumerate(models, 1):
-        name = model.get('name', 'unknown')
-        size = model.get('size', 0) / (1024**3)
-        details = model.get('details', {})
-        param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
-        print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
-    print(f"  0. Cancel")
-    print("=" * 60)
-
-    # Get user selection
+    # Use curses interface for model selection
     try:
-        selection = input("> ").strip()
-        idx = int(selection) - 1
-        if idx < 0 or idx >= len(models):
+        selected = curses.wrapper(
+            lambda stdscr: select_models(
+                stdscr,
+                models,
+                SelectionType.SINGLE,
+                title="Select Model for Analysis",
+                columns=[
+                    {'key': 'name', 'header': 'Model', 'width': 30},
+                    {'key': 'size', 'header': 'Size', 'width': 12, 'formatter': lambda x: f"{x/(1024**3):.1f}GB" if x else "0.0GB"},
+                ]
+            )
+        )
+        if not selected:
             print("Cancelled.")
             return
-        selected_model = models[idx]
-    except ValueError:
-        # Try matching by name
-        name_match = next((m for m in models if m.get('name') == selection), None)
-        if name_match:
-            selected_model = name_match
-        else:
+        model_name = selected[0].get('name', 'unknown')
+    except Exception:
+        # Fallback to numeric input if curses fails
+        print("\n" + "=" * 60)
+        print(get_text("ask_select_model"))
+        print("=" * 60)
+        for i, model in enumerate(models, 1):
+            name = model.get('name', 'unknown')
+            size = model.get('size', 0) / (1024**3)
+            details = model.get('details', {})
+            param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
+            print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
+        print(f"  0. Cancel")
+        print("=" * 60)
+
+        try:
+            selection = input("> ").strip()
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(models):
+                print("Cancelled.")
+                return
+            selected_model = models[idx]
+            model_name = selected_model.get('name', 'unknown')
+        except ValueError:
             print("Invalid selection.")
             return
 
-    model_name = selected_model.get('name', 'unknown')
     print(get_text("analysis_sending", model_name=model_name))
     
     # Check if model is already loaded
