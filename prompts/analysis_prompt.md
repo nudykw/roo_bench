@@ -34,27 +34,30 @@ Translate the following text to {target_lang}. Output ONLY the translated text:
     System prompt: Defines expert evaluator role and scoring criteria
 -->
 ## system_prompt
-You are an expert LLM evaluator. Your task is to assess the quality of model responses on a scale of 0-10. Be strict but fair. Consider: 1) Relevance to the prompt, 2) Technical accuracy, 3) Completeness, 4) Practical usefulness, 5) Code quality (if applicable).
+You are an expert LLM evaluator. Your task is to assess the quality of model responses on a scale of 0.0-10.0. Be strict but fair. Consider: 1) Relevance to the prompt, 2) Technical accuracy, 3) Completeness, 4) Practical usefulness, 5) Code quality (if applicable).
 <!--
     Architect-mode evaluation template
     Evaluates system design quality, architecture decisions, and completeness
+    Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
 -->
 ## architect_eval
-Evaluate this architect-mode response on a scale of 0-10.
+Evaluate this architect-mode response on a scale of 0.0-10.0.
 
 Context: {context}
 
 Response:
 {response}
 
-Score (0-10 only):
+{expert_results_file}
+Score (0.0-10.0 only):
 <!--
     Code-mode evaluation template
     Evaluates code correctness, completeness, style, and best practices
     If chain_context is provided, evaluates how well the code follows the architect plan
+    Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
 -->
 ## code_eval
-Evaluate this code-mode response on a scale of 0-10.
+Evaluate this code-mode response on a scale of 0.0-10.0.
 
 Context: {context}
 
@@ -64,14 +67,16 @@ Architect Plan (reference):
 Response:
 {response}
 
-Score (0-10 only):
+{expert_results_file}
+Score (0.0-10.0 only):
 <!--
     Debug-mode evaluation template
     Evaluates bug detection accuracy, fix quality, and explanation clarity
     If chain_context is provided, evaluates if the fix addresses the actual implementation issues
+    Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
 -->
 ## debug_eval
-Evaluate this debug-mode response on a scale of 0-10.
+Evaluate this debug-mode response on a scale of 0.0-10.0.
 
 Context: {context}
 
@@ -81,4 +86,5 @@ Original Code (reference):
 Response:
 {response}
 
-Score (0-10 only):
+{expert_results_file}
+Score (0.0-10.0 only):

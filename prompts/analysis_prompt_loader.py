@@ -3,7 +3,11 @@
 import json
 import os
 import re
+import logging
 from typing import Dict, Any, Optional
+
+
+logger = logging.getLogger('roo_bench')
 
 
 class AnalysisPromptLoader:
@@ -193,8 +197,18 @@ class AnalysisPromptLoader:
         """Get a specific key from the prompts data."""
         return self.data.get(key, default)
     
-    def get_expert_template(self, mode: str) -> str:
-        """Get expert evaluation template for a specific mode."""
+    def get_expert_template(self, mode: str, expert_results_file: Optional[str] = None) -> str:
+        """Get expert evaluation template for a specific mode.
+        
+        Args:
+            mode: Evaluation mode ('architect', 'code', 'debug').
+            expert_results_file: Path to the expert results file for placeholder substitution.
+                                 If provided, {expert_results_file} placeholder will be replaced
+                                 with the file contents.
+        
+        Returns:
+            Template string with placeholders substituted if file path provided.
+        """
         expert = self.data.get('expert', {})
         if isinstance(expert, dict):
             templates = {
@@ -202,5 +216,16 @@ class AnalysisPromptLoader:
                 'code': expert.get('code_eval', ''),
                 'debug': expert.get('debug_eval', ''),
             }
-            return templates.get(mode, templates.get('architect', ''))
+            template = templates.get(mode, templates.get('architect', ''))
+            
+            # Substitute {expert_results_file} placeholder if file path provided
+            if expert_results_file and os.path.exists(expert_results_file):
+                try:
+                    with open(expert_results_file, 'r', encoding='utf-8') as f:
+                        file_contents = f.read()
+                    template = template.replace('{expert_results_file}', file_contents)
+                except Exception as e:
+                    logger.warning(f"Failed to read expert results file: {e}")
+            
+            return template
         return ''

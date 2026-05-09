@@ -347,6 +347,72 @@ Based on your benchmark results, here are my recommendations...
 ./venv/bin/python roo_bench.py --no-interactive
 ```
 
+#### Expert Evaluation Results File
+
+During expert evaluation, all prompt-response pairs are saved to `export/expert_results.md` in markdown format. This file is automatically overwritten at each program start.
+
+**Placeholder Support:** The prompt templates in `prompts/analysis_prompt.md` and `prompts/analysis_prompt.jsonc` support the `{expert_results_file}` placeholder. When provided, this placeholder is replaced with the contents of the expert results file, allowing the expert model to reference previous evaluation results.
+
+**Available Placeholders in Expert Templates:**
+- `{context}` - The context/prompt for evaluation
+- `{response}` - The model response to evaluate
+- `{architect_response}` - The architect mode response (for code_eval)
+- `{code_response}` - The original code (for debug_eval)
+- `{expert_results_file}` - Contents of `export/expert_results.md` (optional)
+
+**File Structure:**
+```markdown
+# Expert Evaluation Results
+
+**Generated:** 2026-05-09 12:00:00
+**Tested Model:** llama3.2:3b
+**Expert Model:** qwen3.6:35b
+**Total Responses:** 10
+
+---
+
+## Entry 1
+
+### Prompt Information
+- **Prompt ID:** test_prompt_1
+- **Prompt Name:** Test Prompt
+- **Mode:** architect
+- **Context Size:** 16384
+- **Temperature:** 0.0
+- **Average TPS:** 100.50
+- **Model:** llama3.2:3b
+
+### Response
+```
+This is the model response...
+```
+
+---
+```
+
+**Placeholder: `{expert_results_file}`**
+
+The `prompts/analysis_prompt.md` file supports a special placeholder `{expert_results_file}` that gets replaced with the contents of the expert results file. This allows the expert model to see all prompt-response pairs when making evaluations.
+
+To use this placeholder in your evaluation templates:
+```markdown
+## architect_eval
+Evaluate this architect-mode response on a scale of 0-10.
+
+Context: {context}
+
+Response:
+{response}
+
+### All Previous Responses (for reference):
+{expert_results_file}
+
+Score (0-10 only):
+```
+
+**Note:** The placeholder is only substituted when the file exists. If the file doesn't exist, the template is used as-is.
+
+
 #### Updating Capabilities Cache
 
 Roo Bench automatically caches model capabilities (vision, tools, thinking) in `data/capabilities_cache.json`. You can force an update:

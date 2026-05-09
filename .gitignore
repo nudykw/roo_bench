@@ -9,3 +9,4 @@ benchmark_results*.json
 .clinerules 
 .roo/
 tests/temp/
+export/expert_results.md

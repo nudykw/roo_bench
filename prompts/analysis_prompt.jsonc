@@ -11,15 +11,18 @@
   // Expert evaluation prompts for different evaluation aspects
   "expert": {
     // System prompt: Defines expert evaluator role and scoring criteria
-    "system_prompt": "You are an expert LLM evaluator. Your task is to assess the quality of model responses on a scale of 0-10. Be strict but fair. Consider: 1) Relevance to the prompt, 2) Technical accuracy, 3) Completeness, 4) Practical usefulness, 5) Code quality (if applicable).",
+    "system_prompt": "You are an expert LLM evaluator. Your task is to assess the quality of model responses on a scale of 0.0-10.0. Be strict but fair. Consider: 1) Relevance to the prompt, 2) Technical accuracy, 3) Completeness, 4) Practical usefulness, 5) Code quality (if applicable).",
     
     // Architect-mode evaluation template
-    "architect_eval": "Evaluate this architect-mode response on a scale of 0-10.\n\nContext: {context}\n\nResponse:\n{response}\n\nScore (0-10 only):",
+    // Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
+    "architect_eval": "Evaluate this architect-mode response on a scale of 0.0-10.0.\n\nContext: {context}\n\nResponse:\n{response}\n\n{expert_results_file}\nScore (0.0-10.0 only):",
     
     // Code-mode evaluation template
-    "code_eval": "Evaluate this code-mode response on a scale of 0-10.\n\nContext: {context}\n\nArchitect Plan (reference):\n{architect_response}\n\nResponse:\n{response}\n\nScore (0-10 only):",
+    // Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
+    "code_eval": "Evaluate this code-mode response on a scale of 0.0-10.0.\n\nContext: {context}\n\nArchitect Plan (reference):\n{architect_response}\n\nResponse:\n{response}\n\n{expert_results_file}\nScore (0.0-10.0 only):",
     
     // Debug-mode evaluation template
-    "debug_eval": "Evaluate this debug-mode response on a scale of 0-10.\n\nContext: {context}\n\nOriginal Code (reference):\n{code_response}\n\nResponse:\n{response}\n\nScore (0-10 only):"
+    // Placeholder: {expert_results_file} = contents of expert evaluation results file (optional)
+    "debug_eval": "Evaluate this debug-mode response on a scale of 0.0-10.0.\n\nContext: {context}\n\nOriginal Code (reference):\n{code_response}\n\nResponse:\n{response}\n\n{expert_results_file}\nScore (0.0-10.0 only):"
   }
 }

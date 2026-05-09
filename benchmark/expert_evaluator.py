@@ -1,10 +1,12 @@
 """Expert model-based response evaluation module."""
 
 import logging
+import os
 import requests
 from typing import List, Optional
 from api.base_client import BaseApiClient
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
+from benchmark.expert_results_saver import ExpertResultsSaver
 from prompts.analysis_prompt_loader import AnalysisPromptLoader
 
 logger = logging.getLogger('roo_bench.benchmark')
@@ -13,16 +15,20 @@ logger = logging.getLogger('roo_bench.benchmark')
 class ExpertEvaluator:
     """Evaluates benchmark responses using an expert LLM model."""
 
-    def __init__(self, ollama_client: BaseApiClient, expert_model_name: str):
+    def __init__(self, ollama_client: BaseApiClient, expert_model_name: str,
+                 results_file: Optional[str] = None):
         """Initialize expert evaluator.
 
         Args:
             ollama_client: API client for Ollama communication.
             expert_model_name: Name of the expert model to use.
+            results_file: Path to file for saving expert results (optional).
         """
         self.ollama_client = ollama_client
         self.expert_model_name = expert_model_name
+        self.results_file = results_file
         self.prompts = self._load_prompts()
+        self._results_saver = ExpertResultsSaver(results_file) if results_file else None
 
     def _load_prompts(self) -> dict:
         """Load expert evaluation prompts using AnalysisPromptLoader.
@@ -81,6 +87,12 @@ class ExpertEvaluator:
             progress = (i + 1) / len(entries) * 100
             print(f"   Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) - Score: {score}")
 
+        # Save results to file after all evaluations are complete
+        if self._results_saver and entries:
+            model_name = entries[0].model_name if entries else "unknown"
+            self._results_saver.save(entries, model_name, self.expert_model_name)
+            logger.info(f"[Expert] Results saved to {self._results_saver.output_file}")
+
     def _evaluate_single(self, entry: ExpertEvaluationEntry) -> float:
         """Evaluate a single response.
 
@@ -99,7 +111,8 @@ class ExpertEvaluator:
 
         template_vars = {
             'context': context,
-            'response': entry.response[:4000]
+            'response': entry.response[:4000],
+            'expert_results_file': ''
         }
 
         if entry.chain_context:
@@ -108,13 +121,15 @@ class ExpertEvaluator:
             for key in ['architect_response', 'code_response']:
                 template_vars[key] = 'N/A (independent prompt)'
 
-        try:
-            eval_prompt = prompt_template.format(**template_vars)
-        except KeyError:
-            eval_prompt = prompt_template.format(
-                context=context,
-                response=entry.response[:4000]
-            )
+        # Add expert results file content if available
+        if self.results_file and os.path.exists(self.results_file):
+            try:
+                with open(self.results_file, 'r', encoding='utf-8') as f:
+                    template_vars['expert_results_file'] = f.read()
+            except Exception as e:
+                logger.warning(f"Could not read results file: {e}")
+
+        eval_prompt = prompt_template.format(**template_vars)
 
         score = self._call_expert_api(eval_prompt)
         return score

@@ -174,12 +174,13 @@ class TestAnalysisPromptLoaderPlaceholderSubstitution:
         template = data['expert']['architect_eval']
         context_text = "Architecture context here"
         response_text = "Architect response here"
-        substituted = template.format(context=context_text, response=response_text)
+        substituted = template.format(context=context_text, response=response_text, expert_results_file="")
         
         assert context_text in substituted
         assert response_text in substituted
         assert '{context}' not in substituted
         assert '{response}' not in substituted
+        assert '{expert_results_file}' not in substituted
     
     def test_substitute_code_eval_template(self):
         """Test substituting context, architect_response, and response into code_eval template."""
@@ -193,7 +194,8 @@ class TestAnalysisPromptLoaderPlaceholderSubstitution:
         substituted = template.format(
             context=context_text,
             architect_response=architect_response,
-            response=response_text
+            response=response_text,
+            expert_results_file=""
         )
         
         assert context_text in substituted
@@ -202,6 +204,7 @@ class TestAnalysisPromptLoaderPlaceholderSubstitution:
         assert '{context}' not in substituted
         assert '{architect_response}' not in substituted
         assert '{response}' not in substituted
+        assert '{expert_results_file}' not in substituted
     
     def test_substitute_debug_eval_template(self):
         """Test substituting context, code_response, and response into debug_eval template."""
@@ -215,7 +218,8 @@ class TestAnalysisPromptLoaderPlaceholderSubstitution:
         substituted = template.format(
             context=context_text,
             code_response=code_response,
-            response=response_text
+            response=response_text,
+            expert_results_file=""
         )
         
         assert context_text in substituted
@@ -224,6 +228,7 @@ class TestAnalysisPromptLoaderPlaceholderSubstitution:
         assert '{context}' not in substituted
         assert '{code_response}' not in substituted
         assert '{response}' not in substituted
+        assert '{expert_results_file}' not in substituted
 
 
 class TestAnalysisPromptLoaderDataProperty:
@@ -272,3 +277,86 @@ class TestAnalysisPromptLoaderFallback:
                 loader.load()
         finally:
             os.unlink(temp_path)
+
+class TestExpertResultsFilePlaceholder:
+    """Test {expert_results_file} placeholder substitution."""
+    
+    def test_get_expert_template_with_results_file(self, tmp_path):
+        """Test that get_expert_template substitutes {expert_results_file} placeholder."""
+        import os
+        
+        # Create a temporary results file
+        results_file = tmp_path / 'expert_results.md'
+        results_content = """# Expert Evaluation Results
+
+**Generated:** 2026-05-09 12:00:00
+
+**Tested Model:** llama3.2:3b
+**Expert Model:** qwen3.6:35b
+**Total Responses:** 2
+
+---
+
+## Entry 1
+
+### Prompt Information
+- **Prompt ID:** test_prompt_1
+- **Mode:** architect
+- **Context Size:** 16384
+
+### Response
+```
+This is a test response.
+```
+"""
+        results_file.write_text(results_content)
+        
+        loader = AnalysisPromptLoader('prompts/analysis_prompt.md')
+        loader.load()
+        
+        # Get template with results file
+        template = loader.get_expert_template('architect', str(results_file))
+        
+        # Check that placeholder was substituted
+        assert '{expert_results_file}' not in template
+        assert results_content.strip() in template
+    
+    def test_get_expert_template_without_results_file(self):
+        """Test that get_expert_template works without results file."""
+        loader = AnalysisPromptLoader('prompts/analysis_prompt.md')
+        loader.load()
+        
+        # Get template without results file
+        template = loader.get_expert_template('architect', None)
+        
+        # Check that template is returned as-is (with {expert_results_file} placeholder)
+        assert '{context}' in template
+        assert '{response}' in template
+    
+    def test_get_expert_template_nonexistent_file(self):
+        """Test that get_expert_template handles nonexistent file gracefully."""
+        loader = AnalysisPromptLoader('prompts/analysis_prompt.md')
+        loader.load()
+        
+        # Get template with nonexistent file
+        template = loader.get_expert_template('architect', '/nonexistent/path/results.md')
+        
+        # Check that template is returned as-is
+        assert '{context}' in template
+        assert '{response}' in template
+    
+    def test_get_expert_template_all_modes_with_results_file(self, tmp_path):
+        """Test placeholder substitution for all evaluation modes."""
+        import os
+        
+        # Create a temporary results file
+        results_file = tmp_path / 'expert_results.md'
+        results_file.write_text('# Test results')
+        
+        loader = AnalysisPromptLoader('prompts/analysis_prompt.md')
+        loader.load()
+        
+        # Test all modes
+        for mode in ['architect', 'code', 'debug']:
+            template = loader.get_expert_template(mode, str(results_file))
+            assert '# Test results' in template

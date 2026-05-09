@@ -18,6 +18,7 @@ from benchmark.result import ModelInfo, BenchmarkResult, Capability
 from ui.curses_selector import interactive_model_select, select_expert_model
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
+from benchmark.expert_results_saver import ExpertResultsSaver
 from prompts.loader import PromptLoader
 
 # Setup logging
@@ -384,7 +385,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 if expert_model_name:
                     from benchmark.expert_evaluator import ExpertEvaluator
                     logger.info("[Expert] Creating ExpertEvaluator with model=%s", expert_model_name)
-                    expert_evaluator = ExpertEvaluator(ollama_client, expert_model_name)
+                    expert_evaluator = ExpertEvaluator(ollama_client, expert_model_name, results_file="export/expert_results.md")
                     print(f"✅ Expert evaluator initialized with model: {expert_model_name}")
                     logger.info("[Expert] ExpertEvaluator created successfully")
                 else:
