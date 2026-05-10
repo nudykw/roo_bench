@@ -5,12 +5,13 @@ import sys
 from i18n import get_text, _current_language
 
 
-def interactive_model_select(stdscr, models: list) -> list:
+def interactive_model_select(stdscr, models: list, single_select: bool = False) -> list:
     """Interactive model selection using curses with keyboard and mouse support.
 
     Args:
         stdscr: curses standard screen
         models: List of model dictionaries
+        single_select: If True, allow selection of only one model (used for expert evaluator)
 
     Returns:
         list: Selected model dictionaries
@@ -66,9 +67,14 @@ def interactive_model_select(stdscr, models: list) -> list:
         stdscr.erase()
 
         # Title
-        title = "Select models to benchmark"
-        if _current_language == "ua":
-            title = "Оберіть моделі для тестування"
+        if single_select:
+            title = "Select a model for expert evaluation"
+            if _current_language == "ua":
+                title = "Виберіть модель для експертизи"
+        else:
+            title = "Select models to benchmark"
+            if _current_language == "ua":
+                title = "Оберіть моделі для тестування"
         try:
             stdscr.addstr(0, 0, title, curses.color_pair(4) | curses.A_BOLD)
         except curses.error:
@@ -176,10 +182,16 @@ def interactive_model_select(stdscr, models: list) -> list:
 
         # Confirmation line
         selected_count = len(selected)
-        if selected_count > 0:
-            confirm = f"Selected: {selected_count} models. Press Enter to confirm, Esc to deselect all"
+        if single_select:
+            if selected_count > 0:
+                confirm = f"Selected: 1 model. Press Enter to confirm, Esc to cancel"
+            else:
+                confirm = f"No model selected. Press Enter to select first, Esc to cancel"
         else:
-            confirm = f"No models selected. Press Enter to select all, Esc to cancel"
+            if selected_count > 0:
+                confirm = f"Selected: {selected_count} models. Press Enter to confirm, Esc to deselect all"
+            else:
+                confirm = f"No models selected. Press Enter to select all, Esc to cancel"
         confirm = confirm[:max_cols-1]
         try:
             stdscr.addstr(max_rows - 1, 0, confirm.ljust(max_cols-1), curses.A_BOLD)
@@ -203,27 +215,42 @@ def interactive_model_select(stdscr, models: list) -> list:
                     if model_area_start <= y < model_area_end:
                         model_idx = start_row + (y - model_area_start)
                         if 0 <= model_idx < len(models):
-                            if model_idx in selected:
-                                selected.discard(model_idx)
-                            else:
+                            if single_select:
+                                selected.clear()
                                 selected.add(model_idx)
+                                return [models[model_idx]]
+                            else:
+                                if model_idx in selected:
+                                    selected.discard(model_idx)
+                                else:
+                                    selected.add(model_idx)
                             current_row = model_idx
-                            continue
+                            if not single_select:
+                                continue
+                            else:
+                                continue
             except curses.error:
                 pass
             except KeyboardInterrupt:
                 break
         elif key == ord('\n') or key == ord('\r'):  # Enter - confirm
-            if selected:
-                return [models[i] for i in sorted(selected)]
+            if single_select:
+                if selected:
+                    return [models[i] for i in sorted(selected)]
+                else:
+                    return [models[current_row]]
             else:
-                return models  # Select all if none selected
+                if selected:
+                    return [models[i] for i in sorted(selected)]
+                else:
+                    return models
         elif key == 27:  # Esc - deselect all
             selected.clear()
             current_row = 0
             start_row = 0
-        elif key == ord('a') or key == ord('A'):  # 'a' - select all
-            selected = set(range(len(models)))
+        elif key == ord('a') or key == ord('A'):  # 'a' - select all (only in multi-select mode)
+            if not single_select:
+                selected = set(range(len(models)))
         elif key == curses.KEY_UP:  # Up arrow
             if current_row > 0:
                 current_row -= 1
@@ -235,28 +262,32 @@ def interactive_model_select(stdscr, models: list) -> list:
         elif key == curses.KEY_NPAGE:  # Page Down
             current_row = min(len(models) - 1, current_row + visible_models)
         elif key == ord(' '):  # Space - toggle selection
-            if current_row in selected:
-                selected.discard(current_row)
-            else:
+            if single_select:
+                selected.clear()
                 selected.add(current_row)
+            else:
+                if current_row in selected:
+                    selected.discard(current_row)
+                else:
+                    selected.add(current_row)
 
 
 def select_expert_model(stdscr, models: list) -> str:
-   """Select a single expert model using curses interface.
+    """Select a single expert model using curses interface.
 
-   Args:
-       stdscr: curses standard screen
-       models: List of model dictionaries
+    Args:
+        stdscr: curses standard screen
+        models: List of model dictionaries
 
-   Returns:
-       str: Selected model name, or None to cancel.
-   """
-   if not models:
-       return None
+    Returns:
+        str: Selected model name, or None to cancel.
+    """
+    if not models:
+        return None
 
-   selected = interactive_model_select(stdscr, models)
+    selected = interactive_model_select(stdscr, models, single_select=True)
 
-   if not selected:
-       return None
+    if not selected:
+        return None
 
-   return selected[0]['name']
+    return selected[0]['name']
