@@ -449,7 +449,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     
     # Initialize retest decision state and results file
     decision_state: dict = {}
-    results_file = getattr(args, 'output', DEFAULT_OUTPUT_FILE)
+    results_file = args.output if args.output else DEFAULT_OUTPUT_FILE
 
     # Run based on mode
     if args.independent:
