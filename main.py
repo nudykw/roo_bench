@@ -311,7 +311,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         # Interactive model selection with curses
         # curses.wrapper temporarily replaces SIGINT handler, so re-register after
         try:
-            test_models = curses.wrapper(lambda stdscr: interactive_model_select(stdscr, models))
+            test_models = curses.wrapper(lambda stdscr: interactive_model_select(stdscr, models, single_select=False))
         except curses.error:
             # Fallback to numeric input if curses fails (e.g., terminal not supported)
             print("\n⚠️  Interactive curses mode not available, using numeric input...")
@@ -753,6 +753,7 @@ def _post_benchmark_workflow(args, all_results: list[BenchmarkResult], test_mode
         AIAnalyzer,
         prompt_user
     )
+    import curses
     
     # Skip if --no-interactive flag is set
     if getattr(args, 'no_interactive', False):
@@ -791,6 +792,19 @@ def _post_benchmark_workflow(args, all_results: list[BenchmarkResult], test_mode
                 ssh_client=ollama_client.ssh_client,
                 ollama_client=ollama_client  # Pass API client for unload_model
             )
+        
+        # Step 3: Select best model from tested models
+        if test_models and len(test_models) > 1:
+            print("\n" + get_text("select_best_model_prompt"))
+            try:
+                from ui.curses_selector import interactive_model_select
+                selected_model = curses.wrapper(
+                    lambda stdscr: interactive_model_select(stdscr, test_models, single_select=True)
+                )
+                if selected_model:
+                    print(f"✅ Selected model for further use: {selected_model[0]['name']}")
+            except Exception as e:
+                print(f"⚠️  Model selection failed: {e}")
 
 
 def main():
