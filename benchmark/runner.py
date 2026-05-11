@@ -253,6 +253,7 @@ class BenchmarkRunner:
                             std_dev = 0.0
                         
                         # Create BenchmarkMetrics instance
+                        response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                         metrics = BenchmarkMetrics(
                             prompt_id=prompt_id,
                             prompt_name=prompt_name,
@@ -267,6 +268,7 @@ class BenchmarkRunner:
                             std_dev=std_dev,
                             vram=vram,
                             mode=mode,
+                            response=response,
                         )
                         all_metrics.append(metrics)
                         
@@ -415,6 +417,7 @@ class BenchmarkRunner:
                         else:
                             std_dev = 0.0
                         
+                        response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                         metrics = BenchmarkMetrics(
                             mode=mode,
                             prompt_id=prompt_id,
@@ -431,10 +434,11 @@ class BenchmarkRunner:
                             vram=vram,
                             chain_id=chain_id,
                             chain_name=chain_name,
+                            response=response,
                         )
                         all_metrics.append(metrics)
                         
-                        if tps_list and tps_list[0].get('response'):
+                        if response:
                             response = tps_list[0]['response']
                             chain_responses[mode] = response
                             
@@ -585,6 +589,7 @@ class BenchmarkRunner:
                     std_dev = variance ** 0.5
                     print(f"   Std Dev: {std_dev:.2f} TPS")
 
+                    response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                     metrics = BenchmarkMetrics(
                         ctx=ctx,
                         temperature=used_temp,
@@ -596,10 +601,11 @@ class BenchmarkRunner:
                         max_tps=max(r['tps'] for r in tps_list),
                         std_dev=std_dev,
                         vram=vram,
+                        response=response,
                     )
                     all_metrics.append(metrics)
                     
-                    _resp_val = tps_list[0].get('response') if tps_list else None
+                    _resp_val = response
                     logger.debug(
                         "[Expert] run_for_model check: tps_list_len=%d response_present=%s response_len=%d",
                         len(tps_list),
@@ -768,6 +774,7 @@ class BenchmarkRunner:
                         else:
                             std_dev = 0.0
                         
+                        response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                         metrics = BenchmarkMetrics(
                             mode=mode,
                             prompt_id=prompt_id,
@@ -782,17 +789,17 @@ class BenchmarkRunner:
                             max_tps=max(run['tps'] for run in tps_list),
                             std_dev=std_dev,
                             vram=vram,
+                            response=response,
                         )
                         all_metrics.append(metrics)
                         
-                        _resp_val_ai = tps_list[0].get('response') if tps_list else None
+                        _resp_val_ai = response
                         logger.info(
                             "[Expert] run_all_ind check: prompt_id=%r tps_list_len=%d response_present=%s response_len=%d",
                             prompt_id, len(tps_list), _resp_val_ai is not None,
                             len(_resp_val_ai) if _resp_val_ai else 0
                         )
-                        if tps_list and tps_list[0].get('response'):
-                            response = tps_list[0]['response']
+                        if response:
                             store_entry = ExpertEvaluationEntry(
                                 model_name=model_name,
                                 ctx=ctx,
@@ -935,6 +942,7 @@ class BenchmarkRunner:
                             else:
                                 std_dev = 0.0
                             
+                            response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                             metrics = BenchmarkMetrics(
                                 chain_id=chain_id,
                                 chain_name=chain_name,
@@ -951,11 +959,11 @@ class BenchmarkRunner:
                                 max_tps=max(run['tps'] for run in tps_list),
                                 std_dev=std_dev,
                                 vram=vram,
+                                response=response,
                             )
                             all_metrics.append(metrics)
                             
-                            if tps_list and tps_list[0].get('response'):
-                                response = tps_list[0]['response']
+                            if response:
                                 store_entry = ExpertEvaluationEntry(
                                     model_name=model_name,
                                     ctx=ctx,

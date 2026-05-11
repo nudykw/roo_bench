@@ -279,6 +279,44 @@ Based on your benchmark results, here are my recommendations...
 ./venv/bin/python roo_bench.py --no-interactive
 ```
 
+#### Retest Existing Models
+
+When running benchmarks, Roo Bench can check if a model has already been tested and prompt you for retest decisions. This is useful when:
+
+- You want to re-run specific models with updated prompts
+- You want to skip models that have already been tested
+- You want to run all remaining models without further prompts
+
+**How it works:**
+
+1. Before testing each model, the system checks if it exists in the results file (`benchmark_results.json` by default)
+2. If the model exists, you can choose:
+   - **Yes** — Retest this specific model
+   - **No** — Skip this model
+   - **Yes All** — Retest all remaining models
+   - **No All** — Skip all remaining models
+
+**Example workflow:**
+```
+Testing model: llama3.2 (1/5)
+✅ Model 'llama3.2' already tested in benchmark_results.json
+Model 'llama3.2' already tested. Retest?
+  1. Yes - Retest this model
+  2. No - Skip this model
+  3. Yes All - Retest all remaining models
+  4. No All - Skip all remaining models
+Select option (1-4): 2
+⏭️  Skipping llama3.2...
+```
+
+**Output file:**
+
+The results are saved to `benchmark_results.json` by default. You can specify a custom file with `--output`:
+
+```bash
+./venv/bin/python main.py --output my_results.json
+```
+
 #### Updating Capabilities Cache
 
 Roo Bench automatically caches model capabilities (vision, tools, thinking) in `data/capabilities_cache.json`. You can force an update:
@@ -814,6 +852,44 @@ Based on your benchmark results, here are my recommendations...
 ```bash
 # Пропустити всі інтерактивні підказки після бенчмарку
 ./venv/bin/python roo_bench.py --no-interactive
+```
+
+#### Перетестування існуючих моделей
+
+Під час запуску бенчмарку Roo Bench може перевіряти, чи була модель вже протестована, і запитувати про рішення щодо повторного тестування. Це корисно, коли:
+
+- Ви хочете перетестити конкретні моделі з оновленими промптами
+- Ви хочете пропустити моделі, які вже були протестовані
+- Ви хочете запустити всі залишкові моделі без додаткових запитів
+
+**Як це працює:**
+
+1. Перед тестуванням кожної моделі система перевіряє, чи вона існує в файлі результатів (`benchmark_results.json` за замовчуванням)
+2. Якщо модель існує, ви можете обрати:
+   - **Так** — Повторити цю конкретну модель
+   - **Ні** — Пропустити цю модель
+   - **Так усі** — Повторити всі залишкові моделі
+   - **Ні усі** — Пропустити всі залишкові моделі
+
+**Приклад роботи:**
+```
+Testing model: llama3.2 (1/5)
+✅ Model 'llama3.2' already tested in benchmark_results.json
+Модель 'llama3.2' вже тестувалася. Повторити?
+  1. Так - Повторити цю модель
+  2. Ні - Пропустити цю модель
+  3. Так усі - Повторити всі залишкові моделі
+  4. Ні усі - Пропустити всі залишкові моделі
+Оберіть опцію (1-4): 2
+⏭️  Пропускаємо llama3.2...
+```
+
+**Файл виводу:**
+
+Результати зберігаються у `benchmark_results.json` за замовчуванням. Ви можете вказати інший файл за допомогою `--output`:
+
+```bash
+./venv/bin/python main.py --output my_results.json
 ```
 
 #### Оновлення кешу можливостей

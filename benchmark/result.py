@@ -88,6 +88,7 @@ class BenchmarkMetrics(BaseModel):
     chain_id: Optional[str] = None
     chain_name: Optional[str] = None
     expert_score: Optional[float] = None
+    response: Optional[str] = None
 
     # Властивості для форматування
     @property
@@ -169,6 +170,7 @@ class BenchmarkMetrics(BaseModel):
             'chain_id': self.chain_id,
             'chain_name': self.chain_name,
             'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
+            'response': self.response,
         }
 
     @classmethod

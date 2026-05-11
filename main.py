@@ -18,10 +18,15 @@ from benchmark.result import ModelInfo, BenchmarkResult, Capability
 from ui.curses_selector import interactive_model_select, select_expert_model
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
+from export.retest_dialog import RetestDecision, prompt_retest_decision, should_skip_model, should_stop_testing
+from export.merge_utils import model_exists_in_results
 from prompts.loader import PromptLoader
 
 # Setup logging
 logger = logging.getLogger('roo_bench')
+
+# Default output file for benchmark results
+DEFAULT_OUTPUT_FILE = "benchmark_results.json"
 
 
 def validate_expert_prompts() -> bool:
@@ -84,6 +89,47 @@ def run_benchmark_workflow(config: OllamaConfig, args):
     except KeyboardInterrupt:
         print("\n" + get_text("benchmark_interrupted"))
         sys.exit(0)
+
+
+def _check_model_retest(model_name: str, tested_count: int, total_count: int,
+                         results_file: str, decision_state: dict) -> tuple:
+    """Check if model exists in results and prompt for retest decision.
+    
+    Args:
+        model_name: Name of the model to check
+        tested_count: Number of models already tested
+        total_count: Total number of models to test
+        results_file: Path to results file
+        decision_state: Shared state dict for YES_ALL/NO_ALL decisions
+        
+    Returns:
+        Tuple of (should_test: bool, should_stop: bool)
+    """
+    # Check if we have a shared decision state (YES_ALL or NO_ALL)
+    if decision_state.get('skip_all', False):
+        return False, False
+    if decision_state.get('test_all', False):
+        return True, False
+    
+    # Check if model exists in results file
+    if not model_exists_in_results(results_file, model_name):
+        return True, False
+    
+    # Model exists - prompt user
+    decision = prompt_retest_decision(model_name, tested_count, total_count)
+    
+    if should_skip_model(decision, tested_count, total_count):
+        if should_stop_testing(decision):
+            return False, True
+        return False, False
+    
+    # YES or YES_ALL
+    if decision == RetestDecision.YES_ALL:
+        decision_state['test_all'] = True
+    elif decision == RetestDecision.NO_ALL:
+        decision_state['skip_all'] = True
+    
+    return True, False
 
 
 def _run_benchmark_workflow_impl(config: OllamaConfig, args):
@@ -400,11 +446,24 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     # Run benchmarks for each model
     from benchmark.result import BenchmarkResult
     all_results: list[BenchmarkResult] = []
+    
+    # Initialize retest decision state and results file
+    decision_state: dict = {}
+    results_file = getattr(args, 'output', DEFAULT_OUTPUT_FILE)
 
     # Run based on mode
     if args.independent:
         # Run ALL independent prompts for each model
-        for m in test_models:
+        for i, m in enumerate(test_models):
+            # Check if model exists in results and prompt for retest decision
+            should_test, should_stop = _check_model_retest(
+                m['name'], i, len(test_models), results_file, decision_state
+            )
+            if should_stop:
+                break
+            if not should_test:
+                continue
+            
             moe_val = m.get('moe')
             moe_dict = moe_val if isinstance(moe_val, dict) else None
             model_info = ModelInfo(
@@ -427,7 +486,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
 
     elif args.chains:
         # NEW: Run ALL chains for each model
-        for m in test_models:
+        for i, m in enumerate(test_models):
+            # Check if model exists in results and prompt for retest decision
+            should_test, should_stop = _check_model_retest(
+                m['name'], i, len(test_models), results_file, decision_state
+            )
+            if should_stop:
+                break
+            if not should_test:
+                continue
+            
             moe_val = m.get('moe')
             moe_dict = moe_val if isinstance(moe_val, dict) else None
             model_info = ModelInfo(
@@ -454,7 +522,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         if not chain:
             print(f"Chain not found: {args.chain}")
             return
-        for m in test_models:
+        for i, m in enumerate(test_models):
+            # Check if model exists in results and prompt for retest decision
+            should_test, should_stop = _check_model_retest(
+                m['name'], i, len(test_models), results_file, decision_state
+            )
+            if should_stop:
+                break
+            if not should_test:
+                continue
+            
             moe_val = m.get('moe')
             moe_dict = moe_val if isinstance(moe_val, dict) else None
             model_info = ModelInfo(
@@ -479,7 +556,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         # Default: run ALL independent prompts
         if prompt_loader and prompt_loader.data.get('independent'):
             print(get_text("using_independent_prompts_default"))
-            for m in test_models:
+            for i, m in enumerate(test_models):
+                # Check if model exists in results and prompt for retest decision
+                should_test, should_stop = _check_model_retest(
+                    m['name'], i, len(test_models), results_file, decision_state
+                )
+                if should_stop:
+                    break
+                if not should_test:
+                    continue
+                
                 # Helper: convert moe value to dict or None
                 moe_val = m.get('moe')
                 moe_dict = moe_val if isinstance(moe_val, dict) else None
@@ -503,7 +589,16 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     continue
         else:
             logger.warning("⚠️  No independent prompts found in prompts.jsonc, using default benchmark prompt")
-            for m in test_models:
+            for i, m in enumerate(test_models):
+                # Check if model exists in results and prompt for retest decision
+                should_test, should_stop = _check_model_retest(
+                    m['name'], i, len(test_models), results_file, decision_state
+                )
+                if should_stop:
+                    break
+                if not should_test:
+                    continue
+                
                 moe_val = m.get('moe')
                 moe_dict = moe_val if isinstance(moe_val, dict) else None
                 model_info = ModelInfo(
