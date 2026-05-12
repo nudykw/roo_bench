@@ -291,3 +291,109 @@ def select_expert_model(stdscr, models: list) -> str:
         return None
 
     return selected[0]['name']
+
+
+def select_retest_decision(stdscr, model_name: str, tested_count: int, total_count: int) -> str:
+    """Select retest decision using curses interface.
+
+    Args:
+        stdscr: curses standard screen
+        model_name: Name of the model being checked
+        tested_count: Number of models already tested
+        total_count: Total number of models to test
+
+    Returns:
+        str: Selected decision value ('yes', 'no', 'yes_all', 'no_all')
+    """
+    from export.retest_dialog import RetestDecision
+    
+    options = [
+        (RetestDecision.YES, get_text('retest_yes')),
+        (RetestDecision.NO, get_text('retest_no')),
+        (RetestDecision.YES_ALL, get_text('retest_yes_all')),
+        (RetestDecision.NO_ALL, get_text('retest_no_all')),
+    ]
+    
+    # Initialize curses features
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    stdscr.timeout(100)
+    
+    # Enable mouse
+    try:
+        mouse_event = curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED
+        curses.mousemask(mouse_event)
+        curses.mouseinterval(0)
+    except Exception:
+        mouse_event = 0
+    
+    current_idx = 0
+    
+    # Get screen dimensions
+    max_rows, max_cols = stdscr.getmaxyx()
+    
+    # Color pairs
+    try:
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+    except Exception:
+        pass
+    
+    def draw():
+        stdscr.erase()
+        
+        # Header
+        header = f"⚠️  Model '{model_name}' already exists in results file!"
+        subheader = f"   Progress: {tested_count}/{total_count} models tested"
+        try:
+            stdscr.addstr(0, 0, header[:max_cols-1], curses.color_pair(4) | curses.A_BOLD)
+            stdscr.addstr(1, 0, subheader[:max_cols-1], curses.A_NORMAL)
+        except curses.error:
+            pass
+        
+        # Prompt
+        prompt = get_text('retest_prompt', model=model_name)
+        try:
+            stdscr.addstr(3, 0, prompt[:max_cols-1])
+        except curses.error:
+            pass
+        
+        # Options
+        hint = "Use ↑/↓ arrows to navigate, Enter to select"
+        if _current_language == "ua":
+            hint = "Використовуйте ↑/↓ для навігації, Enter для вибору"
+        
+        try:
+            stdscr.addstr(max_rows - 2, 0, hint[:max_cols-1], curses.color_pair(3))
+        except curses.error:
+            pass
+        
+        for i, (decision, label) in enumerate(options):
+            y = 5 + i
+            if y >= max_rows - 3:
+                break
+            try:
+                if i == current_idx:
+                    stdscr.addstr(y, 2, f"▶ {label}", curses.color_pair(2) | curses.A_BOLD)
+                else:
+                    stdscr.addstr(y, 2, f"  {label}", curses.A_NORMAL)
+            except curses.error:
+                pass
+        
+        stdscr.refresh()
+    
+    while True:
+        draw()
+        
+        key = stdscr.getch()
+        
+        if key == curses.KEY_UP:
+            current_idx = (current_idx - 1) % len(options)
+        elif key == curses.KEY_DOWN:
+            current_idx = (current_idx + 1) % len(options)
+        elif key == ord('\n') or key == ord('\r'):
+            return options[current_idx][0].value
+        elif key == 27:  # Esc
+            return RetestDecision.NO.value

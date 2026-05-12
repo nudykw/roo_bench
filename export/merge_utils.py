@@ -153,11 +153,14 @@ def model_exists_in_results(file_path: str, model_name: str) -> bool:
     """Check if a model already exists in the results file.
 
     Args:
-        file_path: Path to the results JSON file.
+        file_path: Path to the results JSON file. Can be None.
         model_name: Name of the model to check.
 
     Returns:
         True if model exists in results, False otherwise.
+        Returns False if file_path is None or file doesn't exist.
     """
+    if not file_path:
+        return False
     existing_results, _ = load_results_file(file_path)
     return any(r.model.name == model_name for r in existing_results)
