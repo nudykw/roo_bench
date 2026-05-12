@@ -23,7 +23,8 @@ class BenchmarkRunner:
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
-                 num_predict: int = 12000, independent_top: Optional[int] = None):
+                 num_predict: int = 12000, independent_top: Optional[int] = None,
+                 user_context_sizes: str = None):
         """Initialize benchmark runner.
 
         Args:
@@ -37,9 +38,11 @@ class BenchmarkRunner:
             temperature_test_values: List of temperature values for testing (default: None)
             expert_evaluator: Optional ExpertEvaluator instance for response quality assessment
             num_predict: Maximum number of tokens to generate (default: 12000, use -1 for unlimited)
+            user_context_sizes: Raw string from --context-sizes CLI arg (None if not specified)
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
+        self.user_context_sizes = user_context_sizes
         self.num_runs = num_runs
         self.no_restart = no_restart
         self.disable_thinking = disable_thinking
@@ -61,6 +64,27 @@ class BenchmarkRunner:
         self.expert_evaluator = expert_evaluator
         self._response_store: List[ExpertEvaluationEntry] = []
         self.independent_top = independent_top  # Limit prompts per mode for independent tests
+
+    def get_test_params(self, model_names: list, expert_model: Optional[str] = None) -> dict:
+        """Get test parameters as a dictionary.
+        
+        Args:
+            model_names: List of model names being tested
+            expert_model: Expert model name (or None)
+            
+        Returns:
+            dict: Test parameters including context sizes, num runs, etc.
+        """
+        return {
+            "context_sizes": self.context_sizes,
+            "num_runs": self.num_runs,
+            "num_predict": self.num_predict,
+            "temperature_test_values": self.temperature_test_values,
+            "independent_top": self.independent_top,
+            "disable_thinking": self.disable_thinking,
+            "models": model_names,
+            "expert_model": expert_model
+        }
 
     def run_expert_evaluation(self) -> None:
         """Run expert evaluation on all stored responses.
@@ -118,20 +142,27 @@ class BenchmarkRunner:
             max_ctx: Model's maximum context size
     
         Returns:
-            list: Filtered list of valid context sizes (minimum 32K)
+            list: Filtered list of valid context sizes
         """
-        # Filter contexts: take only those >= 32K and <= maximum
         MIN_CONTEXT = 32_768  # 32K minimum
-        valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
     
-        logger.info(f"[DIAGNOSIS] filter_contexts: input_sizes={self.context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
-    
-        # If the model supports some "non-standard" max context (e.g. 128000),
-        # which is not in our list, but it's >= 32K and <= 262144, we can add it for testing
-        if max_ctx not in valid_contexts and MIN_CONTEXT <= max_ctx <= 262144:
-            logger.info(f"[DIAGNOSIS] Adding max_ctx={max_ctx} to valid_contexts (not in list)")
-            valid_contexts.append(max_ctx)
-            valid_contexts.sort()
+        if self.user_context_sizes is not None:
+            # User explicitly specified context sizes - only use those
+            # Check each one against model's max_ctx
+            valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
+            logger.info(f"[DIAGNOSIS] filter_contexts: user-specified sizes={self.context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
+        else:
+            # Default mode - use default list and add max_ctx if not already present
+            valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
+        
+            # If the model supports some "non-standard" max context (e.g. 128000),
+            # which is not in our list, but it's >= 32K and <= 262144, add it for testing
+            if max_ctx not in valid_contexts and MIN_CONTEXT <= max_ctx <= 262144:
+                logger.info(f"[DIAGNOSIS] Adding max_ctx={max_ctx} to valid_contexts (not in list)")
+                valid_contexts.append(max_ctx)
+                valid_contexts.sort()
+        
+            logger.info(f"[DIAGNOSIS] filter_contexts: default sizes={self.context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
     
         logger.info(f"[DIAGNOSIS] filter_contexts result: {valid_contexts}")
         return valid_contexts

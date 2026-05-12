@@ -142,12 +142,16 @@ TRANSLATIONS = {
         "cli_temperature": "Temperature values to test (comma-separated, e.g., 0.0,0.7,1.0)",
         "error_invalid_temperature": "❌ Invalid temperature values '{values}'. Use comma-separated values between 0.0 and 2.0.",
         "cli_independent_top": "Limit the number of independent prompts per mode (e.g., --independent-top 1 runs only the first prompt per mode)",
+        "test_parameters_header": "Test Parameters",
         "retest_prompt": "Model '{model}' already tested. Retest?",
         "retest_yes": "1. Yes - Retest this model",
         "retest_no": "2. No - Skip this model",
         "retest_yes_all": "3. Yes All - Retest all remaining models",
         "retest_no_all": "4. No All - Skip all remaining models",
         "retest_select": "Select option (1-4):",
+        "ask_save_results_after": "Would you like to save the results to a file now?",
+        "ask_save_filename_after": "Enter filename (default: benchmark_results.json): ",
+        "ask_ai_analysis": "Would you like to send results for AI analysis?",
     },
     "ua": {
         "retest_prompt": "Модель '{model}' вже тестувалася. Повторити?",
@@ -156,6 +160,9 @@ TRANSLATIONS = {
         "retest_yes_all": "3. Так усі - Повторити всі залишкові моделі",
         "retest_no_all": "4. Ні усі - Пропустити всі залишкові моделі",
         "retest_select": "Оберіть опцію (1-4):",
+        "ask_save_results_after": "Бажаєте зберегти результати у файл зараз?",
+        "ask_save_filename_after": "Введіть ім'я файлу (за замовчуванням: benchmark_results.json): ",
+        "ask_ai_analysis": "Відправити результати для аналізу штучним інтелектом?",
         "app_title": "Roo Code Model Benchmark",
         "scanning_models": "Сканування моделей та збір даних з ollama.com...",
         "available_models": "Доступні моделі:",
@@ -294,6 +301,7 @@ TRANSLATIONS = {
         "cli_temperature": "Значення температури для тестування (через кому, наприклад, 0.0,0.7,1.0)",
         "error_invalid_temperature": "❌ Невірні значення температури '{values}'. Використовуйте значення через кому від 0.0 до 2.0.",
         "cli_independent_top": "Обмежити кількість незалежних промтів на режим (напр., --independent-top 1 запускає лише перший промт на режим)",
+        "test_parameters_header": "Параметри тестування",
     }
 }
 

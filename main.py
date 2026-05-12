@@ -56,6 +56,22 @@ def prompt_user(message: str) -> bool:
     return response in ['y', 'yes']
 
 
+def prompt_output_filename(default: str = DEFAULT_OUTPUT_FILE) -> str:
+    """Prompt user for output filename with default value.
+    
+    Args:
+        default: Default filename to use if user presses Enter
+        
+    Returns:
+        str: The filename entered by user or default
+    """
+    try:
+        response = input(f"\n{get_text('ask_save_filename')} ").strip()
+        return response if response else default
+    except (EOFError, KeyboardInterrupt):
+        return default
+
+
 def get_ollama_config(args) -> OllamaConfig:
     """Get Ollama configuration from CLI arguments.
 
@@ -99,7 +115,7 @@ def _check_model_retest(model_name: str, tested_count: int, total_count: int,
         model_name: Name of the model to check
         tested_count: Number of models already tested
         total_count: Total number of models to test
-        results_file: Path to results file
+        results_file: Path to results file (can be None)
         decision_state: Shared state dict for YES_ALL/NO_ALL decisions
         
     Returns:
@@ -111,7 +127,7 @@ def _check_model_retest(model_name: str, tested_count: int, total_count: int,
     if decision_state.get('test_all', False):
         return True, False
     
-    # Check if model exists in results file
+    # Check if model exists in results file (returns False if results_file is None)
     if not model_exists_in_results(results_file, model_name):
         return True, False
     
@@ -438,18 +454,44 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         temperature_test_values=temperature_test_values,
         expert_evaluator=expert_evaluator,
         num_predict=getattr(args, 'num_predict', 12000),
-        independent_top=getattr(args, 'independent_top', None)
+        independent_top=getattr(args, 'independent_top', None),
+        user_context_sizes=getattr(args, 'context_sizes', None)
     )
     logger.info("[Expert] After BenchmarkRunner init: runner.expert_evaluator=%s",
                 benchmark_runner.expert_evaluator is not None)
+
+    # Display test parameters in JSON format
+    import json
+    model_names = [m["name"] for m in test_models]
+    test_params = benchmark_runner.get_test_params(model_names, expert_model_name)
+    print("\n" + "="*60)
+    print(get_text("test_parameters_header", default="Test Parameters"))
+    print("="*60)
+    print(json.dumps(test_params, indent=2, ensure_ascii=False))
+    print("="*60 + "\n")
 
     # Run benchmarks for each model
     from benchmark.result import BenchmarkResult
     all_results: list[BenchmarkResult] = []
     
-    # Initialize retest decision state and results file
+    # Initialize retest decision state
     decision_state: dict = {}
-    results_file = args.output if args.output else DEFAULT_OUTPUT_FILE
+    
+    # Determine output file - prompt user if not specified via --output
+    # Track whether we should save results
+    should_save_results = False
+    if args.output:
+        results_file = args.output
+        should_save_results = True
+    else:
+        # Ask to save results first
+        if prompt_user(get_text("ask_save_results")):
+            results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)
+            should_save_results = True
+        else:
+            # User declined to save - set to None to indicate no file
+            results_file = None
+            should_save_results = False
 
     # Run based on mode
     if args.independent:
@@ -724,223 +766,102 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     print(f"    {model_name} ({params}, {size_gb} GB)")
                     print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
 
-    # Save results to file (if --output flag specified)
-    if hasattr(args, 'output') and hasattr(args, 'output_format'):
+    # Save results to file
+    # If --output-format is specified, use it; otherwise save to the determined results_file
+    if hasattr(args, 'output_format') and args.output_format:
         save_results(
             all_results,
-            args.output,
+            results_file,
             args.output_format,
             prompts_config=prompt_loader.data if prompt_loader else None
         )
-    
-    # Post-benchmark interactive workflow (save + AI analysis)
-    _post_benchmark_workflow(args, all_results, test_models, config)
+    elif results_file:
+        # Interactive save if no output file was specified and user declined to save
+        # results_file is already set (either from --output or from user prompt earlier)
+        save_results(
+            all_results,
+            results_file,
+            'json',
+            prompts_config=prompt_loader.data if prompt_loader else None
+        )
+    elif all_results and prompt_user(get_text("ask_save_results_after")):
+        # No results_file was set, but user wants to save now
+        results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)
+        save_results(
+            all_results,
+            results_file,
+            'json',
+            prompts_config=prompt_loader.data if prompt_loader else None
+        )
 
 
-def _post_benchmark_workflow(args, all_results: list[BenchmarkResult], test_models, config):
-    """Handle post-benchmark save and analysis prompts.
+def _post_benchmark_workflow(results_file: str, all_results: list, args):
+    """Post-benchmark workflow: ask about AI analysis and model selection.
     
     Args:
-        args: Parsed command-line arguments
+        results_file: Path to results file (can be None)
         all_results: List of BenchmarkResult objects
-        test_models: List of model objects
-        config: OllamaConfig object
+        args: Parsed arguments
     """
     from i18n import get_text
-    from export.ai_analyzer import (
-        save_results_interactive,
-        analyze_results_interactive,
-        AIAnalyzer,
-        prompt_user
-    )
-    import curses
+    from export.ai_analyzer import AIAnalyzer, analyze_results_interactive
     
-    # Skip if --no-interactive flag is set
-    if getattr(args, 'no_interactive', False):
+    # Only ask about AI analysis if we have results and a file to work with
+    if not all_results or not results_file:
         return
     
-    # Only prompt if no output file was specified
-    if not hasattr(args, 'output') or not args.output:
-        # Step 1: Ask to save results
-        saved_file = save_results_interactive(
-            all_results,
-            config.base_url, config.get_headers()
-        )
-        
-        # Step 2: Ask for AI analysis
-        if prompt_user(get_text("ask_analyze_ai")):
-            analyzer = AIAnalyzer(
-                base_url=config.base_url,
-                headers=config.get_headers(),
-                timeout=config.timeout
-            )
-            # Get restart params from args (same as benchmark)
-            from api.factory import ApiClientFactory
-            ollama_client = ApiClientFactory.create_client(
-                base_url=config.base_url,
-                headers=config.get_headers(),
-                timeout=config.timeout,
-                ssh_host=getattr(args, 'ssh_host', None),
-                ssh_user=getattr(args, 'ssh_user', None),
-                ssh_port=getattr(args, 'ssh_port', 22),
-                ssh_key=getattr(args, 'ssh_key', None)
-            )
+    # Ask about AI analysis
+    if prompt_user(get_text("ask_ai_analysis")):
+        try:
+            analyzer = AIAnalyzer()
             analyze_results_interactive(
-                analyzer, all_results, args.lang,
-                restart_method=getattr(args, 'restart_method', 'manual'),
-                no_restart=False,
-                ssh_client=ollama_client.ssh_client,
-                ollama_client=ollama_client  # Pass API client for unload_model
+                analyzer, all_results, 
+                getattr(args, 'language', 'en'),
+                getattr(args, 'restart_method', 'manual'),
+                getattr(args, 'no_restart', False)
             )
-        
-        # Step 3: Select best model from tested models
-        if test_models and len(test_models) > 1:
-            print("\n" + get_text("select_best_model_prompt"))
-            try:
-                from ui.curses_selector import interactive_model_select
-                selected_model = curses.wrapper(
-                    lambda stdscr: interactive_model_select(stdscr, test_models, single_select=True)
-                )
-                if selected_model:
-                    print(f"✅ Selected model for further use: {selected_model[0]['name']}")
-            except Exception as e:
-                print(f"⚠️  Model selection failed: {e}")
+        except Exception as e:
+            print(f"⚠️  AI analysis failed: {e}")
 
 
-def main():
-    """Main entry point function."""
-    try:
-        _main_impl()
-    except KeyboardInterrupt:
-        from i18n import get_text
-        print("\n" + get_text("benchmark_interrupted"))
+def signal_handler(signum, frame):
+    """Handle SIGINT signal gracefully."""
+    print("\n" + get_text("benchmark_interrupted"))
+    sys.exit(0)
 
 
 def _main_impl():
-    """Main implementation separated for clean exception handling."""
-    from i18n import get_text
-    
-    # Parse arguments
-    args = parse_args()
-
-    # Setup logging based on verbose level
+    """Main implementation with language setup."""
+    from i18n import set_language
     from cli import setup_logging
+    
+    args = parse_args()
+    
+    # Setup logging
     setup_logging(getattr(args, 'verbose', 0))
-
+    
     # Set language
-    set_language(args.lang)
-
-    # Handle --update-cache flag (update full model metadata cache)
-    if getattr(args, 'update_cache', False):
-        from api.capabilities_fetcher import CapabilitiesFetcher
-        from api.factory import ApiClientFactory
-        
-        config = get_ollama_config(args)
-        print(get_text("cache_update_start"))
-        
-        ollama_client = ApiClientFactory.create_client(
-            base_url=config.base_url,
-            headers=config.get_headers(),
-            timeout=config.timeout
-        )
-        
-        fetcher = CapabilitiesFetcher()
-        models = ollama_client.get_models()
-        
-        if not models:
-            print(get_text("no_models_found", models=""))
-            return
-        
-        updated = 0
-        for m in models:
-            model_name = m["name"]
-            try:
-                model_info = ollama_client.get_model_info(model_name)
-                # Add size from /api/tags response (it's not in /api/show)
-                if m.get("size", 0) > 0:
-                    model_info["size"] = m["size"]
-                fetcher.add_model_metadata(model_name, model_info)
-                
-                # Extract capabilities from model_info
-                # API returns capabilities as a list of strings (e.g., ['vision', 'tools'])
-                caps_list = model_info.get('capabilities', [])
-                if isinstance(caps_list, list) and len(caps_list) > 0:
-                    caps_str = ' '.join(caps_list).lower()
-                    capabilities_dict = {
-                        'vision': 'vision' in caps_str or 'image' in caps_str,
-                        'tools': 'tools' in caps_str or 'function' in caps_str,
-                        'thinking': 'thinking' in caps_str or 'reason' in caps_str,
-                        'audio': 'audio' in caps_str or 'whisper' in caps_str
-                    }
-                else:
-                    capabilities_dict = {}
-                
-                fetcher.add_model_from_api(model_name, capabilities_dict)
-                updated += 1
-            except Exception as e:
-                print(f"  ⚠️  Error updating {model_name}: {e}")
-        
-        fetcher.save_cache()
-        fetcher.save_model_cache()
-        print(get_text("cache_update_complete", count=updated))
-        return
-
-    # Handle --analyze-file flag (analyze saved benchmark results)
-    analyze_file = getattr(args, 'analyze_file', None)
-    if analyze_file:
-        config = get_ollama_config(args)
-        
-        from export.ai_analyzer import AIAnalyzer
-        from api.factory import ApiClientFactory
-        
-        # Create API client for unload_model support
-        ollama_client = ApiClientFactory.create_client(
-            base_url=config.base_url,
-            headers=config.get_headers(),
-            timeout=config.timeout,
-            ssh_host=getattr(args, 'ssh_host', None),
-            ssh_user=getattr(args, 'ssh_user', None),
-            ssh_port=getattr(args, 'ssh_port', 22),
-            ssh_key=getattr(args, 'ssh_key', None)
-        )
-        
-        analyzer = AIAnalyzer(
-            base_url=config.base_url,
-            headers=config.get_headers(),
-            timeout=config.timeout
-        )
-        
-        # Get model name for analysis (default to first available or prompt)
-        model_name = getattr(args, 'analysis_model', None)
-        if not model_name:
-            # Try to get from args or use default
-            model_name = "qwen3.6:35b"  # default model for analysis
-        
-        success = analyzer.analyze_from_file(
-            file_path=analyze_file,
-            model_name=model_name,
-            target_lang=args.lang,
-            ollama_client=ollama_client,
-            stream=not getattr(args, 'no_stream', False)  # stream=True по умолчанию
-        )
-        
-        sys.exit(0 if success else 1)
-
-    # Initialize Ollama configuration
+    lang = getattr(args, 'language', 'en')
+    set_language(lang)
+    
+    # Get configuration
     config = get_ollama_config(args)
-
+    
+    # Register signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # Run benchmark workflow
     run_benchmark_workflow(config, args)
 
 
-def signal_handler(sig, frame):
-    """Handle Ctrl+C gracefully."""
-    from i18n import get_text
-    print("\n\n⚠️  Перервано користувачем (Ctrl+C)")
-    print(get_text("stopping_tests", model_name="benchmark"))
-    sys.exit(0)
+def main():
+    """Main entry point."""
+    try:
+        _main_impl()
+    except KeyboardInterrupt:
+        print("\n" + get_text("benchmark_interrupted"))
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
     main()
