@@ -66,7 +66,7 @@ Roo Bench is a professional benchmarking tool designed to analyze Ollama models'
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/roo-bench.git
+git clone https://github.com/nudykw/roo_bench.git
 cd roo-bench
 
 # Create virtual environment
