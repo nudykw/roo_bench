@@ -80,11 +80,41 @@ class BenchmarkRunner:
             "num_runs": self.num_runs,
             "num_predict": self.num_predict,
             "temperature_test_values": self.temperature_test_values,
+            "used_prompt_ids": self.get_used_prompt_ids(),
+            "used_chain_ids": self.get_used_chain_ids(),
             "independent_top": self.independent_top,
             "disable_thinking": self.disable_thinking,
             "models": model_names,
             "expert_model": expert_model
         }
+
+    def get_used_independent_prompts(self) -> List[Dict[str, Any]]:
+        """Return independent prompts that will be used by all-independent mode."""
+        if not self.prompt_loader:
+            return []
+
+        all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()
+        if self.independent_top is None or self.independent_top <= 0:
+            return all_prompts
+
+        prompts_by_mode: Dict[str, List[Dict[str, Any]]] = {}
+        for prompt in all_prompts:
+            prompts_by_mode.setdefault(prompt.get('mode'), []).append(prompt)
+
+        filtered_prompts: List[Dict[str, Any]] = []
+        for mode in ['architect', 'code', 'debug']:
+            filtered_prompts.extend(prompts_by_mode.get(mode, [])[:self.independent_top])
+        return filtered_prompts
+
+    def get_used_prompt_ids(self) -> List[str]:
+        """Return independent prompt IDs used by all-independent mode."""
+        return [p.get('id') for p in self.get_used_independent_prompts() if p.get('id')]
+
+    def get_used_chain_ids(self) -> List[str]:
+        """Return all configured chain IDs."""
+        if not self.prompt_loader:
+            return []
+        return [c.get('id') for c in self.prompt_loader.get_chains() if c.get('id')]
 
     def run_expert_evaluation(self) -> None:
         """Run expert evaluation on all stored responses.
@@ -121,6 +151,33 @@ class BenchmarkRunner:
         print("\n" + "=" * 60)
         print("Expert evaluation completed.")
         print("=" * 60)
+
+    def run_expert_evaluation_for_model(self, model_name: str) -> None:
+        """Run expert evaluation only for responses from one tested model."""
+        if not self.expert_evaluator:
+            return
+
+        entries = [e for e in self._response_store if e.model_name == model_name]
+        if not entries:
+            logger.warning("[Expert] No stored responses for model=%s", model_name)
+            return
+
+        print("\n" + "=" * 60)
+        print(f"Starting expert evaluation for: {model_name}")
+        print(f"Total responses to evaluate: {len(entries)}")
+        print("=" * 60)
+        self.expert_evaluator.evaluate_batch(entries)
+        self._response_store = [e for e in self._response_store if e.model_name != model_name]
+        print("Expert evaluation completed for model.")
+        print("=" * 60)
+
+    def _unload_tested_model(self, model_name: str) -> None:
+        """Unload a tested model from VRAM and keep benchmark flow alive."""
+        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
+        try:
+            self.ollama_client.unload_model(model_name)
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not unload model: {e}")
 
     def _store_response(self, entry: ExpertEvaluationEntry) -> None:
         """Store response for later expert evaluation.
@@ -207,7 +264,7 @@ class BenchmarkRunner:
         
         # Get default temperature if not specified
         if temperature is None:
-            temps = [1.0, 0.7, 0.3, 0.0]  # High, medium, low creativity
+            temps = self.temperature_test_values or [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
@@ -325,14 +382,10 @@ class BenchmarkRunner:
                         error_message = f"Critical error during {prompt_id} testing: {e}"
                         print(f"         ❌ {error_message}")
                         # Return error so main.py knows the test failed
+                        self._unload_tested_model(model_name)
                         return None, error_message
         
-        # Unload model from VRAM after all tests
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            self.ollama_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        self._unload_tested_model(model_name)
         
         # Create the final BenchmarkResult object
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
@@ -378,7 +431,7 @@ class BenchmarkRunner:
         
         # Get default temperature if not specified
         if temperature is None:
-            temps = [1.0, 0.7, 0.3, 0.0]
+            temps = self.temperature_test_values or [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
@@ -498,14 +551,10 @@ class BenchmarkRunner:
                     except Exception as e:
                         error_message = f"Critical error during chain [{mode}] testing: {e}"
                         print(f"         ❌ {error_message}")
+                        self._unload_tested_model(model_name)
                         return None, error_message
         
-        # Unload model from VRAM after all tests
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            self.ollama_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        self._unload_tested_model(model_name)
         
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
@@ -663,14 +712,10 @@ class BenchmarkRunner:
                 except Exception as e:
                     error_message = f"Critical error during context {ctx} testing: {e}"
                     print(f"   ❌ {error_message}")
+                    self._unload_tested_model(model_name)
                     return None, error_message
 
-        # Unload model from VRAM after all context tests are done
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            self.ollama_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        self._unload_tested_model(model_name)
 
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
@@ -849,6 +894,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         error_message = f"Critical error during prompt {prompt_id} testing: {e}"
                         print(f"   ❌ {error_message}")
+                        self._unload_tested_model(model_name)
                         return None, error_message
         
         logger.info(
@@ -856,11 +902,7 @@ class BenchmarkRunner:
             model_name, len(self._response_store), len(all_metrics)
         )
         
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            self.ollama_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        self._unload_tested_model(model_name)
         
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
@@ -895,7 +937,7 @@ class BenchmarkRunner:
         valid_contexts = self.filter_contexts(max_ctx)
         
         if temperature is None:
-            temps = [1.0, 0.7, 0.3, 0.0]
+            temps = self.temperature_test_values or [1.0, 0.7, 0.3, 0.0]
         else:
             temps = [temperature]
         
@@ -1013,14 +1055,10 @@ class BenchmarkRunner:
                         except Exception as e:
                             error_message = f"Critical error during chain [{mode}] testing: {e}"
                             print(f"            ❌ {error_message}")
+                            self._unload_tested_model(model_name)
                             return None, error_message
         
-        # Unload model once after all chains
-        print(f"\n   🧹 Unloading model '{model_name}' from VRAM...")
-        try:
-            self.ollama_client.unload_model(model_name)
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not unload model: {e}")
+        self._unload_tested_model(model_name)
         
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None

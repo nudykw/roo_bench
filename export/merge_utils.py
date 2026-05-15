@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 from typing import Optional, Tuple
 from benchmark.result import BenchmarkResult, BenchmarkMetrics, ModelInfo
 
@@ -14,9 +15,37 @@ def compute_metric_key(model_name: str, metric: BenchmarkMetrics) -> str:
         metric: BenchmarkMetrics instance.
 
     Returns:
-        Unique key string: {model_name}|{ctx}|{temperature}|{prompt_id}
+    Unique key string: {model_name}|{ctx}|{temperature}|{prompt_id}|{chain_id}|{mode}
     """
-    return f"{model_name}|{metric.ctx}|{metric.temperature}|{metric.prompt_id or ''}"
+    return (
+        f"{model_name}|{metric.ctx}|{metric.temperature}|"
+        f"{metric.prompt_id or ''}|{metric.chain_id or ''}|{metric.mode or ''}"
+    )
+
+
+def atomic_write_json(file_path: str, data: dict) -> None:
+    """Atomically write JSON data to a file."""
+    directory = os.path.dirname(os.path.abspath(file_path)) or "."
+    os.makedirs(directory, exist_ok=True)
+
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(file_path)}.",
+        suffix=".tmp",
+        dir=directory,
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, file_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def load_results_file(file_path: str) -> Tuple[list, dict]:
@@ -50,7 +79,8 @@ def load_results_file(file_path: str) -> Tuple[list, dict]:
         return [], {}
 
 
-def save_results_file(file_path: str, results: list, prompts_config: dict = None) -> None:
+def save_results_file(file_path: str, results: list, prompts_config: dict = None,
+                      run_config: dict = None) -> None:
     """Save results to JSON file.
 
     Args:
@@ -59,12 +89,12 @@ def save_results_file(file_path: str, results: list, prompts_config: dict = None
         prompts_config: Optional prompts configuration.
     """
     export_data = {
+        'run_config': run_config or {},
         'prompts_config': prompts_config or {},
         'results': [r.to_dict() for r in results]
     }
 
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(export_data, f, indent=2, ensure_ascii=False)
+    atomic_write_json(file_path, export_data)
 
 
 def merge_single_result(existing_results: list, new_result: BenchmarkResult) -> list:
@@ -87,22 +117,22 @@ def merge_single_result(existing_results: list, new_result: BenchmarkResult) -> 
     for new_metric in new_result.results:
         key = compute_metric_key(model_name, new_metric)
 
-        existing_metric = next(
-            (m for m in existing_model.results
+        existing_index = next(
+            (i for i, m in enumerate(existing_model.results)
              if compute_metric_key(model_name, m) == key),
             None
         )
 
-        if existing_metric:
-            existing_metric.response = new_metric.response
-            existing_metric.expert_score = new_metric.expert_score
+        if existing_index is not None:
+            existing_model.results[existing_index] = new_metric
         else:
             existing_model.results.append(new_metric)
 
     return existing_results
 
 
-def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_config: dict = None) -> None:
+def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_config: dict = None,
+                  run_config: dict = None) -> None:
     """Merge new result into existing file.
 
     Args:
@@ -111,12 +141,44 @@ def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_confi
         prompts_config: Optional prompts configuration to save.
     """
     existing_results, existing_prompts = load_results_file(existing_file)
+    existing_run_config = load_run_config(existing_file)
 
     if prompts_config is None:
         prompts_config = existing_prompts
+    if run_config is None:
+        run_config = existing_run_config
 
     updated_results = merge_single_result(existing_results, new_result)
-    save_results_file(existing_file, updated_results, prompts_config)
+    save_results_file(existing_file, updated_results, prompts_config, run_config)
+
+
+def load_run_config(file_path: str) -> dict:
+    """Load run_config from a results file."""
+    if not file_path or not os.path.exists(file_path):
+        return {}
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('run_config', {}) if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, TypeError):
+        return {}
+
+
+def normalize_run_config_for_merge(config: dict) -> dict:
+    """Keep only fields that decide merge compatibility."""
+    config = config or {}
+    return {
+        'used_prompt_ids': sorted(config.get('used_prompt_ids') or []),
+        'used_chain_ids': sorted(config.get('used_chain_ids') or []),
+        'context_sizes': sorted(config.get('context_sizes') or []),
+        'temperature_test_values': sorted(config.get('temperature_test_values') or []),
+    }
+
+
+def run_configs_match(existing_config: dict, new_config: dict) -> bool:
+    """Return True when the fields required for merge compatibility match."""
+    return normalize_run_config_for_merge(existing_config) == normalize_run_config_for_merge(new_config)
 
 
 def check_prompts_match(file_path: str, new_prompts_config: dict) -> bool:

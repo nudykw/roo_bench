@@ -19,7 +19,14 @@ from ui.curses_selector import interactive_model_select, select_expert_model
 from ui.output_formatter import print_model_list, print_results_table
 from export.result_saver import save_results, ResultSaver
 from export.retest_dialog import RetestDecision, prompt_retest_decision, should_skip_model, should_stop_testing
-from export.merge_utils import model_exists_in_results
+from export.merge_utils import (
+    load_run_config,
+    merge_results,
+    model_exists_in_results,
+    run_configs_match,
+    save_results_file,
+)
+from export.expert_results import ExpertResultsManager
 from prompts.loader import PromptLoader
 
 # Setup logging
@@ -27,6 +34,12 @@ logger = logging.getLogger('roo_bench')
 
 # Default output file for benchmark results
 DEFAULT_OUTPUT_FILE = "benchmark_results.json"
+
+
+SAVE_MODE_DISABLED = "disabled"
+SAVE_MODE_NEW = "new"
+SAVE_MODE_OVERWRITE = "overwrite"
+SAVE_MODE_MERGE = "merge"
 
 
 def validate_expert_prompts() -> bool:
@@ -70,6 +83,156 @@ def prompt_output_filename(default: str = DEFAULT_OUTPUT_FILE) -> str:
         return response if response else default
     except (EOFError, KeyboardInterrupt):
         return default
+
+
+def _prompt_existing_results_action(results_file: str, can_merge: bool) -> str:
+    """Ask what to do with an existing results file before tests start."""
+    print(f"\nResults file already exists: {results_file}")
+    if can_merge:
+        print("Compatible run config found. Choose: [m]erge, [o]verwrite, [a]bort")
+        valid = {"m": SAVE_MODE_MERGE, "merge": SAVE_MODE_MERGE,
+                 "o": SAVE_MODE_OVERWRITE, "overwrite": SAVE_MODE_OVERWRITE,
+                 "a": "abort", "abort": "abort"}
+    else:
+        print("Run config is not compatible for merge. Choose: [o]verwrite, [a]bort")
+        valid = {"o": SAVE_MODE_OVERWRITE, "overwrite": SAVE_MODE_OVERWRITE,
+                 "a": "abort", "abort": "abort"}
+
+    while True:
+        response = input("> ").strip().lower()
+        if response in valid:
+            return valid[response]
+        print("Please enter one of the listed options.")
+
+
+def _minimal_prompt(prompt: dict) -> dict:
+    """Keep only prompt fields needed in benchmark_results.json."""
+    return {
+        'id': prompt.get('id'),
+        'name': prompt.get('name'),
+        'prompt': prompt.get('prompt'),
+    }
+
+
+def build_used_prompts_config(prompt_loader: PromptLoader, args, benchmark_runner: BenchmarkRunner) -> dict:
+    """Build prompts_config containing only prompts used by this run."""
+    if not prompt_loader:
+        return None
+
+    if args.chain:
+        chain = prompt_loader.get_chain_by_id(args.chain)
+        if not chain:
+            return None
+        return {
+            'chains': [_minimal_chain(chain)]
+        }
+
+    if args.chains:
+        return {
+            'chains': [_minimal_chain(chain) for chain in prompt_loader.get_chains()]
+        }
+
+    if args.independent or prompt_loader.data.get('independent'):
+        independent = {}
+        for prompt in benchmark_runner.get_used_independent_prompts():
+            mode = prompt.get('mode')
+            if not mode:
+                continue
+            independent.setdefault(mode, []).append(_minimal_prompt(prompt))
+        return {'independent': independent}
+
+    return None
+
+
+def _minimal_chain(chain: dict) -> dict:
+    return {
+        'id': chain.get('id'),
+        'name': chain.get('name'),
+        'prompts': {
+            mode: _minimal_prompt(prompt)
+            for mode, prompt in chain.get('prompts', {}).items()
+        }
+    }
+
+
+def build_run_config(prompt_loader: PromptLoader, args, benchmark_runner: BenchmarkRunner,
+                     test_models: list) -> dict:
+    """Build effective run config used for merge compatibility."""
+    context_sizes = set()
+    for model in test_models:
+        context_sizes.update(benchmark_runner.filter_contexts(model.get('max_ctx', 131072)))
+
+    used_prompt_ids = []
+    used_chain_ids = []
+
+    if args.chain:
+        chain = prompt_loader.get_chain_by_id(args.chain) if prompt_loader else None
+        if chain and chain.get('id'):
+            used_chain_ids = [chain['id']]
+    elif args.chains:
+        used_chain_ids = benchmark_runner.get_used_chain_ids()
+    elif args.independent or (prompt_loader and prompt_loader.data.get('independent')):
+        used_prompt_ids = benchmark_runner.get_used_prompt_ids()
+
+    return {
+        'context_sizes': sorted(context_sizes),
+        'temperature_test_values': sorted(benchmark_runner.temperature_test_values or []),
+        'used_prompt_ids': sorted(used_prompt_ids),
+        'used_chain_ids': sorted(used_chain_ids),
+    }
+
+
+def prepare_results_output_file(results_file: str, run_config: dict,
+                                prompts_config: dict) -> str:
+    """Prepare result-file save mode before benchmark starts."""
+    if not results_file:
+        return SAVE_MODE_DISABLED
+
+    if not os.path.exists(results_file):
+        return SAVE_MODE_NEW
+
+    existing_run_config = load_run_config(results_file)
+    can_merge = bool(existing_run_config) and run_configs_match(existing_run_config, run_config)
+    action = _prompt_existing_results_action(results_file, can_merge)
+    if action == "abort":
+        print("Benchmark aborted before tests started.")
+        return "abort"
+
+    if action == SAVE_MODE_OVERWRITE:
+        save_results_file(results_file, [], prompts_config=prompts_config, run_config=run_config)
+    return action
+
+
+def persist_model_result(save_mode: str, results_file: str, benchmark_result: BenchmarkResult,
+                         all_results: list, prompts_config: dict, run_config: dict) -> None:
+    """Persist one finished model according to selected save mode."""
+    if save_mode == SAVE_MODE_DISABLED or not results_file or not benchmark_result:
+        return
+
+    if save_mode == SAVE_MODE_MERGE:
+        merge_results(results_file, benchmark_result, prompts_config=prompts_config, run_config=run_config)
+    else:
+        save_results_file(results_file, all_results, prompts_config=prompts_config, run_config=run_config)
+    print(f"   💾 Results saved atomically after model: {benchmark_result.model.name}")
+
+
+def make_model_info(model_data: dict) -> ModelInfo:
+    """Convert discovered model dict to ModelInfo."""
+    moe_val = model_data.get('moe')
+    moe_dict = moe_val if isinstance(moe_val, dict) else None
+    return ModelInfo(
+        name=model_data['name'],
+        size_gb=float(model_data['size_gb'])
+        if model_data.get('size_gb') and model_data.get('size_gb') != 'N/A' else 0.0,
+        params=model_data.get('params', 'N/A'),
+        quant=model_data.get('quant', 'N/A'),
+        architecture=model_data.get('architecture', 'N/A'),
+        max_ctx=model_data.get('max_ctx', 131072),
+        moe=moe_dict,
+        vision=Capability.VISION if model_data.get('vision') == '✅' else Capability.TOOLS,
+        tools=Capability.TOOLS if model_data.get('tools') == '✅' else Capability.THINKING,
+        thinking=Capability.THINKING if model_data.get('thinking') == '✅' else Capability.AUDIO,
+    )
 
 
 def get_ollama_config(args) -> OllamaConfig:
@@ -460,10 +623,21 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     logger.info("[Expert] After BenchmarkRunner init: runner.expert_evaluator=%s",
                 benchmark_runner.expert_evaluator is not None)
 
+    selected_chain = None
+    if args.chain:
+        selected_chain = prompt_loader.get_chain_by_id(args.chain)
+        if not selected_chain:
+            print(f"Chain not found: {args.chain}")
+            return
+
+    used_prompts_config = build_used_prompts_config(prompt_loader, args, benchmark_runner)
+    run_config = build_run_config(prompt_loader, args, benchmark_runner, test_models)
+
     # Display test parameters in JSON format
     import json
     model_names = [m["name"] for m in test_models]
     test_params = benchmark_runner.get_test_params(model_names, expert_model_name)
+    test_params.update(run_config)
     print("\n" + "="*60)
     print(get_text("test_parameters_header", default="Test Parameters"))
     print("="*60)
@@ -493,6 +667,42 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             results_file = None
             should_save_results = False
 
+    if getattr(args, 'output_format', None) == 'csv':
+        save_mode = SAVE_MODE_DISABLED
+    else:
+        save_mode = prepare_results_output_file(results_file, run_config, used_prompts_config)
+    if save_mode == "abort":
+        return
+
+    expert_results_manager = ExpertResultsManager()
+    expert_results_manager.start_session(
+        tested_model=model_names,
+        expert_model=expert_model_name,
+        run_config=run_config,
+    )
+
+    def handle_completed_result(benchmark_result: BenchmarkResult):
+        if not benchmark_result:
+            return
+        all_results.append(benchmark_result)
+        benchmark_runner.run_expert_evaluation_for_model(benchmark_result.model.name)
+        expert_results_manager.append_model_result(benchmark_result)
+        persist_model_result(
+            save_mode,
+            results_file,
+            benchmark_result,
+            all_results,
+            used_prompts_config,
+            run_config,
+        )
+
+    def run_model_benchmark(model_info: ModelInfo, runner_method, *method_args):
+        try:
+            return runner_method(model_info, *method_args)
+        except BaseException:
+            benchmark_runner._unload_tested_model(model_info.name)
+            raise
+
     # Run based on mode
     if args.independent:
         # Run ALL independent prompts for each model
@@ -506,23 +716,11 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             if not should_test:
                 continue
             
-            moe_val = m.get('moe')
-            moe_dict = moe_val if isinstance(moe_val, dict) else None
-            model_info = ModelInfo(
-                name=m['name'],
-                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
-                params=m.get('params', 'N/A'),
-                quant=m.get('quant', 'N/A'),
-                architecture=m.get('architecture', 'N/A'),
-                max_ctx=m.get('max_ctx', 131072),
-                moe=moe_dict,
-                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
-                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
-                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            model_info = make_model_info(m)
+            benchmark_result, error = run_model_benchmark(
+                model_info, benchmark_runner.run_all_independent_prompts
             )
-            benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
-            if benchmark_result:
-                all_results.append(benchmark_result)
+            handle_completed_result(benchmark_result)
             if error:
                 continue
 
@@ -538,32 +736,17 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             if not should_test:
                 continue
             
-            moe_val = m.get('moe')
-            moe_dict = moe_val if isinstance(moe_val, dict) else None
-            model_info = ModelInfo(
-                name=m['name'],
-                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
-                params=m.get('params', 'N/A'),
-                quant=m.get('quant', 'N/A'),
-                architecture=m.get('architecture', 'N/A'),
-                max_ctx=m.get('max_ctx', 131072),
-                moe=moe_dict,
-                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
-                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
-                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            model_info = make_model_info(m)
+            benchmark_result, error = run_model_benchmark(
+                model_info, benchmark_runner.run_all_chains
             )
-            benchmark_result, error = benchmark_runner.run_all_chains(model_info)
-            if benchmark_result:
-                all_results.append(benchmark_result)
+            handle_completed_result(benchmark_result)
             if error:
                 continue
 
     elif args.chain:
         # Run specific chain for each model
-        chain = prompt_loader.get_chain_by_id(args.chain)
-        if not chain:
-            print(f"Chain not found: {args.chain}")
-            return
+        chain = selected_chain
         for i, m in enumerate(test_models):
             # Check if model exists in results and prompt for retest decision
             should_test, should_stop = _check_model_retest(
@@ -574,23 +757,11 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             if not should_test:
                 continue
             
-            moe_val = m.get('moe')
-            moe_dict = moe_val if isinstance(moe_val, dict) else None
-            model_info = ModelInfo(
-                name=m['name'],
-                size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
-                params=m.get('params', 'N/A'),
-                quant=m.get('quant', 'N/A'),
-                architecture=m.get('architecture', 'N/A'),
-                max_ctx=m.get('max_ctx', 131072),
-                moe=moe_dict,
-                vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
-                tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
-                thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+            model_info = make_model_info(m)
+            benchmark_result, error = run_model_benchmark(
+                model_info, benchmark_runner.run_chain, chain
             )
-            benchmark_result, error = benchmark_runner.run_chain(model_info, chain)
-            if benchmark_result:
-                all_results.append(benchmark_result)
+            handle_completed_result(benchmark_result)
             if error:
                 continue
 
@@ -608,25 +779,11 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 if not should_test:
                     continue
                 
-                # Helper: convert moe value to dict or None
-                moe_val = m.get('moe')
-                moe_dict = moe_val if isinstance(moe_val, dict) else None
-                
-                model_info = ModelInfo(
-                    name=m['name'],
-                    size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
-                    params=m.get('params', 'N/A'),
-                    quant=m.get('quant', 'N/A'),
-                    architecture=m.get('architecture', 'N/A'),
-                    max_ctx=m.get('max_ctx', 131072),
-                    moe=moe_dict,
-                    vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
-                    tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
-                    thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+                model_info = make_model_info(m)
+                benchmark_result, error = run_model_benchmark(
+                    model_info, benchmark_runner.run_all_independent_prompts
                 )
-                benchmark_result, error = benchmark_runner.run_all_independent_prompts(model_info)
-                if benchmark_result:
-                    all_results.append(benchmark_result)
+                handle_completed_result(benchmark_result)
                 if error:
                     continue
         else:
@@ -641,35 +798,13 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                 if not should_test:
                     continue
                 
-                moe_val = m.get('moe')
-                moe_dict = moe_val if isinstance(moe_val, dict) else None
-                model_info = ModelInfo(
-                    name=m['name'],
-                    size_gb=float(m['size_gb']) if m.get('size_gb') and m.get('size_gb') != 'N/A' else 0.0,
-                    params=m.get('params', 'N/A'),
-                    quant=m.get('quant', 'N/A'),
-                    architecture=m.get('architecture', 'N/A'),
-                    max_ctx=m.get('max_ctx', 131072),
-                    moe=moe_dict,
-                    vision=Capability.VISION if m.get('vision') == '✅' else Capability.TOOLS,
-                    tools=Capability.TOOLS if m.get('tools') == '✅' else Capability.THINKING,
-                    thinking=Capability.THINKING if m.get('thinking') == '✅' else Capability.AUDIO,
+                model_info = make_model_info(m)
+                benchmark_result, error = run_model_benchmark(
+                    model_info, benchmark_runner.run_for_model
                 )
-                benchmark_result, error = benchmark_runner.run_for_model(model_info)
-                if benchmark_result:
-                    all_results.append(benchmark_result)
+                handle_completed_result(benchmark_result)
                 if error:
                     continue
-
-    # Run expert evaluation if enabled
-    logger.info("[Expert] Before run_expert_evaluation: expert_evaluator=%s all_results_count=%d",
-                expert_evaluator is not None, len(all_results))
-    if expert_evaluator and all_results:
-        logger.info("[Expert] Calling benchmark_runner.run_expert_evaluation()")
-        benchmark_runner.run_expert_evaluation()
-    else:
-        logger.warning("[Expert] Skipping: expert_evaluator=%s all_results=%d",
-                       expert_evaluator is not None, len(all_results))
 
     # Print results
     print_results_table(all_results)
@@ -766,32 +901,15 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
                     print(f"    {model_name} ({params}, {size_gb} GB)")
                     print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
 
-    # Save results to file
-    # If --output-format is specified, use it; otherwise save to the determined results_file
-    if hasattr(args, 'output_format') and args.output_format:
+    # CSV export remains a final export. JSON results are persisted per model above.
+    if hasattr(args, 'output_format') and args.output_format == 'csv':
         save_results(
             all_results,
             results_file,
             args.output_format,
-            prompts_config=prompt_loader.data if prompt_loader else None
-        )
-    elif results_file:
-        # Interactive save if no output file was specified and user declined to save
-        # results_file is already set (either from --output or from user prompt earlier)
-        save_results(
-            all_results,
-            results_file,
-            'json',
-            prompts_config=prompt_loader.data if prompt_loader else None
-        )
-    elif all_results and prompt_user(get_text("ask_save_results_after")):
-        # No results_file was set, but user wants to save now
-        results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)
-        save_results(
-            all_results,
-            results_file,
-            'json',
-            prompts_config=prompt_loader.data if prompt_loader else None
+            prompts_config=used_prompts_config,
+            run_config=run_config,
+            confirm_overwrite=False,
         )
 
 

@@ -1,8 +1,9 @@
 """Expert evaluation results management for expert_results.md file."""
 
+import os
 from datetime import datetime
 from typing import Optional, List
-from benchmark.result import BenchmarkMetrics
+from benchmark.result import BenchmarkMetrics, BenchmarkResult
 
 
 class ExpertResultsManager:
@@ -19,18 +20,25 @@ class ExpertResultsManager:
         self.tested_model: Optional[str] = None
         self.expert_model: Optional[str] = None
         self.generated_at: str = ""
+        self.run_config: dict = {}
 
-    def start_session(self, tested_model: str, expert_model: str) -> None:
+    def start_session(self, tested_model=None, expert_model: str = None,
+                      run_config: dict = None) -> None:
         """Start a new expert evaluation session.
 
         Args:
             tested_model: Name of the model being tested.
             expert_model: Name of the expert model used for evaluation.
         """
-        self.tested_model = tested_model
+        if isinstance(tested_model, list):
+            self.tested_model = ", ".join(tested_model)
+        else:
+            self.tested_model = tested_model
         self.expert_model = expert_model
         self.generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.entries = []
+        self.run_config = run_config or {}
+        self.save()
 
     def add_entry(self, metrics: BenchmarkMetrics) -> None:
         """Add a new entry to the results.
@@ -50,6 +58,16 @@ class ExpertResultsManager:
             'expert_score': metrics.expert_score,
         }
         self.entries.append(entry)
+
+    def append_model_result(self, model_result: BenchmarkResult) -> None:
+        """Add all response-bearing metrics for a model and save immediately."""
+        previous_model = self.tested_model
+        self.tested_model = model_result.model.name
+        for metrics in model_result.results:
+            if metrics.response:
+                self.add_entry(metrics)
+        self.tested_model = previous_model
+        self.save()
 
     def _format_entry(self, entry: dict, index: int) -> str:
         """Format a single entry as Markdown.
@@ -109,14 +127,32 @@ class ExpertResultsManager:
             "",
             f"**Total Responses:** {len(self.entries)}",
             "",
+        ]
+
+        if self.run_config:
+            lines.extend([
+                "## Run Config",
+                "",
+                f"- **Context Sizes:** {', '.join(str(x) for x in self.run_config.get('context_sizes', []))}",
+                f"- **Temperatures:** {', '.join(str(x) for x in self.run_config.get('temperature_test_values', []))}",
+                f"- **Prompt IDs:** {', '.join(self.run_config.get('used_prompt_ids', [])) or 'none'}",
+                f"- **Chain IDs:** {', '.join(self.run_config.get('used_chain_ids', [])) or 'none'}",
+                "",
+            ])
+
+        lines.extend([
             "---",
             "",
-        ]
+        ])
 
         for i, entry in enumerate(self.entries, 1):
             lines.append(self._format_entry(entry, i))
 
         content = "\n".join(lines)
+
+        output_dir = os.path.dirname(self.output_file)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
 
         with open(self.output_file, 'w', encoding='utf-8') as f:
             f.write(content)

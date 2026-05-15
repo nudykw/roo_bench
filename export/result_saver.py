@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Any
 from i18n import get_text, _current_language
 from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
+from export.merge_utils import atomic_write_json
 
 
 class ResultSaver:
@@ -23,7 +24,9 @@ class ResultSaver:
         self.output_format = output_format
 
     def save(self, results: List[BenchmarkResult],
-             prompts_config: Optional[dict] = None):
+             prompts_config: Optional[dict] = None,
+             run_config: Optional[dict] = None,
+             confirm_overwrite: bool = True):
         """Save results to file.
 
         Args:
@@ -34,16 +37,17 @@ class ResultSaver:
             return
 
         # Prepare data for export
-        export_data = self._prepare_export_data(results, prompts_config)
+        export_data = self._prepare_export_data(results, prompts_config, run_config)
 
         # Save based on format
         if self.output_format == 'json':
-            self._save_json(export_data)
+            self._save_json(export_data, confirm_overwrite=confirm_overwrite)
         elif self.output_format == 'csv':
             self._save_csv(export_data)
 
     def _prepare_export_data(self, results: List[BenchmarkResult],
-                             prompts_config: Optional[dict] = None) -> dict:
+                             prompts_config: Optional[dict] = None,
+                             run_config: Optional[dict] = None) -> dict:
         """Prepare data for export.
 
         Args:
@@ -56,13 +60,15 @@ class ResultSaver:
         # Include prompts configuration if provided
         prompts_section = None
         if prompts_config:
-            prompts_section = {
-                'independent': {
+            prompts_section = {}
+            if 'independent' in prompts_config:
+                prompts_section['independent'] = {
                     mode: [{'id': p.get('id'), 'name': p.get('name'), 'prompt': p.get('prompt')}
                            for p in prompts]
                     for mode, prompts in prompts_config.get('independent', {}).items()
-                },
-                'chains': [
+                }
+            if 'chains' in prompts_config:
+                prompts_section['chains'] = [
                     {
                         'id': chain.get('id'),
                         'name': chain.get('name'),
@@ -77,7 +83,6 @@ class ResultSaver:
                     }
                     for chain in prompts_config.get('chains', [])
                 ]
-            }
 
         # Prepare results list - nested structure (one entry = one model)
         results_list = []
@@ -90,11 +95,12 @@ class ResultSaver:
 
         # Return new structure with prompts_config at root level
         return {
+            'run_config': run_config or {},
             'prompts_config': prompts_section,
             'results': results_list
         }
 
-    def _save_json(self, export_data: dict):
+    def _save_json(self, export_data: dict, confirm_overwrite: bool = True):
         """Save results to JSON file.
 
         Args:
@@ -102,7 +108,7 @@ class ResultSaver:
         """
         try:
             # Check if file exists and ask for confirmation
-            if os.path.exists(self.output_file):
+            if confirm_overwrite and os.path.exists(self.output_file):
                 file_size = os.path.getsize(self.output_file)
                 print(get_text("output_file_exists",
                               output_file=self.output_file,
@@ -119,8 +125,7 @@ class ResultSaver:
                         print(get_text("save_cancelled"))
                         return
 
-            with open(self.output_file, 'w', encoding='utf-8') as f:
-                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.output_file, export_data)
             print(get_text("output_json", output_file=self.output_file))
         except Exception as e:
             print(get_text("error_unknown", error_details=f"JSON export failed: {e}"))
@@ -259,22 +264,7 @@ def load_results_from_file(file_path: str) -> tuple:
                         moe=model_data.get('moe'),
                     )
                     
-                    # Create BenchmarkMetrics for each run
-                    metrics = []
-                    for m in metrics_list:
-                        metrics.append(BenchmarkMetrics(
-                            ctx=int(m.get('ctx', 0)),
-                            temperature=float(m.get('temperature', 0)),
-                            avg_tps=float(m.get('avg_tps', 0)),
-                            min_tps=float(m.get('min_tps', 0)),
-                            max_tps=float(m.get('max_tps', 0)),
-                            std_dev=float(m.get('std_dev', 0)),
-                            vram=m.get('vram'),
-                            duration_sec=float(m.get('duration_sec', 0)),
-                            prompt_tokens=int(m.get('prompt_tokens', 0)),
-                            response_tokens=int(m.get('response_tokens', 0)),
-                            prompt_id=m.get('prompt_id', ''),
-                        ))
+                    metrics = [BenchmarkMetrics(**m) for m in metrics_list]
                     
                     # Create BenchmarkResult
                     benchmark_result = BenchmarkResult(
@@ -368,7 +358,9 @@ def load_results_from_file(file_path: str) -> tuple:
 
 
 def save_results(results: List[BenchmarkResult], output_file: str, output_format: str,
-                 prompts_config: Optional[dict] = None):
+                 prompts_config: Optional[dict] = None,
+                 run_config: Optional[dict] = None,
+                 confirm_overwrite: bool = True):
     """Convenience function to save results.
 
     Args:
@@ -378,4 +370,4 @@ def save_results(results: List[BenchmarkResult], output_file: str, output_format
         prompts_config: Optional prompts configuration to include in export
     """
     saver = ResultSaver(output_file=output_file, output_format=output_format)
-    saver.save(results, prompts_config)
+    saver.save(results, prompts_config, run_config, confirm_overwrite)
