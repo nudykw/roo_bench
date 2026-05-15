@@ -247,6 +247,7 @@ class BaseApiClient(ABC):
                 chunk_count = 0
                 callback_count = 0
                 last_update_time = 0  # Track last callback time for throttling
+                generation_start_time = time.time()
                 logger.info("[DEBUG] Starting iter_content loop for run %d", run_num + 1)
                 
                 for chunk in response.iter_content(chunk_size=8192):
@@ -300,7 +301,17 @@ class BaseApiClient(ABC):
                                 # Estimate response tokens from response text length (~4 chars per token)
                                 estimated_response_tokens = len(response_text) // 4 if response_text else 0
                                 response_len = len(response_text)
-                                run_on_token_update(prompt_eval_count, eval_count, estimated_response_tokens, response_len, data.get('done', False))
+                                display_tokens = eval_count or estimated_response_tokens
+                                elapsed = max(current_time - generation_start_time, 0.001)
+                                current_tps = display_tokens / elapsed if display_tokens > 0 else 0.0
+                                run_on_token_update(
+                                    prompt_eval_count,
+                                    eval_count,
+                                    estimated_response_tokens,
+                                    response_len,
+                                    data.get('done', False),
+                                    current_tps,
+                                )
                                 
                         except json.JSONDecodeError as e:
                             continue

@@ -111,7 +111,11 @@ def print_results_table(results: List[BenchmarkResult]):
                 min_tps=min_tps,
                 max_tps=max_tps,
                 std_dev=std_dev,
-                vram=vram_str))
+                vram=vram_str), end="")
+            if run.expert_score is not None:
+                print(f" | Expert Score: {run.expert_score:.1f}/10")
+            else:
+                print()
 
 
 def print_recommendations(results: List[BenchmarkResult]):
@@ -149,7 +153,12 @@ def format_tokens_info(prompt_tokens: int, response_tokens: int) -> str:
     return f"| 📊 Tokens: {prompt_tokens}/{response_tokens}"
 
 
-def update_tokens_display(prompt_tokens: int, response_tokens: int, estimated_response_tokens: int = 0, response_len: int = 0, indent: str = "         ", is_done: bool = False) -> None:
+def update_tokens_display(prompt_tokens: int, response_tokens: int,
+                          estimated_response_tokens: int = 0,
+                          response_len: int = 0,
+                          indent: str = "         ",
+                          is_done: bool = False,
+                          current_tps: float = 0.0) -> None:
     """Update token display in real-time during streaming.
     
     This function prints/updates the token count on a single line.
@@ -163,10 +172,12 @@ def update_tokens_display(prompt_tokens: int, response_tokens: int, estimated_re
         response_len: Raw response text length in characters
         indent: Leading whitespace for alignment
         is_done: If True, this is the final chunk with real token counts
+        current_tps: Current generation speed in tokens per second
     """
+    speed_part = f" | ⚡ {current_tps:.2f} tok/s" if current_tps > 0 else ""
     if is_done:
         # Show real token counts when done
-        print(f"{indent}📊 Tokens: {prompt_tokens}/{response_tokens}", end="\r", flush=True)
+        print(f"{indent}📊 Tokens: {prompt_tokens}/{response_tokens}{speed_part}", end="\r", flush=True)
     elif estimated_response_tokens > 0 or response_len > 0:
         # Show estimated tokens during streaming with response length
-        print(f"{indent}📊 Tokens: ~{prompt_tokens}/{estimated_response_tokens} (len={response_len})", end="\r", flush=True)
+        print(f"{indent}📊 Tokens: ~{prompt_tokens}/{estimated_response_tokens} (len={response_len}){speed_part}", end="\r", flush=True)

@@ -295,10 +295,10 @@ class BenchmarkRunner:
                     # Create token update callback for this prompt
                     current_tokens = {'prompt': 0, 'response': 0}
                     
-                    def token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
+                    def token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
                         current_tokens['prompt'] = prompt_tokens
                         current_tokens['response'] = response_tokens
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
@@ -468,8 +468,8 @@ class BenchmarkRunner:
                     print(f"         Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                     
                     # Create token update callback for this chain
-                    def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                    def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
@@ -617,8 +617,8 @@ class BenchmarkRunner:
                 print(f"   📦 Model: {model_name}")
                 
                 # Create token update callback for run_for_model
-                def run_for_model_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
-                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done)
+                def run_for_model_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
+                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done, current_tps=current_tps)
 
                 try:
                     avg_tps, vram, tps_list, error_msg, _, used_temp = self.ollama_client.run_generation(
@@ -820,8 +820,8 @@ class BenchmarkRunner:
                     print(f"         [{mode}] {prompt_name} (ID: {prompt_id})")
                     
                     # Create token update callback for this prompt
-                    def independent_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done)
+                    def independent_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
@@ -982,8 +982,8 @@ class BenchmarkRunner:
                         print(f"            [{mode}] {prompt_name}")
                         
                         # Create token update callback for this chain
-                        def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False):
-                            update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done)
+                        def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
+                            update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done, current_tps=current_tps)
                         
                         try:
                             avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(

@@ -79,7 +79,12 @@ class ExpertEvaluator:
                 logger.debug("[Expert] metrics_ref is None for entry[%d], score not written", i)
 
             progress = (i + 1) / len(entries) * 100
-            print(f"   Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) - Score: {score}")
+            prompt_label = entry.prompt_id or entry.prompt_name or "default"
+            mode_label = entry.mode or "default"
+            print(
+                f"   Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) "
+                f"[{mode_label}:{prompt_label}] - Score: {score:.1f}/10"
+            )
 
     def _evaluate_single(self, entry: ExpertEvaluationEntry) -> float:
         """Evaluate a single response.
