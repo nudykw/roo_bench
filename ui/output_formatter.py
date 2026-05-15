@@ -113,7 +113,7 @@ def print_results_table(results: List[BenchmarkResult]):
                 std_dev=std_dev,
                 vram=vram_str), end="")
             if run.expert_score is not None:
-                print(f" | Expert Score: {run.expert_score:.1f}/10")
+                print(f" | Expert Score: {run.expert_score:.1f}/100")
             else:
                 print()
 

@@ -431,11 +431,11 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
         print(f"  'eval_duration'          : {ed / 1e9:.3f}s")
 
         # ── Parse score exactly as ExpertEvaluator._parse_score ────────────────
-        parsed_score = ExpertEvaluator._parse_score(response_field if isinstance(response_field, str) else "5")
+        parsed_score = ExpertEvaluator._parse_score(response_field if isinstance(response_field, str) else "50")
         print(f"\n  ── Score parsing ──")
         print(f"  ExpertEvaluator._parse_score({response_field!r}) → {parsed_score}")
         if not isinstance(response_field, str) or response_field.strip() == "":
-            print(f"  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 5.0!")
+            print(f"  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 50.0!")
 
         return data
 
@@ -506,7 +506,7 @@ if __name__ == "__main__":
         elif raw_data:
             print()
             print("  ⚠️  DIAGNOSIS: The API returned an EMPTY 'response' field.")
-            print("     _parse_score('') finds no match → returns default 5.0.")
+            print("     _parse_score('') finds no match → returns default 50.0.")
             print("     Root cause candidates:")
             print("     1. num_predict too low — model cannot emit even one token.")
             print("     2. Model is a thinking model and 'think: false' is not propagated.")

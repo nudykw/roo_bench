@@ -235,6 +235,123 @@ def make_model_info(model_data: dict) -> ModelInfo:
     )
 
 
+def _mode_from_metric(metric) -> str:
+    """Return recommendation mode for a metric."""
+    if metric.mode in ('architect', 'code', 'debug'):
+        return metric.mode
+    if metric.ctx >= 65536:
+        return 'architect'
+    if metric.ctx >= 16384:
+        return 'code'
+    return 'debug'
+
+
+def _recommendation_score(mode: str, metric) -> float:
+    """Score a metric for mode-specific recommendations."""
+    expert = metric.expert_score if metric.expert_score is not None else 50.0
+    ctx_score = min(metric.ctx / 131072, 2.0)
+    speed_score = min(metric.avg_tps / 50, 2.0)
+
+    if mode == 'architect':
+        return expert * 10 + ctx_score * 25 + speed_score * 5
+    if mode == 'code':
+        return expert * 10 + speed_score * 30 + ctx_score * 8
+    return expert * 10 + speed_score * 18 + ctx_score * 18
+
+
+def _build_mode_recommendations(all_results: list, test_models: list) -> dict:
+    """Build top model recommendations per Roo mode."""
+    model_lookup = {m['name']: m for m in test_models}
+    best_by_mode_and_model = {
+        'architect': {},
+        'code': {},
+        'debug': {},
+    }
+
+    for result in all_results:
+        model_name = result.model_name
+        for metric in result.results:
+            mode = _mode_from_metric(metric)
+            current = best_by_mode_and_model[mode].get(model_name)
+            if current is None or _recommendation_score(mode, metric) > _recommendation_score(mode, current):
+                best_by_mode_and_model[mode][model_name] = metric
+
+    recommendations = {}
+    for mode, model_metrics in best_by_mode_and_model.items():
+        ranked = []
+        for model_name, metric in model_metrics.items():
+            model_data = model_lookup.get(model_name, {})
+            ranked.append({
+                'model_name': model_name,
+                'metric': metric,
+                'model_data': model_data,
+                'score': _recommendation_score(mode, metric),
+            })
+        ranked.sort(key=lambda item: item['score'], reverse=True)
+        recommendations[mode] = ranked[:3]
+
+    return recommendations
+
+
+def _format_ctx(ctx: int) -> str:
+    return f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
+
+
+def _recommendation_reason(mode: str, metric) -> str:
+    """Explain why a metric is recommended for a mode."""
+    score_text = (
+        f"expert score {metric.expert_score:.1f}/100"
+        if metric.expert_score is not None else "no expert score, using performance fallback"
+    )
+    ctx_text = f"context {_format_ctx(metric.ctx)}"
+    speed_text = f"{metric.avg_tps:.1f} tok/s"
+
+    if mode == 'architect':
+        return f"{score_text}; strongest fit favors large {ctx_text} for project-wide analysis, with {speed_text} generation."
+    if mode == 'code':
+        return f"{score_text}; best coding fit balances response quality with high generation speed ({speed_text}) at {ctx_text}."
+    return f"{score_text}; debug fit balances enough {ctx_text} for traces/logs with practical speed ({speed_text})."
+
+
+def print_expert_recommendations(all_results: list, test_models: list) -> None:
+    """Print top 3 expert-guided recommendations for Architect, Coder, and Debug."""
+    recommendations = _build_mode_recommendations(all_results, test_models)
+    mode_titles = [
+        ('architect', get_text('architect_mode')),
+        ('code', get_text('code_mode')),
+        ('debug', get_text('debug_mode')),
+    ]
+
+    print("\n" + "="*60)
+    print(get_text("recommendations_header"))
+    print("="*60)
+
+    for mode, title in mode_titles:
+        print(f"\n  {title}")
+        recs = recommendations.get(mode, [])
+        if not recs:
+            print("    No completed tests for this mode.")
+            continue
+
+        for rank, rec in enumerate(recs, 1):
+            metric = rec['metric']
+            model_data = rec['model_data']
+            model_name = rec['model_name']
+            params = model_data.get('params', 'N/A')
+            quant = model_data.get('quant', 'N/A')
+            size_gb = model_data.get('size_gb', 'N/A')
+            score = f"{metric.expert_score:.1f}/100" if metric.expert_score is not None else "N/A"
+            prefix = "  ★" if rank == 1 else "   "
+
+            print(f"{prefix} {rank}. {model_name} ({params}, {quant}, {size_gb} GB)")
+            print(
+                f"      Recommended: ctx={_format_ctx(metric.ctx)}, "
+                f"temperature={metric.temperature:.2f}, "
+                f"speed={metric.avg_tps:.1f} tok/s, expert_score={score}"
+            )
+            print(f"      Why: {_recommendation_reason(mode, metric)}")
+
+
 def get_ollama_config(args) -> OllamaConfig:
     """Get Ollama configuration from CLI arguments.
 
@@ -809,97 +926,9 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     # Print results
     print_results_table(all_results)
 
-    # Print recommendations grouped by mode with top 3 results per mode
+    # Print expert-guided recommendations grouped by mode with top 3 models per mode
     if all_results:
-        print("\n" + "="*60)
-        print(get_text("recommendations_header"))
-        print("="*60)
-        
-        # Group all results by mode based on context size
-        mode_groups = {
-            get_text('architect_mode'): [],
-            get_text('code_mode'): [],
-            get_text('debug_mode'): [],
-        }
-        
-        # Build model size lookup
-        model_size_map = {}
-        for m in test_models:
-            model_size_map[m['name']] = m.get('size_gb', 0)
-        
-        for result in all_results:
-            model_name = result.model_name
-            model_size = model_size_map.get(model_name, 0)
-            for run in result.results:
-                ctx_val = run.ctx
-                run_with_model = {
-                    'ctx': ctx_val,
-                    'avg_tps': run.avg_tps,
-                    'model_name': model_name,
-                    'model_size_gb': model_size,
-                }
-                if ctx_val >= 65536:
-                    mode_groups[get_text('architect_mode')].append(run_with_model)
-                elif ctx_val >= 16384:
-                    mode_groups[get_text('code_mode')].append(run_with_model)
-                else:
-                    mode_groups[get_text('debug_mode')].append(run_with_model)
-        
-        # Sort each group by mode-specific criteria and pick top 3 results per mode
-        modes_with_results = []
-        for mode_title, recs in mode_groups.items():
-            if recs:
-                # Sort by mode-specific criteria
-                if 'Architect' in mode_title:
-                    # Architect: sort by context size descending, then by model size ascending (smaller models preferred)
-                    recs.sort(key=lambda x: (-x.get('ctx', 0), x.get('model_size_gb', 0)))
-                elif 'Code' in mode_title:
-                    # Code: sort by TPS descending (faster = better)
-                    recs.sort(key=lambda x: x.get('avg_tps', 0), reverse=True)
-                else:
-                    # Debug: sort by balance (combination of context and TPS)
-                    # Score = ctx/1000 + avg_tps*100 - balances context size with speed
-                    recs.sort(key=lambda x: x.get('ctx', 0)/1000 + x.get('avg_tps', 0)*100, reverse=True)
-                
-                # Get all unique results (unique by model_name + ctx combination), sorted by mode criteria
-                seen_keys = set()
-                unique_results = []
-                for rec in recs:
-                    model_name = rec.get('model_name', '')
-                    ctx_val = rec.get('ctx', 0)
-                    key = f"{model_name}_{ctx_val}"
-                    if key not in seen_keys:
-                        seen_keys.add(key)
-                        unique_results.append(rec)
-                modes_with_results.append((mode_title, unique_results))
-        
-        # Sort modes: Architect first, then Code, then Debug
-        mode_order = [get_text('architect_mode'), get_text('code_mode'), get_text('debug_mode')]
-        modes_with_results.sort(key=lambda x: mode_order.index(x[0]) if x[0] in mode_order else 999)
-        
-        # Display all modes with their top 3 results
-        for mode_title, recs in modes_with_results:
-            print(f"\n  {mode_title}")
-            for j, rec in enumerate(recs[:3], 1):
-                ctx_str = f"{rec['ctx'] // 1024}K" if rec['ctx'] >= 1024 else str(rec['ctx'])
-                model_name = rec.get('model_name', 'unknown')
-                
-                # Get model info from test_models if available
-                params = 'N/A'
-                size_gb = 'N/A'
-                for m in test_models:
-                    if m['name'] == model_name:
-                        params = m.get('params', 'N/A')
-                        size_gb = m.get('size_gb', 'N/A')
-                        break
-                
-                # Mark the recommended (first/best) option
-                if j == 1:
-                    print(f"  ★ {model_name} ({params}, {size_gb} GB)")
-                    print(f"    {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
-                else:
-                    print(f"    {model_name} ({params}, {size_gb} GB)")
-                    print(f"      {get_text('variant', i=j, ctx=ctx_str, tps=rec.get('avg_tps', 0))}")
+        print_expert_recommendations(all_results, test_models)
 
     # CSV export remains a final export. JSON results are persisted per model above.
     if hasattr(args, 'output_format') and args.output_format == 'csv':

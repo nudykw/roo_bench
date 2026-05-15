@@ -6,13 +6,14 @@ import unittest
 from types import SimpleNamespace
 
 from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
+from benchmark.expert_evaluator import ExpertEvaluator
 from export.merge_utils import (
     load_results_file,
     merge_results,
     run_configs_match,
     save_results_file,
 )
-from main import build_used_prompts_config
+from main import _build_mode_recommendations, build_used_prompts_config
 
 
 class FakePromptLoader:
@@ -110,7 +111,7 @@ class TestMergeUtils(unittest.TestCase):
                     max_tps=1.0,
                     std_dev=0.0,
                     response='old',
-                    expert_score=1.0,
+                    expert_score=10.0,
                 )
             ],
         )
@@ -127,7 +128,7 @@ class TestMergeUtils(unittest.TestCase):
                     max_tps=10.0,
                     std_dev=0.5,
                     response='new',
-                    expert_score=9.0,
+                    expert_score=90.0,
                 )
             ],
         )
@@ -146,7 +147,59 @@ class TestMergeUtils(unittest.TestCase):
         metric = loaded[0].results[0]
         self.assertEqual(metric.response, 'new')
         self.assertEqual(metric.avg_tps, 9.0)
-        self.assertEqual(metric.expert_score, 9.0)
+        self.assertEqual(metric.expert_score, 90.0)
+
+
+class TestExpertRecommendations(unittest.TestCase):
+    def test_recommendations_rank_by_expert_score_per_mode(self):
+        fast_low_quality = BenchmarkResult(
+            model=ModelInfo(name='fast-low', size_gb=1.0),
+            results=[
+                BenchmarkMetrics(
+                    ctx=32768,
+                    temperature=0.0,
+                    prompt_id='code_1',
+                    mode='code',
+                    avg_tps=200.0,
+                    min_tps=190.0,
+                    max_tps=210.0,
+                    std_dev=1.0,
+                    expert_score=40.0,
+                )
+            ],
+        )
+        slower_high_quality = BenchmarkResult(
+            model=ModelInfo(name='smart-slower', size_gb=2.0),
+            results=[
+                BenchmarkMetrics(
+                    ctx=32768,
+                    temperature=0.66,
+                    prompt_id='code_1',
+                    mode='code',
+                    avg_tps=20.0,
+                    min_tps=18.0,
+                    max_tps=22.0,
+                    std_dev=1.0,
+                    expert_score=90.0,
+                )
+            ],
+        )
+
+        recs = _build_mode_recommendations(
+            [fast_low_quality, slower_high_quality],
+            [
+                {'name': 'fast-low', 'params': '1B', 'quant': 'Q4', 'size_gb': 1.0},
+                {'name': 'smart-slower', 'params': '2B', 'quant': 'Q4', 'size_gb': 2.0},
+            ],
+        )
+
+        self.assertEqual(recs['code'][0]['model_name'], 'smart-slower')
+
+    def test_expert_score_parser_uses_100_point_scale(self):
+        self.assertEqual(ExpertEvaluator._parse_score("Score: 87"), 87.0)
+        self.assertEqual(ExpertEvaluator._parse_score("100"), 100.0)
+        self.assertEqual(ExpertEvaluator._parse_score("0"), 0.0)
+        self.assertEqual(ExpertEvaluator._parse_score("Score: 150"), 50.0)
 
 
 if __name__ == '__main__':

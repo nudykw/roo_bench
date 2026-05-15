@@ -46,10 +46,10 @@ class ExpertEvaluator:
         """Return default evaluation prompts if file loading fails."""
         return {
             'expert': {
-                'system_prompt': 'You are an expert LLM evaluator. Assess quality 0-10.',
-                'architect_eval': 'Evaluate this response on 0-10 scale.\nResponse:\n{response}\n\nScore (0-10 only):',
-                'code_eval': 'Evaluate this code on 0-10 scale.\nResponse:\n{response}\n\nScore (0-10 only):',
-                'debug_eval': 'Evaluate this debug response on 0-10 scale.\nResponse:\n{response}\n\nScore (0-10 only):'
+                'system_prompt': 'You are an expert LLM evaluator. Assess quality 0-100.',
+                'architect_eval': 'Evaluate this response on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):',
+                'code_eval': 'Evaluate this code on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):',
+                'debug_eval': 'Evaluate this debug response on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):'
             }
         }
 
@@ -83,7 +83,7 @@ class ExpertEvaluator:
             mode_label = entry.mode or "default"
             print(
                 f"   Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) "
-                f"[{mode_label}:{prompt_label}] - Score: {score:.1f}/10"
+                f"[{mode_label}:{prompt_label}] - Score: {score:.1f}/100"
             )
 
     def _evaluate_single(self, entry: ExpertEvaluationEntry) -> float:
@@ -93,7 +93,7 @@ class ExpertEvaluator:
             entry: Evaluation entry containing the response.
 
         Returns:
-            Float score between 0 and 10.
+            Float score between 0 and 100.
         """
         context = (
             f"ctx={entry.ctx}, temp={entry.temperature}, "
@@ -144,13 +144,13 @@ class ExpertEvaluator:
         """Call Ollama API for evaluation.
 
         Uses temperature=0.1 for consistent scoring.
-        Parses integer response from 0-10 range.
+        Parses integer response from 0-100 range.
 
         Args:
             prompt: Evaluation prompt to send.
 
         Returns:
-            Float score between 0 and 10.
+            Float score between 0 and 100.
         """
         payload = {
             "model": self.expert_model_name,
@@ -175,7 +175,7 @@ class ExpertEvaluator:
             logger.debug("[Expert] API response status: %d", response.status_code)
             if response.status_code != 200:
                 logger.warning(f"Expert evaluation failed: {response.text}")
-                return 5.0
+                return 50.0
 
             result = response.json()
             response_text = result.get("response", "5")
@@ -187,7 +187,7 @@ class ExpertEvaluator:
 
         except Exception as e:
             logger.warning(f"Expert API error: {e}")
-            return 5.0
+            return 50.0
 
     @staticmethod
     def _parse_score(response_text: str) -> float:
@@ -197,11 +197,11 @@ class ExpertEvaluator:
             response_text: Raw text response from expert model.
 
         Returns:
-            Float score clamped to 0-10 range.
+            Float score clamped to 0-100 range.
         """
         import re
-        match = re.search(r'\b(10|[0-9])\b', response_text.strip())
+        match = re.search(r'\b(100|[1-9]?[0-9])\b', response_text.strip())
         if match:
             score = int(match.group(1))
-            return float(min(10, max(0, score)))
-        return 5.0
+            return float(min(100, max(0, score)))
+        return 50.0
