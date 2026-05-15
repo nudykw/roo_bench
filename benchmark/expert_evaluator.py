@@ -64,12 +64,22 @@ class ExpertEvaluator:
             entries: List of evaluation entries with responses.
         """
         logger.debug("[Expert] evaluate_batch: %d entries to evaluate", len(entries))
-        for i, entry in enumerate(entries):
+        sorted_entries = sorted(entries, key=lambda e: (e.ctx, e.temperature, e.mode or '', e.prompt_id or ''))
+        current_group = None
+
+        for i, entry in enumerate(sorted_entries):
             logger.debug(
                 "[Expert] Entry[%d]: model=%s prompt_id=%r mode=%r response_len=%d metrics_ref=%s",
                 i, entry.model_name, entry.prompt_id, entry.mode,
                 len(entry.response), "set" if entry.metrics_ref is not None else "NONE"
             )
+
+            group_key = (entry.ctx, entry.temperature)
+            if group_key != current_group:
+                current_group = group_key
+                ctx_str = f"{entry.ctx // 1024}K" if entry.ctx >= 1024 else str(entry.ctx)
+                print(f"\n   Context: {ctx_str} | Temperature: {entry.temperature:.2f}")
+
             score = self._evaluate_single(entry)
 
             if entry.metrics_ref is not None:
@@ -82,7 +92,7 @@ class ExpertEvaluator:
             prompt_label = entry.prompt_id or entry.prompt_name or "default"
             mode_label = entry.mode or "default"
             print(
-                f"   Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) "
+                f"      Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) "
                 f"[{mode_label}:{prompt_label}] - Score: {score:.1f}/100"
             )
 
