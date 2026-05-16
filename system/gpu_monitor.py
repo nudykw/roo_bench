@@ -2,6 +2,7 @@
 
 import subprocess
 import os
+import time
 
 
 def check_gpu_available() -> bool:
@@ -38,112 +39,6 @@ def get_vram_usage() -> int | None:
     """
     if not check_gpu_available():
         return None
-    
-    
-    def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
-        """Get comprehensive VRAM statistics with min/max/avg values.
-    
-        Args:
-            samples: Number of samples to collect
-            interval: Interval between samples in seconds
-    
-        Returns:
-            dict: VRAM statistics including current, min, max, avg, total
-                  Returns None if GPU is unavailable
-        """
-        if not check_gpu_available():
-            return None
-    
-        usages = []
-        total_vram = None
-    
-        # Collect samples
-        for _ in range(samples):
-            usage = get_vram_usage()
-            if usage is not None:
-                usages.append(usage)
-            time.sleep(interval)
-    
-        if not usages:
-            return None
-    
-        # Get total VRAM
-        try:
-            result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,nounits,noheader'],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                total_vram = int(result.stdout.strip()) * 1024 * 1024
-        except Exception:
-            # Fallback: use max observed usage as estimate
-            total_vram = max(usages) * 1.2  # Rough estimate
-    
-        # Calculate statistics
-        current_usage = usages[-1]
-        min_usage = min(usages)
-        max_usage = max(usages)
-        avg_usage = sum(usages) / len(usages)
-    
-        return {
-            'current': current_usage,
-            'min': min_usage,
-            'max': max_usage,
-            'avg': avg_usage,
-            'total': total_vram,
-            'percent_current': (current_usage / total_vram) * 100 if total_vram > 0 else 0,
-            'percent_min': (min_usage / total_vram) * 100 if total_vram > 0 else 0,
-            'percent_max': (max_usage / total_vram) * 100 if total_vram > 0 else 0,
-            'percent_avg': (avg_usage / total_vram) * 100 if total_vram > 0 else 0,
-            'samples_count': len(usages),
-            'interval': interval
-        }
-    
-    
-    def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list:
-        """Get VRAM usage history over time.
-    
-        Args:
-            samples: Number of samples to collect
-            interval: Interval between samples in seconds
-    
-        Returns:
-            list: List of VRAM usage values in bytes
-                  Returns empty list if GPU is unavailable
-        """
-        if not check_gpu_available():
-            return []
-    
-        usages = []
-        for _ in range(samples):
-            usage = get_vram_usage()
-            if usage is not None:
-                usages.append(usage)
-            time.sleep(interval)
-    
-        return usages
-    
-    
-    def get_vram_total() -> int | None:
-        """Get total VRAM capacity.
-    
-        Returns:
-            int or None: Total VRAM in bytes, or None if GPU is unavailable
-        """
-        if not check_gpu_available():
-            return None
-    
-        try:
-            result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,nounits,noheader'],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return int(result.stdout.strip()) * 1024 * 1024
-        except Exception:
-            pass
-    
-        return None
 
     try:
         result = subprocess.run(
@@ -179,6 +74,112 @@ def get_vram_usage() -> int | None:
                     return int(value[:-2]) * 1024 * 1024
                 else:
                     return int(value)
+    except Exception:
+        pass
+
+    return None
+
+
+def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
+    """Get comprehensive VRAM statistics with min/max/avg values.
+
+    Args:
+        samples: Number of samples to collect
+        interval: Interval between samples in seconds
+
+    Returns:
+        dict: VRAM statistics including current, min, max, avg, total
+              Returns None if GPU is unavailable
+    """
+    if not check_gpu_available():
+        return None
+
+    usages = []
+    total_vram = None
+
+    # Collect samples
+    for _ in range(samples):
+        usage = get_vram_usage()
+        if usage is not None:
+            usages.append(usage)
+        time.sleep(interval)
+
+    if not usages:
+        return None
+
+    # Get total VRAM
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,nounits,noheader'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            total_vram = int(result.stdout.strip()) * 1024 * 1024
+    except Exception:
+        # Fallback: use max observed usage as estimate
+        total_vram = max(usages) * 1.2  # Rough estimate
+
+    # Calculate statistics
+    current_usage = usages[-1]
+    min_usage = min(usages)
+    max_usage = max(usages)
+    avg_usage = sum(usages) / len(usages)
+
+    return {
+        'current': current_usage,
+        'min': min_usage,
+        'max': max_usage,
+        'avg': avg_usage,
+        'total': total_vram,
+        'percent_current': (current_usage / total_vram) * 100 if total_vram > 0 else 0,
+        'percent_min': (min_usage / total_vram) * 100 if total_vram > 0 else 0,
+        'percent_max': (max_usage / total_vram) * 100 if total_vram > 0 else 0,
+        'percent_avg': (avg_usage / total_vram) * 100 if total_vram > 0 else 0,
+        'samples_count': len(usages),
+        'interval': interval
+    }
+
+
+def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list:
+    """Get VRAM usage history over time.
+
+    Args:
+        samples: Number of samples to collect
+        interval: Interval between samples in seconds
+
+    Returns:
+        list: List of VRAM usage values in bytes
+              Returns empty list if GPU is unavailable
+    """
+    if not check_gpu_available():
+        return []
+
+    usages = []
+    for _ in range(samples):
+        usage = get_vram_usage()
+        if usage is not None:
+            usages.append(usage)
+        time.sleep(interval)
+
+    return usages
+
+
+def get_vram_total() -> int | None:
+    """Get total VRAM capacity.
+
+    Returns:
+        int or None: Total VRAM in bytes, or None if GPU is unavailable
+    """
+    if not check_gpu_available():
+        return None
+
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,nounits,noheader'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return int(result.stdout.strip()) * 1024 * 1024
     except Exception:
         pass
 

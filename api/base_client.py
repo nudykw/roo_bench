@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, List, Tuple, Any
 
 import requests
-from system.gpu_monitor import get_vram_usage, get_vram_stats
+from system.gpu_monitor import get_vram_usage
 from system.ssh_client import SSHClient
 from system.system_monitor import ResourceMonitor, SystemStats
 from i18n import get_text
@@ -405,30 +405,32 @@ class BaseApiClient(ABC):
                     err_details = get_text("error_unknown", error_details=str(e))
                     error = err_details
                     break
+        finally:
+            # Calculate average TPS and cleanup (always runs)
+            if tps_list:
+                avg_tps = sum(r['tps'] for r in tps_list) / len(tps_list)
+                # Calculate standard deviation
+                if len(tps_list) > 1:
+                    mean = avg_tps
+                    variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+                    std_dev = math.sqrt(variance)
+                else:
+                    std_dev = 0.0
 
-        # Calculate average TPS
-        if tps_list:
-            avg_tps = sum(r['tps'] for r in tps_list) / len(tps_list)
-            # Calculate standard deviation
-            if len(tps_list) > 1:
-                mean = avg_tps
-                variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
-                std_dev = math.sqrt(variance)
+                # Return VRAM from the last successful run
+                vram = tps_list[-1]['vram'] if tps_list else None
+
+                # Get resource statistics if monitoring was active
+                resource_stats = None
+                if resource_monitor:
+                    resource_monitor.stop_monitoring()
+                    resource_stats = resource_monitor.get_aggregated_stats()
             else:
-                std_dev = 0.0
-
-            # Return VRAM from the last successful run
-            vram = tps_list[-1]['vram'] if tps_list else None
-
-            # Get resource statistics if monitoring was active
-            resource_stats = None
-            if resource_monitor:
-                resource_monitor.stop_monitoring()
-                resource_stats = resource_monitor.get_aggregated_stats()
-            
-            return avg_tps, vram, tps_list, error, prompt_metadata, temperature, resource_stats
-        else:
-            return 0.0, None, [], error, prompt_metadata, temperature, None
+                avg_tps = 0.0
+                vram = None
+                resource_stats = None
+        
+        return avg_tps, vram, tps_list, error, prompt_metadata, temperature, resource_stats
 
     def get_default_temperature(self, model_name: str) -> float:
         """Get the default temperature for a model.
