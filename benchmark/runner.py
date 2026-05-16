@@ -301,7 +301,7 @@ class BenchmarkRunner:
                         update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
-                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                        result = self.ollama_client.run_generation(
                             model_name,
                             ctx,  # Use current context size
                             self.num_runs,
@@ -312,6 +312,12 @@ class BenchmarkRunner:
                             num_predict=self.num_predict,
                             on_token_update=token_callback
                         )
+                        # Handle both old and new return formats for backward compatibility
+                        if len(result) == 6:
+                            avg_tps, vram, tps_list, error, _, used_temp = result
+                            resource_stats = None
+                        else:
+                            avg_tps, vram, tps_list, error, _, used_temp, resource_stats = result
                         
                         if error:
                             print(f"         Error running prompt {prompt_id}: {error}")
@@ -357,6 +363,16 @@ class BenchmarkRunner:
                             vram=vram,
                             mode=mode,
                             response=response,
+                            # Добавляем статистику ресурсов
+                            cpu_stats=resource_stats.get('cpu') if resource_stats else None,
+                            ram_stats=resource_stats.get('ram') if resource_stats else None,
+                            vram_stats=resource_stats.get('vram') if resource_stats else None,
+                            avg_cpu_percent=resource_stats.get('cpu', {}).get('avg') if resource_stats else None,
+                            max_cpu_percent=resource_stats.get('cpu', {}).get('max') if resource_stats else None,
+                            avg_ram_percent=resource_stats.get('ram', {}).get('avg_percent') if resource_stats else None,
+                            max_ram_percent=resource_stats.get('ram', {}).get('max_percent') if resource_stats else None,
+                            avg_vram_percent=resource_stats.get('vram', {}).get('avg_percent') if resource_stats else None,
+                            max_vram_percent=resource_stats.get('vram', {}).get('max_percent') if resource_stats else None,
                         )
                         all_metrics.append(metrics)
                         
@@ -472,7 +488,7 @@ class BenchmarkRunner:
                         update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
-                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                        result = self.ollama_client.run_generation(
                             model_name,
                             ctx,
                             self.num_runs,
@@ -483,6 +499,12 @@ class BenchmarkRunner:
                             num_predict=self.num_predict,
                             on_token_update=chain_token_callback
                         )
+                        # Handle both old and new return formats for backward compatibility
+                        if len(result) == 6:
+                            avg_tps, vram, tps_list, error, _, used_temp = result
+                            resource_stats = None
+                        else:
+                            avg_tps, vram, tps_list, error, _, used_temp, resource_stats = result
                         
                         if error:
                             print(f"         Error in chain [{mode}]: {error}")
@@ -519,6 +541,16 @@ class BenchmarkRunner:
                             chain_id=chain_id,
                             chain_name=chain_name,
                             response=response,
+                            # Добавляем статистику ресурсов
+                            cpu_stats=resource_stats.get('cpu') if resource_stats else None,
+                            ram_stats=resource_stats.get('ram') if resource_stats else None,
+                            vram_stats=resource_stats.get('vram') if resource_stats else None,
+                            avg_cpu_percent=resource_stats.get('cpu', {}).get('avg') if resource_stats else None,
+                            max_cpu_percent=resource_stats.get('cpu', {}).get('max') if resource_stats else None,
+                            avg_ram_percent=resource_stats.get('ram', {}).get('avg_percent') if resource_stats else None,
+                            max_ram_percent=resource_stats.get('ram', {}).get('max_percent') if resource_stats else None,
+                            avg_vram_percent=resource_stats.get('vram', {}).get('avg_percent') if resource_stats else None,
+                            max_vram_percent=resource_stats.get('vram', {}).get('max_percent') if resource_stats else None,
                         )
                         all_metrics.append(metrics)
                         
@@ -621,11 +653,17 @@ class BenchmarkRunner:
                     update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done, current_tps=current_tps)
 
                 try:
-                    avg_tps, vram, tps_list, error_msg, _, used_temp = self.ollama_client.run_generation(
+                    result = self.ollama_client.run_generation(
                         model_name, ctx, self.num_runs, self.disable_thinking, temperature=temp,
                         num_predict=self.num_predict,
                         on_token_update=run_for_model_token_callback
                     )
+                    # Handle both old and new return formats for backward compatibility
+                    if len(result) == 6:
+                        avg_tps, vram, tps_list, error_msg, _, used_temp = result
+                        resource_stats = None
+                    else:
+                        avg_tps, vram, tps_list, error_msg, _, used_temp, resource_stats = result
 
                     if error_msg:
                         print(get_text("benchmark_failed", error_msg=error_msg))
@@ -682,6 +720,16 @@ class BenchmarkRunner:
                         std_dev=std_dev,
                         vram=vram,
                         response=response,
+                        # Добавляем статистику ресурсов
+                        cpu_stats=resource_stats.get('cpu') if resource_stats else None,
+                        ram_stats=resource_stats.get('ram') if resource_stats else None,
+                        vram_stats=resource_stats.get('vram') if resource_stats else None,
+                        avg_cpu_percent=resource_stats.get('cpu', {}).get('avg') if resource_stats else None,
+                        max_cpu_percent=resource_stats.get('cpu', {}).get('max') if resource_stats else None,
+                        avg_ram_percent=resource_stats.get('ram', {}).get('avg_percent') if resource_stats else None,
+                        max_ram_percent=resource_stats.get('ram', {}).get('max_percent') if resource_stats else None,
+                        avg_vram_percent=resource_stats.get('vram', {}).get('avg_percent') if resource_stats else None,
+                        max_vram_percent=resource_stats.get('vram', {}).get('max_percent') if resource_stats else None,
                     )
                     all_metrics.append(metrics)
                     

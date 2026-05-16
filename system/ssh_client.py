@@ -155,6 +155,113 @@ class SSHClient:
             pass  # print(f"DEBUG: SSH VRAM exception")
         return None
 
+    def get_cpu_usage_remote(self, timeout: int = 30) -> Optional[float]:
+        """Get CPU usage from remote machine via SSH.
+
+        Args:
+            timeout: Timeout in seconds
+
+        Returns:
+            CPU usage percentage (0-100), or None if unavailable
+        """
+        if not self.is_configured:
+            return None
+            
+        cmd = self.build_command(
+            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1"
+        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    return float(result.stdout.strip())
+                except ValueError:
+                    return None
+        except subprocess.TimeoutExpired:
+            pass
+        except Exception:
+            pass
+        return None
+
+    def get_ram_usage_remote(self, timeout: int = 30) -> Optional[dict]:
+        """Get RAM usage from remote machine via SSH.
+
+        Args:
+            timeout: Timeout in seconds
+
+        Returns:
+            Dictionary with RAM usage stats (used, total, percent, available),
+            or None if unavailable
+        """
+        if not self.is_configured:
+            return None
+            
+        cmd = self.build_command(
+            "free -m | grep '^Mem:' | awk '{print $3,$2,$7}'"
+        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    used_mb, total_mb, available_mb = map(int, result.stdout.strip().split())
+                    return {
+                        'used': used_mb * 1024 * 1024,  # Convert to bytes
+                        'total': total_mb * 1024 * 1024,
+                        'available': available_mb * 1024 * 1024,
+                        'percent': (used_mb / total_mb) * 100 if total_mb > 0 else 0.0
+                    }
+                except (ValueError, ZeroDivisionError):
+                    return None
+        except subprocess.TimeoutExpired:
+            pass
+        except Exception:
+            pass
+        return None
+
+    def get_vram_total_remote(self, timeout: int = 30) -> Optional[int]:
+        """Get total VRAM capacity from remote machine via SSH.
+
+        Args:
+            timeout: Timeout in seconds
+
+        Returns:
+            Total VRAM in bytes, or None if unavailable
+        """
+        if not self.is_configured:
+            return None
+            
+        cmd = self.build_command(
+            "nvidia-smi --query-gpu=memory.total --format=csv,nounits,noheader"
+        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    vram_mib = int(result.stdout.strip())
+                    return vram_mib * 1024 * 1024
+                except ValueError:
+                    return None
+        except subprocess.TimeoutExpired:
+            pass
+        except Exception:
+            pass
+        return None
+
     def restart_ollama(self, timeout: int = 30) -> bool:
         """Restart Ollama on remote host via SSH.
 

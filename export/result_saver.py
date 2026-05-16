@@ -194,6 +194,13 @@ class ResultSaver:
                         'chain_id': metric.get('chain_id', ''),
                         'chain_name': metric.get('chain_name', ''),
                         'expert_score': metric.get('expert_score', ''),
+                        # Добавляем новые поля статистики ресурсов
+                        'cpu_avg_percent': metric.get('avg_cpu_percent', ''),
+                        'cpu_max_percent': metric.get('max_cpu_percent', ''),
+                        'ram_avg_percent': metric.get('avg_ram_percent', ''),
+                        'ram_max_percent': metric.get('max_ram_percent', ''),
+                        'vram_avg_percent': metric.get('avg_vram_percent', ''),
+                        'vram_max_percent': metric.get('max_vram_percent', ''),
                     }
                     csv_rows.append(row)
 
@@ -204,7 +211,10 @@ class ResultSaver:
                          'std_dev', 'vram', 'vram_str',
                          'prompt_id', 'prompt_name', 'duration_sec',
                          'prompt_tokens', 'response_tokens', 'temperature',
-                         'mode', 'chain_id', 'chain_name', 'expert_score']
+                         'mode', 'chain_id', 'chain_name', 'expert_score',
+                         'cpu_avg_percent', 'cpu_max_percent',
+                         'ram_avg_percent', 'ram_max_percent',
+                         'vram_avg_percent', 'vram_max_percent']
 
             with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')

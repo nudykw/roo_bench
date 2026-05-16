@@ -89,6 +89,19 @@ class BenchmarkMetrics(BaseModel):
     chain_name: Optional[str] = None
     expert_score: Optional[float] = None
     response: Optional[str] = None
+    
+    # Расширенная статистика ресурсов
+    cpu_stats: Optional[dict] = None
+    ram_stats: Optional[dict] = None
+    vram_stats: Optional[dict] = None
+    
+    # Агрегированные метрики ресурсов
+    avg_cpu_percent: Optional[float] = None
+    max_cpu_percent: Optional[float] = None
+    avg_ram_percent: Optional[float] = None
+    max_ram_percent: Optional[float] = None
+    avg_vram_percent: Optional[float] = None
+    max_vram_percent: Optional[float] = None
 
     # Властивості для форматування
     @property
@@ -111,18 +124,28 @@ class BenchmarkMetrics(BaseModel):
         Returns:
             Formatted string with benchmark metrics.
         """
-        return (
-            f"{get_text('context')}: {self.ctx_str} | "
-            f"{get_text('temperature')}: {self.temperature:.1f} | "
-            f"{get_text('duration')}: {self.duration_sec:.2f}s | "
-            f"{get_text('prompt_tokens')}: {self.prompt_tokens} | "
-            f"{get_text('response_tokens')}: {self.response_tokens} | "
-            f"{get_text('avg_tps')}: {self.avg_tps:.2f} | "
-            f"{get_text('min_tps')}: {self.min_tps:.2f} | "
-            f"{get_text('max_tps')}: {self.max_tps:.2f} | "
-            f"{get_text('std_dev')}: {self.std_dev:.2f} | "
+        lines = [
+            f"{get_text('context')}: {self.ctx_str}",
+            f"{get_text('temperature')}: {self.temperature:.1f}",
+            f"{get_text('duration')}: {self.duration_sec:.2f}s",
+            f"{get_text('prompt_tokens')}: {self.prompt_tokens}",
+            f"{get_text('response_tokens')}: {self.response_tokens}",
+            f"{get_text('avg_tps')}: {self.avg_tps:.2f}",
+            f"{get_text('min_tps')}: {self.min_tps:.2f}",
+            f"{get_text('max_tps')}: {self.max_tps:.2f}",
+            f"{get_text('std_dev')}: {self.std_dev:.2f}",
             f"VRAM: {self.vram_str}"
-        )
+        ]
+        
+        # Добавляем информацию о ресурсах, если она доступна
+        if self.avg_cpu_percent is not None:
+            lines.append(f"CPU: {self.avg_cpu_percent:.1f}% (max: {self.max_cpu_percent:.1f}%)")
+        if self.avg_ram_percent is not None:
+            lines.append(f"RAM: {self.avg_ram_percent:.1f}% (max: {self.max_ram_percent:.1f}%)")
+        if self.avg_vram_percent is not None:
+            lines.append(f"VRAM: {self.avg_vram_percent:.1f}% (max: {self.max_vram_percent:.1f}%)")
+        
+        return " | ".join(lines)
 
     def to_recommendation_line(self, rank: int = 1) -> str:
         """Format result as recommendation line.
@@ -151,7 +174,7 @@ class BenchmarkMetrics(BaseModel):
         Returns:
             Dictionary with all result fields.
         """
-        return {
+        result = {
             'ctx': self.ctx,
             'ctx_str': self.ctx_str,
             'temperature': round(self.temperature, 3),
@@ -172,6 +195,30 @@ class BenchmarkMetrics(BaseModel):
             'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
             'response': self.response,
         }
+        
+        # Добавляем расширенную статистику ресурсов
+        if self.cpu_stats is not None:
+            result['cpu_stats'] = self.cpu_stats
+        if self.ram_stats is not None:
+            result['ram_stats'] = self.ram_stats
+        if self.vram_stats is not None:
+            result['vram_stats'] = self.vram_stats
+            
+        # Добавляем агрегированные метрики ресурсов
+        if self.avg_cpu_percent is not None:
+            result['avg_cpu_percent'] = round(self.avg_cpu_percent, 3)
+        if self.max_cpu_percent is not None:
+            result['max_cpu_percent'] = round(self.max_cpu_percent, 3)
+        if self.avg_ram_percent is not None:
+            result['avg_ram_percent'] = round(self.avg_ram_percent, 3)
+        if self.max_ram_percent is not None:
+            result['max_ram_percent'] = round(self.max_ram_percent, 3)
+        if self.avg_vram_percent is not None:
+            result['avg_vram_percent'] = round(self.avg_vram_percent, 3)
+        if self.max_vram_percent is not None:
+            result['max_vram_percent'] = round(self.max_vram_percent, 3)
+            
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> 'BenchmarkMetrics':

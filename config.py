@@ -95,6 +95,30 @@ class OllamaConfig:
                 pass
         # Default values
         return DEFAULT_TEMPERATURES
+
+    @property
+    def monitor_config(self) -> dict:
+        """Get monitoring configuration"""
+        defaults = {
+            'collection_interval': 0.5,
+            'max_samples': 1000,
+            'enable_cpu_monitoring': True,
+            'enable_ram_monitoring': True,
+            'enable_vram_monitoring': True
+        }
+        raw = self._config.get('monitor_config')
+        if raw:
+            # Try to parse as JSON
+            try:
+                config = json.loads(raw)
+                # Merge with defaults
+                for key, value in defaults.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return defaults
     
     @property
     def base_url(self) -> str:
