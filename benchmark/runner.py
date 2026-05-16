@@ -872,7 +872,7 @@ class BenchmarkRunner:
                         update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
                     
                     try:
-                        avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
+                        avg_tps, vram, tps_list, error, _, used_temp, _ = self.ollama_client.run_generation(
                             model_name,
                             ctx,
                             self.num_runs,
@@ -1034,8 +1034,8 @@ class BenchmarkRunner:
                             update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done, current_tps=current_tps)
                         
                         try:
-                            avg_tps, vram, tps_list, error, _, used_temp = self.ollama_client.run_generation(
-                                model_name,
+                            avg_tps, vram, tps_list, error, _, used_temp, _ = self.ollama_client.run_generation(
+                                                            model_name,
                                 ctx,
                                 self.num_runs,
                                 self.disable_thinking,
