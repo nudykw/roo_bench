@@ -193,7 +193,6 @@ class BenchmarkMetrics(BaseModel):
             'chain_id': self.chain_id,
             'chain_name': self.chain_name,
             'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
-            'response': self.response,
         }
         
         # Добавляем расширенную статистику ресурсов
