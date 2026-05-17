@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, List, Tuple, Any
 
 import requests
-from system.gpu_monitor import get_vram_usage
+from system.gpu_monitor import get_vram_usage, get_vram_stats
 from system.ssh_client import SSHClient
 from system.system_monitor import ResourceMonitor, SystemStats
 from i18n import get_text
