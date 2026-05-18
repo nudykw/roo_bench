@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from typing import Optional, List
+
 from benchmark.result import BenchmarkMetrics, BenchmarkResult
 
 
@@ -16,9 +16,9 @@ class ExpertResultsManager:
             output_file: Path to the expert results file.
         """
         self.output_file = output_file
-        self.entries: List[dict] = []
-        self.tested_model: Optional[str] = None
-        self.expert_model: Optional[str] = None
+        self.entries: list[dict] = []
+        self.tested_model: str | None = None
+        self.expert_model: str | None = None
         self.generated_at: str = ""
         self.run_config: dict = {}
 

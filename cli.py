@@ -1,12 +1,10 @@
 """Command-line interface argument parsing and validation."""
 
 import argparse
-import sys
-import os
 import logging
-from i18n import get_text, get_available_languages, _current_language
-from constants import CONTEXT_SIZES
 
+from constants import CONTEXT_SIZES
+from i18n import _current_language, get_available_languages, get_text
 
 logger = logging.getLogger('roo_bench')
 

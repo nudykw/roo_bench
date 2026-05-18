@@ -2,7 +2,8 @@
 
 import curses
 import sys
-from i18n import get_text, _current_language
+
+from i18n import _current_language, get_text
 
 
 def interactive_model_select(stdscr, models: list, single_select: bool = False) -> list:
@@ -184,14 +185,14 @@ def interactive_model_select(stdscr, models: list, single_select: bool = False) 
         selected_count = len(selected)
         if single_select:
             if selected_count > 0:
-                confirm = f"Selected: 1 model. Press Enter to confirm, Esc to cancel"
+                confirm = "Selected: 1 model. Press Enter to confirm, Esc to cancel"
             else:
-                confirm = f"No model selected. Press Enter to select first, Esc to cancel"
+                confirm = "No model selected. Press Enter to select first, Esc to cancel"
         else:
             if selected_count > 0:
                 confirm = f"Selected: {selected_count} models. Press Enter to confirm, Esc to deselect all"
             else:
-                confirm = f"No models selected. Press Enter to select all, Esc to cancel"
+                confirm = "No models selected. Press Enter to select all, Esc to cancel"
         confirm = confirm[:max_cols-1]
         try:
             stdscr.addstr(max_rows - 1, 0, confirm.ljust(max_cols-1), curses.A_BOLD)

@@ -1,7 +1,7 @@
 """GPU detection and VRAM monitoring utilities."""
 
-import subprocess
 import os
+import subprocess
 import time
 
 
@@ -55,7 +55,7 @@ def get_vram_usage() -> int | None:
     try:
         gpu_path = '/proc/driver/nvidia/gpus/0/mem_used'
         if os.path.exists(gpu_path):
-            with open(gpu_path, 'r') as f:
+            with open(gpu_path) as f:
                 content = f.read().strip()
                 # Format: "used: 4500MiB" or "4500 MiB"
                 if ':' in content:

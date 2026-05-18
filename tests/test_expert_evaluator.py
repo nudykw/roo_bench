@@ -9,8 +9,8 @@ Usage:
     python test_expert_evaluator.py --ollama-url http://aorus-cachyos-server:11434 --model gemma4:latest
 """
 
-import sys
 import logging
+import sys
 
 # ── Full debug logging identical to production ─────────────────────────────────
 logging.basicConfig(
@@ -347,9 +347,9 @@ def phase1_inspect_prompt() -> tuple:
 
     print(f"\n  Template for mode='architect':\n  {template!r}")
     print(f"\n  Final prompt length      : {len(eval_prompt)} chars")
-    print(f"\n  ── Prompt first 600 chars ──")
+    print("\n  ── Prompt first 600 chars ──")
     print(eval_prompt[:600])
-    print(f"  ── Prompt last 200 chars ──")
+    print("  ── Prompt last 200 chars ──")
     print(eval_prompt[-200:])
 
     return evaluator, entry, eval_prompt
@@ -380,7 +380,7 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
     print(f"  payload['options']       : {payload['options']}")
     print(f"  prompt length            : {len(payload['prompt'])} chars")
     print(f"  headers sent             : {headers_used!r}")
-    print(f"\n  ⏳ Sending request (timeout=120s)…")
+    print("\n  ⏳ Sending request (timeout=120s)…")
 
     try:
         response = requests.post(
@@ -390,7 +390,7 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
             timeout=120,
         )
 
-        print(f"\n  ── HTTP Response ──")
+        print("\n  ── HTTP Response ──")
         print(f"  status_code              : {response.status_code}")
         print(f"  Content-Type             : {response.headers.get('content-type', 'N/A')}")
         print(f"  content-length header    : {response.headers.get('content-length', '<not set>')}")
@@ -408,7 +408,7 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
             print(f"  raw text: {response.text[:500]!r}")
             return None
 
-        print(f"\n  ── Parsed JSON fields ──")
+        print("\n  ── Parsed JSON fields ──")
         print(f"  keys present             : {list(data.keys())}")
 
         response_field = data.get("response", "<<MISSING>>")
@@ -432,15 +432,15 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
 
         # ── Parse score exactly as ExpertEvaluator._parse_score ────────────────
         parsed_score = ExpertEvaluator._parse_score(response_field if isinstance(response_field, str) else "50")
-        print(f"\n  ── Score parsing ──")
+        print("\n  ── Score parsing ──")
         print(f"  ExpertEvaluator._parse_score({response_field!r}) → {parsed_score}")
         if not isinstance(response_field, str) or response_field.strip() == "":
-            print(f"  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 50.0!")
+            print("  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 50.0!")
 
         return data
 
     except requests.exceptions.Timeout:
-        print(f"\n  ❌ TIMEOUT after 120 s")
+        print("\n  ❌ TIMEOUT after 120 s")
     except requests.exceptions.ConnectionError as exc:
         print(f"\n  ❌ CONNECTION ERROR: {exc}")
     except Exception as exc:
@@ -471,7 +471,7 @@ def phase3_evaluate_batch(evaluator: ExpertEvaluator, entry: ExpertEvaluationEnt
 
     print(f"  metrics.expert_score     : {metrics.expert_score}  (before)")
     print(f"  entry.metrics_ref is None: {entry.metrics_ref is None}")
-    print(f"  Calling evaluator.evaluate_batch([entry])…")
+    print("  Calling evaluator.evaluate_batch([entry])…")
 
     evaluator.evaluate_batch([entry])
 
@@ -498,11 +498,11 @@ if __name__ == "__main__":
             print(f"  raw 'response' field     : {resp_field!r}")
             print(f"  raw eval_count           : {raw_data.get('eval_count')}")
         else:
-            print(f"  raw API call             : FAILED (see PHASE 2 output)")
+            print("  raw API call             : FAILED (see PHASE 2 output)")
         print(f"  evaluate_batch score     : {final_score}")
 
         if raw_data and raw_data.get("response", ""):
-            print(f"\n  ✅ API returned a non-empty 'response' — score parsing should succeed.")
+            print("\n  ✅ API returned a non-empty 'response' — score parsing should succeed.")
         elif raw_data:
             print()
             print("  ⚠️  DIAGNOSIS: The API returned an EMPTY 'response' field.")

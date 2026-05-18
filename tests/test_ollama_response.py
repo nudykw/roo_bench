@@ -2,6 +2,7 @@
 
 import json
 import sys
+
 import requests
 
 OLLAMA_URL = "http://aorus-cachyos-server:11434"

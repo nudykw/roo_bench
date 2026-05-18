@@ -6,13 +6,16 @@ import math
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, List, Tuple, Any
 
 import requests
-from system.gpu_monitor import get_vram_usage, get_vram_stats, get_gpu_utilization, get_vram_total
-from system.ssh_client import SSHClient
-from system.system_monitor import ResourceMonitor, SystemStats
+
 from i18n import get_text
+from system.gpu_monitor import (
+    get_gpu_utilization,
+    get_vram_total,
+    get_vram_usage,
+)
+from system.system_monitor import ResourceMonitor
 
 logger = logging.getLogger('roo_bench')
 
@@ -138,7 +141,7 @@ class BaseApiClient(ABC):
 
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3,
                        disable_thinking: bool = True,
-                       temperature: Optional[float] = None,
+                       temperature: float | None = None,
                        prompt: str = None,
                        prompt_metadata: dict = None,
                        num_predict: int = 8192,
@@ -361,7 +364,7 @@ class BaseApiClient(ABC):
                                         gpu_percent,
                                     )
                                     
-                            except json.JSONDecodeError as e:
+                            except json.JSONDecodeError:
                                 continue
                     
                     logger.info("[DEBUG] Finished iter_content loop: %d chunks, %d callbacks", chunk_count, callback_count)
@@ -616,7 +619,7 @@ class BaseApiClient(ABC):
                 return model.get('n_ctx', 0)
         return 0
 
-    def _get_vram_fallback(self, model_name: str) -> Optional[int]:
+    def _get_vram_fallback(self, model_name: str) -> int | None:
         """Get VRAM usage from Ollama API /api/ps endpoint as fallback.
         
         This is used when direct GPU monitoring is not available.
@@ -730,7 +733,7 @@ class BaseApiClient(ABC):
                 details += f" | ❌ Too small (found {actual_value} < {expected_ctx})"
                 return False, details, found_values
 
-        return False, f"   🔍 via /api/show: No context values found in model info", found_values
+        return False, "   🔍 via /api/show: No context values found in model info", found_values
 
     def verify_ctx_via_generation(self, model_name: str, context_size: int, prompt: str) -> tuple:
         """Verify context size by sending a test generation and checking prompt_eval_count.
@@ -862,11 +865,11 @@ class BaseApiClient(ABC):
                 
                 # Determine restart method based on SSH client availability
                 if self.ssh_client and self.ssh_client.is_configured:
-                    print(f"   🔄 Restarting Ollama via SSH...")
+                    print("   🔄 Restarting Ollama via SSH...")
                     try:
                         exec_result = self.ssh_client.execute("sudo systemctl restart ollama", timeout=60)
                         if exec_result.returncode == 0:
-                            print(f"   ⏳ Waiting for Ollama to start...")
+                            print("   ⏳ Waiting for Ollama to start...")
                             time.sleep(5)
                             # Verify model is unloaded
                             verify_response = requests.get(
@@ -890,7 +893,7 @@ class BaseApiClient(ABC):
                     except Exception as ssh_err:
                         print(f"   ⚠️  SSH restart error: {ssh_err}")
                 else:
-                    print(f"   🔄 Restarting Ollama via systemctl...")
+                    print("   🔄 Restarting Ollama via systemctl...")
                     result = subprocess.run(
                         ['sudo', 'systemctl', 'restart', 'ollama'],
                         capture_output=True,
@@ -898,7 +901,7 @@ class BaseApiClient(ABC):
                         timeout=60
                     )
                     if result.returncode == 0:
-                        print(f"   ⏳ Waiting for Ollama to start...")
+                        print("   ⏳ Waiting for Ollama to start...")
                         time.sleep(5)
                         # Verify model is unloaded
                         verify_response = requests.get(
@@ -930,7 +933,7 @@ class BaseApiClient(ABC):
             print(f"   ⚠️  Error unloading model: {e}")
             # Fallback: try direct systemctl restart
             try:
-                print(f"   🔄 Trying direct systemctl restart...")
+                print("   🔄 Trying direct systemctl restart...")
                 result = subprocess.run(
                     ['sudo', 'systemctl', 'restart', 'ollama'],
                     capture_output=True,
@@ -939,13 +942,13 @@ class BaseApiClient(ABC):
                 )
                 if result.returncode == 0:
                     time.sleep(5)
-                    print(f"   🧹 Ollama restarted via fallback, VRAM freed.")
+                    print("   🧹 Ollama restarted via fallback, VRAM freed.")
                     return True
             except Exception:
                 pass
             
             print(f"   ⚠️  Could not unload model '{model_name}' automatically.")
-            print(f"   💡 Tip: Run 'sudo systemctl restart ollama' to free VRAM.")
+            print("   💡 Tip: Run 'sudo systemctl restart ollama' to free VRAM.")
             return False
 
     def unload_all_models(self) -> bool:
@@ -955,8 +958,8 @@ class BaseApiClient(ABC):
             bool: True if restart was successful, False otherwise
         """
         try:
-            print(f"   🧹 Unloading all models from VRAM...")
-            from system.restart_manager import restart_ollama, RestartMethod
+            print("   🧹 Unloading all models from VRAM...")
+            from system.restart_manager import RestartMethod, restart_ollama
             
             # Determine restart method based on SSH client availability
             if hasattr(self, 'ssh_client') and self.ssh_client and self.ssh_client.is_configured:

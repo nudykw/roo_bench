@@ -9,10 +9,11 @@ This module provides comprehensive model metadata caching including:
 import json
 import os
 import re
-import requests
 import urllib.parse
-from bs4 import BeautifulSoup
 from datetime import datetime, timezone
+
+import requests
+from bs4 import BeautifulSoup
 
 
 class CapabilitiesFetcher:
@@ -136,7 +137,7 @@ class CapabilitiesFetcher:
             return False
         
         try:
-            with open(self.model_cache_file, 'r', encoding='utf-8') as f:
+            with open(self.model_cache_file, encoding='utf-8') as f:
                 cache_data = json.load(f)
             
             cache_timestamp = cache_data.get('cache_timestamp', '')
@@ -149,7 +150,7 @@ class CapabilitiesFetcher:
             age_hours = (now - fetched_at).total_seconds() / 3600
             
             return age_hours < self.CACHE_TTL_HOURS
-        except (json.JSONDecodeError, IOError, ValueError):
+        except (OSError, json.JSONDecodeError, ValueError):
             return False
     
     def _load_model_cache(self):
@@ -158,7 +159,7 @@ class CapabilitiesFetcher:
             return
         
         try:
-            with open(self.model_cache_file, 'r', encoding='utf-8') as f:
+            with open(self.model_cache_file, encoding='utf-8') as f:
                 cache_data = json.load(f)
             
             # Validate cache version
@@ -170,7 +171,7 @@ class CapabilitiesFetcher:
             self.model_metadata = cache_data.get('models', {})
             timestamp = cache_data.get('cache_timestamp', 'unknown')
             print(f"✅ Loaded model cache: {len(self.model_metadata)} models from {timestamp} ({self.model_cache_file})")
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             print(f"⚠️  Error loading model cache: {e}")
 
     def _load_cache(self):
@@ -179,14 +180,14 @@ class CapabilitiesFetcher:
             return
         
         try:
-            with open(self.cache_file, 'r', encoding='utf-8') as f:
+            with open(self.cache_file, encoding='utf-8') as f:
                 cached_data = json.load(f)
             
             # Merge cached data with defaults (cache takes precedence)
             if isinstance(cached_data, dict):
                 self.MODEL_CAPABILITIES.update(cached_data)
                 print(f"✅ Loaded cache: {len(cached_data)} models from {self.cache_file}")
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             print(f"⚠️  Error loading cache: {e}")
 
     def add_model_from_api(self, model_name: str, capabilities: dict):
@@ -238,8 +239,8 @@ class CapabilitiesFetcher:
             if cached_only:
                 print(f"💾 Saved cache: {len(cached_only)} new models to {self.cache_file}")
             else:
-                print(f"ℹ️  No new models to save (all models are in default database)")
-        except IOError as e:
+                print("ℹ️  No new models to save (all models are in default database)")
+        except OSError as e:
             print(f"⚠️  Error saving cache: {e}")
     
     # ========================================================================
@@ -268,7 +269,7 @@ class CapabilitiesFetcher:
                 json.dump(cache_data, f, indent=2, ensure_ascii=False)
             
             print(f"💾 Saved model cache: {len(self.model_metadata)} models to {self.model_cache_file}")
-        except IOError as e:
+        except OSError as e:
             print(f"⚠️  Error saving model cache: {e}")
     
     def add_model_metadata(self, model_name: str, metadata: dict):

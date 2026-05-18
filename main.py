@@ -1,24 +1,17 @@
 """Main entry point for roo_bench - orchestration of all modules."""
 
-import sys
+import curses
+import logging
 import os
 import signal
-import logging
-import curses
-from i18n import set_language, get_text
-from config import OllamaConfig
-from cli import parse_args, get_context_sizes, get_temperature_test_values
-from constants import CONTEXT_SIZES, DEFAULT_OLLAMA_URL
+import sys
+
 from api.factory import ApiClientFactory
-from system.restart_manager import restart_ollama, RestartMethod
-from system.gpu_monitor import check_gpu_available, get_vram_usage
+from benchmark.result import BenchmarkResult, Capability, ModelInfo
 from benchmark.runner import BenchmarkRunner
-from benchmark.results import calculate_statistics, format_result_row, format_recommendations
-from benchmark.result import ModelInfo, BenchmarkResult, Capability
-from ui.curses_selector import interactive_model_select, select_expert_model
-from ui.output_formatter import print_model_list, print_results_table
-from export.result_saver import save_results, ResultSaver
-from export.retest_dialog import RetestDecision, prompt_retest_decision, should_skip_model, should_stop_testing
+from cli import get_context_sizes, get_temperature_test_values, parse_args
+from config import OllamaConfig
+from export.expert_results import ExpertResultsManager
 from export.merge_utils import (
     load_run_config,
     merge_results,
@@ -26,8 +19,17 @@ from export.merge_utils import (
     run_configs_match,
     save_results_file,
 )
-from export.expert_results import ExpertResultsManager
+from export.result_saver import save_results
+from export.retest_dialog import (
+    RetestDecision,
+    prompt_retest_decision,
+    should_skip_model,
+    should_stop_testing,
+)
+from i18n import get_text, set_language
 from prompts.loader import PromptLoader
+from ui.curses_selector import interactive_model_select, select_expert_model
+from ui.output_formatter import print_model_list, print_results_table
 
 # Setup logging
 logger = logging.getLogger('roo_bench')
@@ -950,8 +952,8 @@ def _post_benchmark_workflow(results_file: str, all_results: list, args):
         all_results: List of BenchmarkResult objects
         args: Parsed arguments
     """
-    from i18n import get_text
     from export.ai_analyzer import AIAnalyzer, analyze_results_interactive
+    from i18n import get_text
     
     # Only ask about AI analysis if we have results and a file to work with
     if not all_results or not results_file:
@@ -979,7 +981,6 @@ def signal_handler(signum, frame):
 
 def _main_impl():
     """Main implementation with language setup."""
-    from i18n import set_language
     from cli import setup_logging
     
     args = parse_args()

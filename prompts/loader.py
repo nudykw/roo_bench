@@ -1,9 +1,8 @@
 """JSONC (JSON with Comments) loader for benchmark prompts."""
 
 import json
-import re
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 
 class PromptLoader:
@@ -11,14 +10,14 @@ class PromptLoader:
     
     DEFAULT_PROMPTS_FILE = os.path.join(os.path.dirname(__file__), '..', 'prompts.jsonc')
     
-    def __init__(self, prompts_file: Optional[str] = None):
+    def __init__(self, prompts_file: str | None = None):
         """Initialize prompt loader.
         
         Args:
             prompts_file: Path to prompts.jsonc file. If None, uses default.
         """
         self.prompts_file = prompts_file or self.DEFAULT_PROMPTS_FILE
-        self._data: Optional[Dict] = None
+        self._data: dict | None = None
     
     def _strip_comments(self, jsonc: str) -> str:
         """Remove comments from JSONC content.
@@ -89,7 +88,7 @@ class PromptLoader:
         
         return ''.join(result)
     
-    def load(self) -> Dict[str, Any]:
+    def load(self) -> dict[str, Any]:
         """Load prompts from JSONC file.
         
         Returns:
@@ -99,7 +98,7 @@ class PromptLoader:
             FileNotFoundError: If prompts file doesn't exist
             json.JSONDecodeError: If JSON is invalid (after comment removal)
         """
-        with open(self.prompts_file, 'r', encoding='utf-8') as f:
+        with open(self.prompts_file, encoding='utf-8') as f:
             jsonc_content = f.read()
         
         # Strip comments
@@ -110,13 +109,13 @@ class PromptLoader:
         return self._data
     
     @property
-    def data(self) -> Dict[str, Any]:
+    def data(self) -> dict[str, Any]:
         """Lazy-load and return prompts data."""
         if self._data is None:
             self.load()
         return self._data
     
-    def get_independent_prompts(self, mode: str) -> List[Dict[str, str]]:
+    def get_independent_prompts(self, mode: str) -> list[dict[str, str]]:
         """Get independent prompts for a specific mode.
         
         Args:
@@ -128,7 +127,7 @@ class PromptLoader:
         data = self.data
         return data.get('independent', {}).get(mode, [])
     
-    def get_all_independent_modes(self) -> List[str]:
+    def get_all_independent_modes(self) -> list[str]:
         """Get list of all available independent modes.
         
         Returns:
@@ -136,7 +135,7 @@ class PromptLoader:
         """
         return list(self.data.get('independent', {}).keys())
     
-    def get_all_independent_prompts_ordered(self) -> List[Dict[str, Any]]:
+    def get_all_independent_prompts_ordered(self) -> list[dict[str, Any]]:
         """Get all independent prompts in order: architect → code → debug.
         
         Returns:
@@ -151,7 +150,7 @@ class PromptLoader:
                 all_prompts.append(prompt_with_mode)
         return all_prompts
     
-    def get_chains(self) -> List[Dict[str, Any]]:
+    def get_chains(self) -> list[dict[str, Any]]:
         """Get all prompt chains.
         
         Returns:
@@ -159,7 +158,7 @@ class PromptLoader:
         """
         return self.data.get('chains', [])
     
-    def get_chain_by_id(self, chain_id: str) -> Optional[Dict[str, Any]]:
+    def get_chain_by_id(self, chain_id: str) -> dict[str, Any] | None:
         """Get a specific chain by ID.
         
         Args:
@@ -173,7 +172,7 @@ class PromptLoader:
                 return chain
         return None
     
-    def get_chain_by_name(self, chain_name: str) -> Optional[Dict[str, Any]]:
+    def get_chain_by_name(self, chain_name: str) -> dict[str, Any] | None:
         """Get a specific chain by name.
         
         Args:
@@ -187,9 +186,9 @@ class PromptLoader:
                 return chain
         return None
     
-    def build_chain_context(self, chain: Dict[str, Any],
+    def build_chain_context(self, chain: dict[str, Any],
                            architect_response: str = None,
-                           code_response: str = None) -> Dict[str, str]:
+                           code_response: str = None) -> dict[str, str]:
         """Build final prompts for a chain with context substitution.
         
         Args:

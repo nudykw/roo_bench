@@ -1,6 +1,7 @@
-import os
 import json
-from typing import Optional, Dict, Any
+import os
+from typing import Any
+
 
 class OllamaConfig:
     """Ollama server connection configuration"""
@@ -13,19 +14,19 @@ class OllamaConfig:
         'config_file': 'config.json'
     }
     
-    def __init__(self, cli_args: Optional[Dict[str, Any]] = None):
+    def __init__(self, cli_args: dict[str, Any] | None = None):
         self.cli_args = cli_args or {}
         self._config = self._load_config()
         self._apply_env_vars()
         self._apply_cli_args()
     
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from file"""
         config_file = self.cli_args.get('config') or self.DEFAULTS['config_file']
         
         if config_file and os.path.exists(config_file):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, encoding='utf-8') as f:
                     return json.load(f)
             except json.JSONDecodeError as e:
                 print(f"Error reading configuration: {e}")
@@ -73,7 +74,7 @@ class OllamaConfig:
         return int(self._config.get('port', self.DEFAULTS['port']))
     
     @property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         """Get API key"""
         return self._config.get('api_key')
     
@@ -132,7 +133,7 @@ class OllamaConfig:
         """Get path to prompts configuration file."""
         return self._config.get('prompts_file', os.path.join(os.path.dirname(__file__), 'prompts.jsonc'))
     
-    def get_headers(self) -> Dict[str, str]:
+    def get_headers(self) -> dict[str, str]:
         """Get headers for requests"""
         headers = {}
         if self.api_key:

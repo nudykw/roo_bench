@@ -2,7 +2,8 @@
 
 import curses
 from enum import Enum
-from i18n import get_text, _current_language
+
+from i18n import _current_language, get_text
 
 
 class RetestDecision(Enum):

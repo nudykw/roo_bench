@@ -1,10 +1,10 @@
 """Benchmark result data class for formatting and display."""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
 from enum import Enum
-from i18n import get_text
 
+from pydantic import BaseModel, Field
+
+from i18n import get_text
 
 # --- ENUMS ---
 
@@ -27,7 +27,7 @@ class ModelInfo(BaseModel):
     quant: str = "N/A"
     architecture: str = "N/A"
     max_ctx: int = 131072
-    moe: Optional[dict] = None
+    moe: dict | None = None
     vision: Capability = Capability.VISION
     tools: Capability = Capability.TOOLS
     thinking: Capability = Capability.THINKING
@@ -78,30 +78,30 @@ class BenchmarkMetrics(BaseModel):
     min_tps: float
     max_tps: float
     std_dev: float
-    vram: Optional[int] = None
-    prompt_id: Optional[str] = None
-    prompt_name: Optional[str] = None
+    vram: int | None = None
+    prompt_id: str | None = None
+    prompt_name: str | None = None
     duration_sec: float = 0.0
     prompt_tokens: int = 0
     response_tokens: int = 0
-    mode: Optional[str] = None
-    chain_id: Optional[str] = None
-    chain_name: Optional[str] = None
-    expert_score: Optional[float] = None
-    response: Optional[str] = None
+    mode: str | None = None
+    chain_id: str | None = None
+    chain_name: str | None = None
+    expert_score: float | None = None
+    response: str | None = None
     
     # Расширенная статистика ресурсов
-    cpu_stats: Optional[dict] = None
-    ram_stats: Optional[dict] = None
-    vram_stats: Optional[dict] = None
+    cpu_stats: dict | None = None
+    ram_stats: dict | None = None
+    vram_stats: dict | None = None
     
     # Агрегированные метрики ресурсов
-    avg_cpu_percent: Optional[float] = None
-    max_cpu_percent: Optional[float] = None
-    avg_ram_percent: Optional[float] = None
-    max_ram_percent: Optional[float] = None
-    avg_vram_percent: Optional[float] = None
-    max_vram_percent: Optional[float] = None
+    avg_cpu_percent: float | None = None
+    max_cpu_percent: float | None = None
+    avg_ram_percent: float | None = None
+    max_ram_percent: float | None = None
+    avg_vram_percent: float | None = None
+    max_vram_percent: float | None = None
 
     # Властивості для форматування
     @property
@@ -245,7 +245,7 @@ class BenchmarkResult(BaseModel):
     """Результати бенчмарку для моделі."""
 
     model: ModelInfo
-    results: List[BenchmarkMetrics] = []
+    results: list[BenchmarkMetrics] = []
 
     # Властивості зручності
     @property
@@ -254,30 +254,30 @@ class BenchmarkResult(BaseModel):
         return self.model.name
 
     @property
-    def all_contexts(self) -> List[int]:
+    def all_contexts(self) -> list[int]:
         """Get all context sizes tested."""
         return [r.ctx for r in self.results]
 
     @property
-    def all_temperatures(self) -> List[float]:
+    def all_temperatures(self) -> list[float]:
         """Get all temperatures tested."""
         return [r.temperature for r in self.results]
 
     # Методи фільтрації
-    def filter_by_context(self, ctx: int) -> List[BenchmarkMetrics]:
+    def filter_by_context(self, ctx: int) -> list[BenchmarkMetrics]:
         """Filter results by context size."""
         return [r for r in self.results if r.ctx == ctx]
 
-    def filter_by_temperature(self, temp: float) -> List[BenchmarkMetrics]:
+    def filter_by_temperature(self, temp: float) -> list[BenchmarkMetrics]:
         """Filter results by temperature."""
         return [r for r in self.results if r.temperature == temp]
 
-    def filter_by_mode(self, mode: str) -> List[BenchmarkMetrics]:
+    def filter_by_mode(self, mode: str) -> list[BenchmarkMetrics]:
         """Filter results by mode."""
         return [r for r in self.results if r.mode == mode]
 
     # Методи агрегації
-    def get_best_result(self) -> Optional[BenchmarkMetrics]:
+    def get_best_result(self) -> BenchmarkMetrics | None:
         """Get the result with the highest average TPS."""
         return max(self.results, key=lambda r: r.avg_tps) if self.results else None
 
@@ -317,11 +317,11 @@ class BenchmarkResult(BaseModel):
         return cls(model=model, results=metrics_list)
 
     # Методи форматування (для сумісності)
-    def to_summary_lines(self) -> List[str]:
+    def to_summary_lines(self) -> list[str]:
         """Generate summary lines for all results."""
         return [r.to_summary_line() for r in self.results]
 
-    def to_recommendation_lines(self, rank: int = 1) -> List[str]:
+    def to_recommendation_lines(self, rank: int = 1) -> list[str]:
         """Generate recommendation lines for the top result."""
         best_result = self.get_best_result()
         if best_result:

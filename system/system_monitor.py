@@ -1,12 +1,11 @@
 """System resource monitoring with support for local and remote machines."""
 
-import time
-import threading
 import logging
+import threading
+import time
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
-from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger('roo_bench.system_monitor')
 
@@ -17,19 +16,19 @@ class SystemStats:
     
     # CPU метрики
     cpu_percent: float = 0.0
-    cpu_percent_samples: List[float] = None
+    cpu_percent_samples: list[float] = None
     
     # RAM метрики
     ram_used: int = 0
     ram_total: int = 0
     ram_percent: float = 0.0
-    ram_samples: List[int] = None
+    ram_samples: list[int] = None
     
     # VRAM метрики
-    vram_used: Optional[int] = None
-    vram_total: Optional[int] = None
-    vram_percent: Optional[float] = None
-    vram_samples: List[int] = None
+    vram_used: int | None = None
+    vram_total: int | None = None
+    vram_percent: float | None = None
+    vram_samples: list[int] = None
     
     # Временные метки
     timestamp: float = 0.0
@@ -43,7 +42,7 @@ class SystemStats:
         if self.vram_samples is None:
             self.vram_samples = []
     
-    def add_sample(self, cpu_percent: float, ram_used: int, vram_used: Optional[int] = None):
+    def add_sample(self, cpu_percent: float, ram_used: int, vram_used: int | None = None):
         """Добавить новую выборку метрик."""
         self.cpu_percent_samples.append(cpu_percent)
         self.ram_samples.append(ram_used)
@@ -59,7 +58,7 @@ class SystemStats:
         if len(self.vram_samples) > max_samples:
             self.vram_samples = self.vram_samples[-max_samples:]
     
-    def get_aggregated_stats(self) -> Dict[str, Any]:
+    def get_aggregated_stats(self) -> dict[str, Any]:
         """Получить агрегированную статистику."""
         stats = {
             'cpu': {
@@ -106,11 +105,11 @@ class BaseMonitor(ABC):
         self.collection_interval = collection_interval
         self.is_monitoring = False
         self.monitor_thread = None
-        self.stats_history: List[SystemStats] = []
+        self.stats_history: list[SystemStats] = []
         self._lock = threading.Lock()
     
     @abstractmethod
-    def collect_stats(self) -> Optional[SystemStats]:
+    def collect_stats(self) -> SystemStats | None:
         """Собрать текущие метрики системы.
         
         Returns:
@@ -118,7 +117,7 @@ class BaseMonitor(ABC):
         """
         pass
     
-    def start_monitoring(self, duration: Optional[float] = None):
+    def start_monitoring(self, duration: float | None = None):
         """Начать мониторинг ресурсов.
         
         Args:
@@ -167,12 +166,12 @@ class BaseMonitor(ABC):
         
         logger.info("Stopped monitoring")
     
-    def get_latest_stats(self) -> Optional[SystemStats]:
+    def get_latest_stats(self) -> SystemStats | None:
         """Получить последние собранные метрики."""
         with self._lock:
             return self.stats_history[-1] if self.stats_history else None
     
-    def get_aggregated_stats(self) -> Optional[Dict[str, Any]]:
+    def get_aggregated_stats(self) -> dict[str, Any] | None:
         """Получить агрегированную статистику по всем собранным метрикам."""
         if not self.stats_history:
             return None
@@ -216,7 +215,7 @@ class BaseMonitor(ABC):
         
         return aggregated
     
-    def get_stats_history(self) -> List[SystemStats]:
+    def get_stats_history(self) -> list[SystemStats]:
         """Получить историю собранных метрик."""
         with self._lock:
             return self.stats_history.copy()
@@ -243,7 +242,7 @@ class LocalSystemMonitor(BaseMonitor):
     def _try_import_gpu_monitor(self):
         """Попытка импорта gpu_monitor для мониторинга VRAM."""
         try:
-            from .gpu_monitor import get_vram_usage, check_gpu_available
+            from .gpu_monitor import check_gpu_available, get_vram_usage
             self.gpu_monitor = {
                 'get_vram_usage': get_vram_usage,
                 'check_gpu_available': check_gpu_available
@@ -252,7 +251,7 @@ class LocalSystemMonitor(BaseMonitor):
             logger.warning("gpu_monitor not available, VRAM monitoring disabled")
             self.gpu_monitor = None
     
-    def collect_stats(self) -> Optional[SystemStats]:
+    def collect_stats(self) -> SystemStats | None:
         """Собрать текущие метрики локальной системы."""
         try:
             # CPU метрики
@@ -327,7 +326,7 @@ class RemoteSystemMonitor(BaseMonitor):
         super().__init__(collection_interval)
         self.ssh_client = ssh_client
     
-    def collect_stats(self) -> Optional[SystemStats]:
+    def collect_stats(self) -> SystemStats | None:
         """Собрать текущие метрики удаленной системы."""
         if not self.ssh_client or not self.ssh_client.is_configured:
             logger.warning("SSH client not configured for remote monitoring")
@@ -383,7 +382,7 @@ class RemoteSystemMonitor(BaseMonitor):
             logger.error(f"Error collecting remote system stats: {e}")
             return None
     
-    def _get_cpu_usage_remote(self) -> Optional[float]:
+    def _get_cpu_usage_remote(self) -> float | None:
         """Получить загрузку CPU на удаленной машине."""
         try:
             # Используем top для получения загрузки CPU
@@ -395,7 +394,7 @@ class RemoteSystemMonitor(BaseMonitor):
             logger.debug(f"Error getting remote CPU usage: {e}")
         return None
     
-    def _get_ram_usage_remote(self) -> Optional[Dict[str, Any]]:
+    def _get_ram_usage_remote(self) -> dict[str, Any] | None:
         """Получить статистику RAM на удаленной машине."""
         try:
             # Используем free для получения статистики RAM
@@ -437,7 +436,7 @@ class ResourceMonitor:
         else:
             raise ValueError(f"Unsupported monitor type: {monitor_type}")
     
-    def start_monitoring(self, duration: Optional[float] = None):
+    def start_monitoring(self, duration: float | None = None):
         """Начать мониторинг."""
         if self.monitor:
             self.monitor.start_monitoring(duration)
@@ -447,15 +446,15 @@ class ResourceMonitor:
         if self.monitor:
             self.monitor.stop_monitoring()
     
-    def get_latest_stats(self) -> Optional[SystemStats]:
+    def get_latest_stats(self) -> SystemStats | None:
         """Получить последние метрики."""
         return self.monitor.get_latest_stats() if self.monitor else None
     
-    def get_aggregated_stats(self) -> Optional[Dict[str, Any]]:
+    def get_aggregated_stats(self) -> dict[str, Any] | None:
         """Получить агрегированную статистику."""
         return self.monitor.get_aggregated_stats() if self.monitor else None
     
-    def get_stats_history(self) -> List[SystemStats]:
+    def get_stats_history(self) -> list[SystemStats]:
         """Получить историю метрик."""
         return self.monitor.get_stats_history() if self.monitor else []
     
@@ -465,7 +464,7 @@ class ResourceMonitor:
 
 
 # Утилитарные функции для быстрого использования
-def get_local_stats(collection_interval: float = 0.5, samples: int = 1) -> Optional[SystemStats]:
+def get_local_stats(collection_interval: float = 0.5, samples: int = 1) -> SystemStats | None:
     """Получить метрики локальной системы с заданным количеством выборок.
     
     Args:
@@ -485,7 +484,7 @@ def get_local_stats(collection_interval: float = 0.5, samples: int = 1) -> Optio
     return monitor.get_aggregated_stats()
 
 
-def get_remote_stats(ssh_client, collection_interval: float = 0.5, samples: int = 1) -> Optional[SystemStats]:
+def get_remote_stats(ssh_client, collection_interval: float = 0.5, samples: int = 1) -> SystemStats | None:
     """Получить метрики удаленной системы с заданным количеством выборок.
     
     Args:

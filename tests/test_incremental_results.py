@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
-from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from benchmark.expert_evaluator import ExpertEvaluator
+from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from export.merge_utils import (
     load_results_file,
     merge_results,

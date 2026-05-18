@@ -3,6 +3,7 @@
 import subprocess
 import time
 from enum import Enum
+
 from i18n import get_text
 from system.ssh_client import SSHClient
 
@@ -113,13 +114,13 @@ class RestartManager:
                             print(get_text("restart_success"))
                         else:
                             print(get_text("error_restart_command", cmd='sudo systemctl restart ollama', stderr=result.stderr or "all methods failed"))
-                            print(f"   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
+                            print("   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
                     except subprocess.TimeoutExpired:
                         print(get_text("error_restart_timeout"))
                         return
                     except FileNotFoundError:
                         print(get_text("error_restart_command", cmd='sudo systemctl restart ollama', stderr="systemctl not found"))
-                        print(f"   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
+                        print("   💡 Tip: You can restart Ollama manually by running: sudo systemctl restart ollama")
                     except PermissionError:
                         print(get_text("error_restart_permission"))
 

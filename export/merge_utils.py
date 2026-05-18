@@ -3,8 +3,8 @@
 import json
 import os
 import tempfile
-from typing import Optional, Tuple
-from benchmark.result import BenchmarkResult, BenchmarkMetrics, ModelInfo
+
+from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 
 
 def compute_metric_key(model_name: str, metric: BenchmarkMetrics) -> str:
@@ -48,7 +48,7 @@ def atomic_write_json(file_path: str, data: dict) -> None:
         raise
 
 
-def load_results_file(file_path: str) -> Tuple[list, dict]:
+def load_results_file(file_path: str) -> tuple[list, dict]:
     """Load existing results from JSON file.
 
     Args:
@@ -62,7 +62,7 @@ def load_results_file(file_path: str) -> Tuple[list, dict]:
         return [], {}
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             data = json.load(f)
 
         results = []
@@ -158,7 +158,7 @@ def load_run_config(file_path: str) -> dict:
         return {}
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             data = json.load(f)
         return data.get('run_config', {}) if isinstance(data, dict) else {}
     except (json.JSONDecodeError, OSError, TypeError):

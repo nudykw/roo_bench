@@ -1,9 +1,10 @@
 """Markdown rendering module for AI analysis output."""
 
+from collections.abc import Iterator
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from typing import Iterator
 
 console = Console()
 

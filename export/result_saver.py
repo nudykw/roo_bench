@@ -1,13 +1,12 @@
 """Results export to JSON and CSV files."""
 
-import json
 import csv
+import json
 import os
-from datetime import datetime
-from typing import List, Optional, Any
-from i18n import get_text, _current_language
-from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
+
+from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from export.merge_utils import atomic_write_json
+from i18n import get_text
 
 
 class ResultSaver:
@@ -23,9 +22,9 @@ class ResultSaver:
         self.output_file = output_file
         self.output_format = output_format
 
-    def save(self, results: List[BenchmarkResult],
-             prompts_config: Optional[dict] = None,
-             run_config: Optional[dict] = None,
+    def save(self, results: list[BenchmarkResult],
+             prompts_config: dict | None = None,
+             run_config: dict | None = None,
              confirm_overwrite: bool = True):
         """Save results to file.
 
@@ -45,9 +44,9 @@ class ResultSaver:
         elif self.output_format == 'csv':
             self._save_csv(export_data)
 
-    def _prepare_export_data(self, results: List[BenchmarkResult],
-                             prompts_config: Optional[dict] = None,
-                             run_config: Optional[dict] = None) -> dict:
+    def _prepare_export_data(self, results: list[BenchmarkResult],
+                             prompts_config: dict | None = None,
+                             run_config: dict | None = None) -> dict:
         """Prepare data for export.
 
         Args:
@@ -241,12 +240,12 @@ def load_results_from_file(file_path: str) -> tuple:
         return None, None
     
     ext = os.path.splitext(file_path)[1].lower()
-    all_results: List[BenchmarkResult] = []
+    all_results: list[BenchmarkResult] = []
     prompts_config = None
     
     try:
         if ext == '.json':
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 data = json.load(f)
             
             # Extract prompts_config if present
@@ -285,7 +284,7 @@ def load_results_from_file(file_path: str) -> tuple:
         
         elif ext == '.csv':
             # CSV loading - create simple BenchmarkResult from flat CSV data
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 rows = list(reader)
             
@@ -367,9 +366,9 @@ def load_results_from_file(file_path: str) -> tuple:
         return None, None
 
 
-def save_results(results: List[BenchmarkResult], output_file: str, output_format: str,
-                 prompts_config: Optional[dict] = None,
-                 run_config: Optional[dict] = None,
+def save_results(results: list[BenchmarkResult], output_file: str, output_format: str,
+                 prompts_config: dict | None = None,
+                 run_config: dict | None = None,
                  confirm_overwrite: bool = True):
     """Convenience function to save results.
 

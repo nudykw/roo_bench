@@ -1,9 +1,10 @@
 """Expert model-based response evaluation module."""
 
 import logging
+
 import json5
 import requests
-from typing import List, Optional
+
 from api.base_client import BaseApiClient
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
 
@@ -31,7 +32,7 @@ class ExpertEvaluator:
             Dict with prompt templates. Returns defaults if file not found.
         """
         try:
-            with open('prompts/analysis_prompt.jsonc', 'r', encoding='utf-8') as f:
+            with open('prompts/analysis_prompt.jsonc', encoding='utf-8') as f:
                 data = json5.load(f)
             logger.debug("[Expert] Prompts loaded from analysis_prompt.jsonc, keys: %s", list(data.keys()))
             return data
@@ -53,7 +54,7 @@ class ExpertEvaluator:
             }
         }
 
-    def evaluate_batch(self, entries: List[ExpertEvaluationEntry]) -> None:
+    def evaluate_batch(self, entries: list[ExpertEvaluationEntry]) -> None:
         """Evaluate all responses in batch mode and assign scores directly.
 
         Uses sequential API calls with the expert model. Each response is
@@ -134,7 +135,7 @@ class ExpertEvaluator:
         score = self._call_expert_api(eval_prompt)
         return score
 
-    def _get_prompt_template(self, mode: Optional[str]) -> str:
+    def _get_prompt_template(self, mode: str | None) -> str:
         """Get appropriate prompt template based on mode.
 
         Args:

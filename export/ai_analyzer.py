@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import re
-from typing import Optional, List
 
 from benchmark.result import BenchmarkResult
 from ui.markdown_renderer import display_markdown
@@ -26,7 +25,7 @@ class AIAnalyzer:
         """Load prompt templates from prompts/analysis_prompt.jsonc."""
         prompts_file = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.jsonc')
         try:
-            with open(prompts_file, 'r', encoding='utf-8') as f:
+            with open(prompts_file, encoding='utf-8') as f:
                 content = f.read()
                 # Remove comments (// style)
                 content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
@@ -57,7 +56,7 @@ class AIAnalyzer:
             logger.error("Failed to get available models: %s", e)
             return []
 
-    def format_results_for_prompt(self, all_results: List[BenchmarkResult]) -> str:
+    def format_results_for_prompt(self, all_results: list[BenchmarkResult]) -> str:
         """Format benchmark results for AI prompt."""
         lines = []
         for result in all_results:
@@ -67,13 +66,13 @@ class AIAnalyzer:
                 lines.append(f"  Context: {metric.ctx}, TPS: {metric.avg_tps:.2f}")
         return "\n".join(lines)
 
-    def generate_prompt(self, all_results: List[BenchmarkResult]) -> str:
+    def generate_prompt(self, all_results: list[BenchmarkResult]) -> str:
         """Generate analysis prompt from results."""
         base_prompt = self.prompts.get('analyze', 'Analyze these results:')
         formatted = self.format_results_for_prompt(all_results)
         return f"{base_prompt}\n\n{formatted}"
 
-    def analyze(self, model_name: str, all_results: List[BenchmarkResult], ollama_client=None, stream: bool = True) -> str:
+    def analyze(self, model_name: str, all_results: list[BenchmarkResult], ollama_client=None, stream: bool = True) -> str:
         """Send request to Ollama and get response."""
         import requests
 
@@ -119,7 +118,7 @@ class AIAnalyzer:
             logger.error("Analysis failed: %s", e)
             raise
 
-    def translate(self, text: str, target_lang: str, model_name: str = None) -> Optional[str]:
+    def translate(self, text: str, target_lang: str, model_name: str = None) -> str | None:
         """Translate text using Ollama model."""
         import requests
 
@@ -178,7 +177,7 @@ def prompt_filename(default: str = "benchmark_results.json") -> str:
         return default
 
 
-def save_results_interactive(all_results: 'List[BenchmarkResult]', base_url: str, headers: dict, filename: str = None) -> Optional[str]:
+def save_results_interactive(all_results: 'list[BenchmarkResult]', base_url: str, headers: dict, filename: str = None) -> str | None:
     """Interactive workflow: ask to save, get filename, save results.
 
     Args:
@@ -201,9 +200,9 @@ def save_results_interactive(all_results: 'List[BenchmarkResult]', base_url: str
         final_filename = prompt_filename(default_filename)
 
     # Import and save
+    from config import OllamaConfig
     from export.result_saver import save_results
     from prompts.loader import PromptLoader
-    from config import OllamaConfig
 
     # Create config and prompt loader
     config = OllamaConfig()
@@ -218,7 +217,7 @@ def save_results_interactive(all_results: 'List[BenchmarkResult]', base_url: str
     return final_filename
 
 
-def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[BenchmarkResult]', current_lang: str,
+def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'list[BenchmarkResult]', current_lang: str,
                                restart_method: str = 'manual', no_restart: bool = False,
                                ssh_client = None, ollama_client = None):
     """Interactive workflow: list models, let user select, run analysis, show results.
@@ -249,7 +248,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
         details = model.get('details', {})
         param_size = details.get('parameter_size', 'N/A') if details else 'N/A'
         print(f"  {i}. {name} ({param_size}, {size:.1f} GB)")
-    print(f"  0. Cancel")
+    print("  0. Cancel")
     print("=" * 60)
 
     # Get user selection
@@ -309,7 +308,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
 
         # Translate if needed (BEFORE unload to avoid model reload)
         if current_lang != 'en':
-            print(f"\n" + "=" * 60)
+            print("\n" + "=" * 60)
             print(get_text("analysis_translated"))
             print("=" * 60)
 
@@ -334,7 +333,7 @@ def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'List[Benchma
             if ollama_client:
                 ollama_client.unload_model(model_name)
             else:
-                print(f"   ⚠️  Warning: ollama_client not available, skipping unload")
+                print("   ⚠️  Warning: ollama_client not available, skipping unload")
             print(f"   ✅ Model '{model_name}' unloaded successfully")
         except Exception as e:
             print(f"   ⚠️  Warning: Could not unload model: {e}")

@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-from typing import Optional
 
 
 class SSHClient:
@@ -28,7 +27,7 @@ class SSHClient:
         """Check if SSH client has valid configuration."""
         return bool(self.ssh_host)
 
-    def _find_default_ssh_key(self) -> Optional[str]:
+    def _find_default_ssh_key(self) -> str | None:
         """Find default SSH private key in ~/.ssh/.
 
         Returns:
@@ -56,7 +55,7 @@ class SSHClient:
 
         return None
 
-    def _resolve_key(self) -> Optional[str]:
+    def _resolve_key(self) -> str | None:
         """Resolve SSH key path.
 
         Returns:
@@ -118,7 +117,7 @@ class SSHClient:
             timeout=timeout
         )
 
-    def get_vram_usage(self, timeout: int = 30) -> Optional[int]:
+    def get_vram_usage(self, timeout: int = 30) -> int | None:
         """Get VRAM usage from remote GPU via SSH.
 
         Returns:
@@ -155,7 +154,7 @@ class SSHClient:
             pass  # print(f"DEBUG: SSH VRAM exception")
         return None
 
-    def get_cpu_usage_remote(self, timeout: int = 30) -> Optional[float]:
+    def get_cpu_usage_remote(self, timeout: int = 30) -> float | None:
         """Get CPU usage from remote machine via SSH.
 
         Args:
@@ -188,7 +187,7 @@ class SSHClient:
             pass
         return None
 
-    def get_ram_usage_remote(self, timeout: int = 30) -> Optional[dict]:
+    def get_ram_usage_remote(self, timeout: int = 30) -> dict | None:
         """Get RAM usage from remote machine via SSH.
 
         Args:
@@ -228,7 +227,7 @@ class SSHClient:
             pass
         return None
 
-    def get_vram_total_remote(self, timeout: int = 30) -> Optional[int]:
+    def get_vram_total_remote(self, timeout: int = 30) -> int | None:
         """Get total VRAM capacity from remote machine via SSH.
 
         Args:

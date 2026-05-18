@@ -1,14 +1,14 @@
 """Core benchmark execution orchestration."""
 
 import logging
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any
+
 from api.base_client import BaseApiClient
-from system.restart_manager import restart_ollama, RestartMethod
-from benchmark.result import BenchmarkResult, ModelInfo, BenchmarkMetrics
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
+from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from i18n import get_text
-from prompts.loader import PromptLoader
 from system.gpu_monitor import get_vram_stats
+from system.restart_manager import RestartMethod, restart_ollama
 from ui.output_formatter import format_tokens_info, update_tokens_display
 
 # Setup logging
@@ -24,7 +24,7 @@ class BenchmarkRunner:
     def __init__(self, ollama_client: BaseApiClient, context_sizes: list, num_runs: int = 3,
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
-                 num_predict: int = 12000, independent_top: Optional[int] = None,
+                 num_predict: int = 12000, independent_top: int | None = None,
                  user_context_sizes: str = None):
         """Initialize benchmark runner.
 
@@ -63,10 +63,10 @@ class BenchmarkRunner:
         self.prompt_loader = prompt_loader
         self.temperature_test_values = temperature_test_values or DEFAULT_TEMPERATURES
         self.expert_evaluator = expert_evaluator
-        self._response_store: List[ExpertEvaluationEntry] = []
+        self._response_store: list[ExpertEvaluationEntry] = []
         self.independent_top = independent_top  # Limit prompts per mode for independent tests
 
-    def get_test_params(self, model_names: list, expert_model: Optional[str] = None) -> dict:
+    def get_test_params(self, model_names: list, expert_model: str | None = None) -> dict:
         """Get test parameters as a dictionary.
         
         Args:
@@ -89,7 +89,7 @@ class BenchmarkRunner:
             "expert_model": expert_model
         }
 
-    def get_used_independent_prompts(self) -> List[Dict[str, Any]]:
+    def get_used_independent_prompts(self) -> list[dict[str, Any]]:
         """Return independent prompts that will be used by all-independent mode."""
         if not self.prompt_loader:
             return []
@@ -98,20 +98,20 @@ class BenchmarkRunner:
         if self.independent_top is None or self.independent_top <= 0:
             return all_prompts
 
-        prompts_by_mode: Dict[str, List[Dict[str, Any]]] = {}
+        prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
         for prompt in all_prompts:
             prompts_by_mode.setdefault(prompt.get('mode'), []).append(prompt)
 
-        filtered_prompts: List[Dict[str, Any]] = []
+        filtered_prompts: list[dict[str, Any]] = []
         for mode in ['architect', 'code', 'debug']:
             filtered_prompts.extend(prompts_by_mode.get(mode, [])[:self.independent_top])
         return filtered_prompts
 
-    def get_used_prompt_ids(self) -> List[str]:
+    def get_used_prompt_ids(self) -> list[str]:
         """Return independent prompt IDs used by all-independent mode."""
         return [p.get('id') for p in self.get_used_independent_prompts() if p.get('id')]
 
-    def get_used_chain_ids(self) -> List[str]:
+    def get_used_chain_ids(self) -> list[str]:
         """Return all configured chain IDs."""
         if not self.prompt_loader:
             return []
@@ -139,7 +139,7 @@ class BenchmarkRunner:
         print(f"Total responses to evaluate: {len(self._response_store)}")
         print("=" * 60)
 
-        model_groups: Dict[str, List[ExpertEvaluationEntry]] = {}
+        model_groups: dict[str, list[ExpertEvaluationEntry]] = {}
         for entry in self._response_store:
             if entry.model_name not in model_groups:
                 model_groups[entry.model_name] = []
@@ -217,7 +217,7 @@ class BenchmarkRunner:
             if vram_stats['total']:
                 print(f"      VRAM Total: {vram_stats['total'] / 1024 / 1024:.1f} MiB")
         else:
-            print(f"      VRAM: N/A (GPU not available)")
+            print("      VRAM: N/A (GPU not available)")
 
     def _store_response(self, entry: ExpertEvaluationEntry) -> None:
         """Store response for later expert evaluation.
@@ -264,7 +264,7 @@ class BenchmarkRunner:
         logger.info(f"[DIAGNOSIS] filter_contexts result: {valid_contexts}")
         return valid_contexts
 
-    def run_independent_prompts(self, model: ModelInfo, mode: str, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
+    def run_independent_prompts(self, model: ModelInfo, mode: str, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run benchmarks using independent prompts for a specific mode.
 
         Args:
@@ -285,8 +285,8 @@ class BenchmarkRunner:
             logger.info("[independent_top] Limited %s prompts to first %d: %d prompts",
                        mode, self.independent_top, len(prompts))
         
-        all_metrics: List[BenchmarkMetrics] = []
-        error_message: Optional[str] = None
+        all_metrics: list[BenchmarkMetrics] = []
+        error_message: str | None = None
         
         # Display model name at the start
         print(f"\n🤖 Testing model: {model_name}")
@@ -448,7 +448,7 @@ class BenchmarkRunner:
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
     
-    def run_chain(self, model: ModelInfo, chain: dict, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
+    def run_chain(self, model: ModelInfo, chain: dict, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run benchmarks using a prompt chain (Architect -> Code -> Debug).
 
         Args:
@@ -464,8 +464,8 @@ class BenchmarkRunner:
         chain_id = chain.get('id', 'unknown')
         chain_name = chain.get('name', 'Unknown Chain')
         
-        all_metrics: List[BenchmarkMetrics] = []
-        error_message: Optional[str] = None
+        all_metrics: list[BenchmarkMetrics] = []
+        error_message: str | None = None
         
         # Display model name at the start
         print(f"\n🤖 Testing model: {model_name}")
@@ -501,7 +501,7 @@ class BenchmarkRunner:
                 logger.info(f"   🌡️  Temperature: {temp:.2f}")
                 print(f"      🌡️  Temperature: {temp:.2f}")
                 
-                chain_responses: Dict[str, str] = {}
+                chain_responses: dict[str, str] = {}
                 
                 for mode in ['architect', 'code', 'debug']:
                     if mode not in chain_prompts:
@@ -633,7 +633,7 @@ class BenchmarkRunner:
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
 
-    def run_for_model(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
+    def run_for_model(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run benchmarks for a single model across valid contexts.
 
         Args:
@@ -654,8 +654,8 @@ class BenchmarkRunner:
         size_gb_str = f"{model.size_gb:.1f}"
         print(get_text("model_size", size_gb=size_gb_str, max_ctx_str=max_ctx_str))
 
-        all_metrics: List[BenchmarkMetrics] = []
-        error_message: Optional[str] = None
+        all_metrics: list[BenchmarkMetrics] = []
+        error_message: str | None = None
         valid_contexts = self.filter_contexts(max_ctx)
 
         if not valid_contexts:
@@ -811,7 +811,7 @@ class BenchmarkRunner:
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
     
-    def run_all_independent_prompts(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
+    def run_all_independent_prompts(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run ALL independent prompts for a model across contexts and temperatures.
         
         Execution order:
@@ -826,8 +826,8 @@ class BenchmarkRunner:
         """
         model_name = model.name
         max_ctx = model.max_ctx
-        all_metrics: List[BenchmarkMetrics] = []
-        error_message: Optional[str] = None
+        all_metrics: list[BenchmarkMetrics] = []
+        error_message: str | None = None
         
         print(f"\n🤖 Testing model: {model_name}")
         logger.info(f"🤖 Testing model: {model_name}")
@@ -865,7 +865,7 @@ class BenchmarkRunner:
         
         # Apply independent_top filter if specified
         if self.independent_top is not None and self.independent_top > 0:
-            prompts_by_mode: Dict[str, List[Dict[str, Any]]] = {}
+            prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
             for p in all_prompts:
                 mode = p['mode']
                 if mode not in prompts_by_mode:
@@ -999,7 +999,7 @@ class BenchmarkRunner:
         benchmark_result = BenchmarkResult(model=model, results=all_metrics)
         return benchmark_result, None
     
-    def run_all_chains(self, model: ModelInfo, temperature: Optional[float] = None) -> Tuple[Optional[BenchmarkResult], Optional[str]]:
+    def run_all_chains(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run ALL chains for a model.
         
         Execution order:
@@ -1014,8 +1014,8 @@ class BenchmarkRunner:
         """
         model_name = model.name
         max_ctx = model.max_ctx
-        all_metrics: List[BenchmarkMetrics] = []
-        error_message: Optional[str] = None
+        all_metrics: list[BenchmarkMetrics] = []
+        error_message: str | None = None
         
         print(f"\n🤖 Testing model: {model_name}")
         logger.info(f"🤖 Testing model: {model_name}")

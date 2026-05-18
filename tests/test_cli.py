@@ -1,6 +1,7 @@
 """Tests for CLI parsing functions."""
 
 import unittest
+
 from cli import parse_context_size
 
 

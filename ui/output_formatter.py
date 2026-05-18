@@ -1,8 +1,8 @@
 """Console output formatting and display utilities."""
 
-from typing import List
-from i18n import get_text
+
 from benchmark.result import BenchmarkResult
+from i18n import get_text
 
 
 def _format_moe_display(moe_data) -> str:
@@ -74,7 +74,7 @@ def print_benchmark_progress(model_name: str, context_size: int, tps: float, vra
     print(f"  Context: {ctx_str} | TPS: {tps:.2f} | VRAM: {vram_str}")
 
 
-def print_results_table(results: List[BenchmarkResult]):
+def print_results_table(results: list[BenchmarkResult]):
     """Print formatted results table.
 
     Args:
@@ -118,7 +118,7 @@ def print_results_table(results: List[BenchmarkResult]):
                 print()
 
 
-def print_recommendations(results: List[BenchmarkResult]):
+def print_recommendations(results: list[BenchmarkResult]):
     """Print recommendations output.
 
     Args:

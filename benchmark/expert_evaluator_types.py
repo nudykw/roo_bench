@@ -1,8 +1,9 @@
 """Expert evaluator data types and structures."""
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from benchmark.result import BenchmarkMetrics
@@ -17,12 +18,12 @@ class ExpertEvaluationEntry:
     temperature: float
     prompt_id: str
     prompt_name: str
-    mode: Optional[str]
-    chain_id: Optional[str]
-    chain_name: Optional[str]
+    mode: str | None
+    chain_id: str | None
+    chain_name: str | None
     response: str
     avg_tps: float
 
-    metrics_ref: Optional['BenchmarkMetrics'] = None
+    metrics_ref: BenchmarkMetrics | None = None
 
-    chain_context: Dict[str, str] = field(default_factory=dict)
+    chain_context: dict[str, str] = field(default_factory=dict)
