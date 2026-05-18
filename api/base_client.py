@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, List, Tuple, Any
 
 import requests
-from system.gpu_monitor import get_vram_usage, get_vram_stats
+from system.gpu_monitor import get_vram_usage, get_vram_stats, get_gpu_utilization, get_vram_total
 from system.ssh_client import SSHClient
 from system.system_monitor import ResourceMonitor, SystemStats
 from i18n import get_text
@@ -256,6 +256,19 @@ class BaseApiClient(ABC):
                     eval_count = 0
                     prompt_eval_count = 0
                     
+                    # CPU/RAM metrics collection
+                    cpu_percent = 0.0
+                    ram_percent = 0.0
+                    vram_percent = 0.0
+                    gpu_percent = 0.0
+                    
+                    # Try to import psutil for CPU/RAM monitoring
+                    try:
+                        import psutil
+                        psutil_available = True
+                    except ImportError:
+                        psutil_available = False
+                    
                     # Use iter_content for real-time chunk processing
                     buffer = b""
                     chunk_count = 0
@@ -301,6 +314,23 @@ class BaseApiClient(ABC):
                                 if 'total_duration' in data:
                                     total_duration = data['total_duration']
                                 
+                                # Collect CPU/RAM metrics
+                                if psutil_available:
+                                    try:
+                                        cpu_percent = psutil.cpu_percent(interval=0.01)
+                                        ram_percent = psutil.virtual_memory().percent
+                                    except Exception:
+                                        pass
+                                
+                                # Collect GPU metrics
+                                gpu_util = get_gpu_utilization()
+                                if gpu_util is not None:
+                                    gpu_percent = gpu_util
+                                    vram = get_vram_usage()
+                                    vram_total = get_vram_total()
+                                    if vram is not None and vram_total is not None:
+                                        vram_percent = (vram / vram_total) * 100
+                                
                                 # Call token update callback for real-time display
                                 # During streaming (done=False), pass response length as approximate token count
                                 # When done=True, pass real token counts
@@ -325,6 +355,10 @@ class BaseApiClient(ABC):
                                         response_len,
                                         data.get('done', False),
                                         current_tps,
+                                        cpu_percent,
+                                        ram_percent,
+                                        vram_percent,
+                                        gpu_percent,
                                     )
                                     
                             except json.JSONDecodeError as e:

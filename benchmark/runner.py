@@ -335,10 +335,10 @@ class BenchmarkRunner:
                     # Create token update callback for this prompt
                     current_tokens = {'prompt': 0, 'response': 0}
                     
-                    def token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
+                    def token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
                         current_tokens['prompt'] = prompt_tokens
                         current_tokens['response'] = response_tokens
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
                     
                     try:
                         result = self.ollama_client.run_generation(
@@ -525,8 +525,8 @@ class BenchmarkRunner:
                     print(f"         Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
                     
                     # Create token update callback for this chain
-                    def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
+                    def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
                     
                     try:
                         result = self.ollama_client.run_generation(
@@ -691,8 +691,8 @@ class BenchmarkRunner:
                 print(f"   📦 Model: {model_name}")
                 
                 # Create token update callback for run_for_model
-                def run_for_model_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
-                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done, current_tps=current_tps)
+                def run_for_model_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
+                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="   ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
 
                 try:
                     result = self.ollama_client.run_generation(
@@ -911,8 +911,8 @@ class BenchmarkRunner:
                     print(f"         [{mode}] {prompt_name} (ID: {prompt_id})")
                     
                     # Create token update callback for this prompt
-                    def independent_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps)
+                    def independent_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
+                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
                     
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp, _ = self.ollama_client.run_generation(
@@ -1074,21 +1074,21 @@ class BenchmarkRunner:
                         print(f"            [{mode}] {prompt_name}")
                         
                         # Create token update callback for this chain
-                        def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0):
-                            update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done, current_tps=current_tps)
+                        def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
+                            update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
                         
                         try:
-                            avg_tps, vram, tps_list, error, _, used_temp, _ = self.ollama_client.run_generation(
-                                                            model_name,
-                                ctx,
-                                self.num_runs,
-                                self.disable_thinking,
-                                temperature=temp,
-                                prompt=prompt,
-                                prompt_metadata=prompt_metadata,
-                                num_predict=self.num_predict,
-                                on_token_update=chain_token_callback_2
-                            )
+                            avg_tps, vram, tps_list, error, _, used_temp, resource_stats = self.ollama_client.run_generation(
+                                                                            model_name,
+                                                                ctx,
+                                                                self.num_runs,
+                                                                self.disable_thinking,
+                                                                temperature=temp,
+                                                                prompt=prompt,
+                                                                prompt_metadata=prompt_metadata,
+                                                                num_predict=self.num_predict,
+                                                                on_token_update=chain_token_callback_2
+                                                            )
                             
                             if error:
                                 print(f"            Error: {error}")
@@ -1125,6 +1125,16 @@ class BenchmarkRunner:
                                 std_dev=std_dev,
                                 vram=vram,
                                 response=response,
+                                # Добавляем статистику ресурсов
+                                cpu_stats=resource_stats.get('cpu') if resource_stats else None,
+                                ram_stats=resource_stats.get('ram') if resource_stats else None,
+                                vram_stats=resource_stats.get('vram') if resource_stats else None,
+                                avg_cpu_percent=resource_stats.get('cpu', {}).get('avg') if resource_stats else None,
+                                max_cpu_percent=resource_stats.get('cpu', {}).get('max') if resource_stats else None,
+                                avg_ram_percent=resource_stats.get('ram', {}).get('avg_percent') if resource_stats else None,
+                                max_ram_percent=resource_stats.get('ram', {}).get('max_percent') if resource_stats else None,
+                                avg_vram_percent=resource_stats.get('vram', {}).get('avg_percent') if resource_stats else None,
+                                max_vram_percent=resource_stats.get('vram', {}).get('max_percent') if resource_stats else None,
                             )
                             all_metrics.append(metrics)
                             

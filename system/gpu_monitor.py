@@ -184,3 +184,71 @@ def get_vram_total() -> int | None:
         pass
 
     return None
+
+
+def get_gpu_utilization() -> float | None:
+    """Get current GPU utilization percentage.
+
+    Returns:
+        float or None: GPU utilization percentage (0-100), or None if GPU is unavailable
+    """
+    if not check_gpu_available():
+        return None
+
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,nounits,noheader'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except Exception:
+        pass
+
+    return None
+
+
+def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> dict:
+    """Get comprehensive GPU statistics with min/max/avg values.
+
+    Args:
+        samples: Number of samples to collect
+        interval: Interval between samples in seconds
+
+    Returns:
+        dict: GPU statistics including utilization and VRAM
+        Returns None if GPU is unavailable
+    """
+    if not check_gpu_available():
+        return None
+
+    utilizations = []
+    vram_usages = []
+
+    for _ in range(samples):
+        util = get_gpu_utilization()
+        vram = get_vram_usage()
+        if util is not None:
+            utilizations.append(util)
+        if vram is not None:
+            vram_usages.append(vram)
+        time.sleep(interval)
+
+    if not utilizations:
+        return None
+
+    total_vram = get_vram_total()
+
+    return {
+        'utilization_current': utilizations[-1] if utilizations else 0,
+        'utilization_min': min(utilizations) if utilizations else 0,
+        'utilization_max': max(utilizations) if utilizations else 0,
+        'utilization_avg': sum(utilizations) / len(utilizations) if utilizations else 0,
+        'vram_current': vram_usages[-1] if vram_usages else None,
+        'vram_min': min(vram_usages) if vram_usages else None,
+        'vram_max': max(vram_usages) if vram_usages else None,
+        'vram_avg': sum(vram_usages) / len(vram_usages) if vram_usages else None,
+        'vram_total': total_vram,
+        'samples_count': len(utilizations),
+        'interval': interval
+    }

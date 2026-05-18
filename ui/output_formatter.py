@@ -158,7 +158,11 @@ def update_tokens_display(prompt_tokens: int, response_tokens: int,
                           response_len: int = 0,
                           indent: str = "         ",
                           is_done: bool = False,
-                          current_tps: float = 0.0) -> None:
+                          current_tps: float = 0.0,
+                          cpu_percent: float = 0.0,
+                          ram_percent: float = 0.0,
+                          vram_percent: float = 0.0,
+                          gpu_percent: float = 0.0) -> None:
     """Update token display in real-time during streaming.
     
     This function prints/updates the token count on a single line.
@@ -173,11 +177,29 @@ def update_tokens_display(prompt_tokens: int, response_tokens: int,
         indent: Leading whitespace for alignment
         is_done: If True, this is the final chunk with real token counts
         current_tps: Current generation speed in tokens per second
+        cpu_percent: Current CPU usage percentage (0-100)
+        ram_percent: Current RAM usage percentage (0-100)
+        vram_percent: Current VRAM usage percentage (0-100), None if no GPU
+        gpu_percent: Current GPU utilization percentage (0-100), None if no GPU
     """
     speed_part = f" | ⚡ {current_tps:.2f} tok/s" if current_tps > 0 else ""
+    
+    # Build resource metrics string
+    resources = []
+    if cpu_percent > 0:
+        resources.append(f"CPU: {cpu_percent:.1f}%")
+    if ram_percent > 0:
+        resources.append(f"RAM: {ram_percent:.1f}%")
+    if vram_percent > 0:
+        resources.append(f"VRAM: {vram_percent:.1f}%")
+    if gpu_percent > 0:
+        resources.append(f"GPU: {gpu_percent:.1f}%")
+    
+    resources_part = " | " + " | ".join(resources) if resources else ""
+    
     if is_done:
         # Show real token counts when done
-        print(f"{indent}📊 Tokens: {prompt_tokens}/{response_tokens}{speed_part}", end="\r", flush=True)
+        print(f"{indent}📊 Tokens: {prompt_tokens}/{response_tokens}{speed_part}{resources_part}", end="\r", flush=True)
     elif estimated_response_tokens > 0 or response_len > 0:
         # Show estimated tokens during streaming with response length
-        print(f"{indent}📊 Tokens: ~{prompt_tokens}/{estimated_response_tokens} (len={response_len}){speed_part}", end="\r", flush=True)
+        print(f"{indent}📊 Tokens: ~{prompt_tokens}/{estimated_response_tokens} (len={response_len}){speed_part}{resources_part}", end="\r", flush=True)
