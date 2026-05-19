@@ -1,6 +1,7 @@
 """Benchmark result data class for formatting and display."""
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +28,7 @@ class ModelInfo(BaseModel):
     quant: str = "N/A"
     architecture: str = "N/A"
     max_ctx: int = 131072
-    moe: dict | None = None
+    moe: dict[str, Any] | None = None
     vision: Capability = Capability.VISION
     tools: Capability = Capability.TOOLS
     thinking: Capability = Capability.THINKING
@@ -91,9 +92,9 @@ class BenchmarkMetrics(BaseModel):
     response: str | None = None
     
     # Расширенная статистика ресурсов
-    cpu_stats: dict | None = None
-    ram_stats: dict | None = None
-    vram_stats: dict | None = None
+    cpu_stats: dict[str, Any] | None = None
+    ram_stats: dict[str, Any] | None = None
+    vram_stats: dict[str, Any] | None = None
     
     # Агрегированные метрики ресурсов
     avg_cpu_percent: float | None = None
@@ -164,17 +165,17 @@ class BenchmarkMetrics(BaseModel):
             prefix = "    "
 
         return (
-            f"{prefix}{get_text('variant', i=rank, ctx=self.ctx_str, tps=self.avg_tps)} | "
+            f"{prefix}{get_text('variant', i=str(rank), ctx=self.ctx_str, tps=str(self.avg_tps))} | "
             f"{get_text('temperature')}: {self.temperature:.1f}"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON export.
 
         Returns:
             Dictionary with all result fields.
         """
-        result = {
+        result: dict[str, Any] = {
             'ctx': self.ctx,
             'ctx_str': self.ctx_str,
             'temperature': round(self.temperature, 3),
@@ -193,6 +194,7 @@ class BenchmarkMetrics(BaseModel):
             'chain_id': self.chain_id,
             'chain_name': self.chain_name,
             'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
+            'response': self.response,
         }
         
         # Добавляем расширенную статистику ресурсов
@@ -220,7 +222,7 @@ class BenchmarkMetrics(BaseModel):
         return result
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'BenchmarkMetrics':
+    def from_dict(cls, data: dict[str, Any]) -> 'BenchmarkMetrics':
         """Create BenchmarkMetrics from dictionary.
 
         Args:
@@ -287,7 +289,7 @@ class BenchmarkResult(BaseModel):
         return total_tps / len(self.results) if self.results else 0.0
 
     # Методи трансформації
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON export.
 
         Returns:
@@ -299,7 +301,7 @@ class BenchmarkResult(BaseModel):
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'BenchmarkResult':
+    def from_dict(cls, data: dict[str, Any]) -> 'BenchmarkResult':
         """Create BenchmarkResult from dictionary.
 
         Args:

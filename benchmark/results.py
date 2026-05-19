@@ -1,9 +1,10 @@
 """Results processing and statistics calculation."""
 
 import math
+from typing import Any
 
 
-def calculate_statistics(tps_list: list) -> dict:
+def calculate_statistics(tps_list: list[dict[str, Any]]) -> dict[str, float]:
     """Calculate statistics from a list of TPS results.
 
     Args:
@@ -39,7 +40,7 @@ def calculate_statistics(tps_list: list) -> dict:
     }
 
 
-def format_result_row(ctx: int, stats: dict, vram) -> str:
+def format_result_row(ctx: int, stats: dict[str, float], vram: int | None) -> str:
     """Format a single result row for display.
 
     Args:
@@ -63,7 +64,7 @@ def format_result_row(ctx: int, stats: dict, vram) -> str:
     )
 
 
-def format_recommendations(results: dict, min_tps: float = 0) -> list:
+def format_recommendations(results: dict[str, list[dict[str, Any]]], min_tps: float = 0) -> list[dict[str, Any]]:
     """Generate top 3 recommendations based on results.
 
     Args:

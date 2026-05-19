@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import re
+from typing import Any, cast
 
 from benchmark.result import BenchmarkResult
+from i18n import get_text
 from ui.markdown_renderer import display_markdown
 
 logger = logging.getLogger(__name__)
@@ -14,14 +16,14 @@ logger = logging.getLogger(__name__)
 class AIAnalyzer:
     """Handles AI analysis of benchmark results via Ollama."""
 
-    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
+    def __init__(self, base_url: str, headers: dict[str, Any] | None = None, timeout: int = 300):
         """Initialize AIAnalyzer with Ollama connection details."""
         self.base_url = base_url
         self.headers = headers or {}
         self.timeout = timeout
         self.prompts = self._load_prompts()
 
-    def _load_prompts(self) -> dict:
+    def _load_prompts(self) -> dict[str, Any]:
         """Load prompt templates from prompts/analysis_prompt.jsonc."""
         prompts_file = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.jsonc')
         try:
@@ -29,19 +31,19 @@ class AIAnalyzer:
                 content = f.read()
                 # Remove comments (// style)
                 content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
-                return json.loads(content)
+                return cast(dict[str, Any], json.loads(content))
         except Exception as e:
             logger.warning("Could not load prompts file: %s", e)
             return self._get_fallback_prompts()
 
-    def _get_fallback_prompts(self) -> dict:
+    def _get_fallback_prompts(self) -> dict[str, str]:
         """Return fallback prompts if file loading fails."""
         return {
             "analyze": "Analyze these benchmark results and provide recommendations.",
             "translate": "Translate the following text to {target_lang}:"
         }
 
-    def get_available_models(self) -> list:
+    def get_available_models(self) -> list[dict[str, Any]]:
         """Get list of models available for analysis."""
         import requests
         try:
@@ -51,7 +53,7 @@ class AIAnalyzer:
                 timeout=self.timeout
             )
             response.raise_for_status()
-            return response.json().get('models', [])
+            return [m for m in response.json().get('models', [])]
         except Exception as e:
             logger.error("Failed to get available models: %s", e)
             return []
@@ -72,7 +74,7 @@ class AIAnalyzer:
         formatted = self.format_results_for_prompt(all_results)
         return f"{base_prompt}\n\n{formatted}"
 
-    def analyze(self, model_name: str, all_results: list[BenchmarkResult], ollama_client=None, stream: bool = True) -> str:
+    def analyze(self, model_name: str, all_results: list[BenchmarkResult], ollama_client: Any = None, stream: bool = True) -> str:
         """Send request to Ollama and get response."""
         import requests
 
@@ -113,12 +115,12 @@ class AIAnalyzer:
                     timeout=self.timeout
                 )
                 response.raise_for_status()
-                return response.json().get('response', '')
+                return cast(str, response.json().get('response', ''))
         except Exception as e:
             logger.error("Analysis failed: %s", e)
             raise
 
-    def translate(self, text: str, target_lang: str, model_name: str = None) -> str | None:
+    def translate(self, text: str, target_lang: str, model_name: str | None = None) -> str | None:
         """Translate text using Ollama model."""
         import requests
 
@@ -142,12 +144,12 @@ class AIAnalyzer:
                 timeout=self.timeout
             )
             response.raise_for_status()
-            return response.json().get('response', '')
+            return cast(str, response.json().get('response', ''))
         except Exception as e:
             logger.error("Translation failed: %s", e)
             return None
 
-    def analyze_from_file(self, file_path: str, model_name: str, target_lang: str = 'en', ollama_client=None, stream: bool = True) -> bool:
+    def analyze_from_file(self, file_path: str, model_name: str, target_lang: str = 'en', ollama_client: Any = None, stream: bool = True) -> bool:
         """Analyze benchmark results from a saved file."""
         from export.merge_utils import load_results_file
 
@@ -177,7 +179,7 @@ def prompt_filename(default: str = "benchmark_results.json") -> str:
         return default
 
 
-def save_results_interactive(all_results: 'list[BenchmarkResult]', base_url: str, headers: dict, filename: str = None) -> str | None:
+def save_results_interactive(all_results: list[BenchmarkResult], base_url: str, headers: dict[str, Any], filename: str | None = None) -> str | None:
     """Interactive workflow: ask to save, get filename, save results.
 
     Args:
@@ -217,9 +219,9 @@ def save_results_interactive(all_results: 'list[BenchmarkResult]', base_url: str
     return final_filename
 
 
-def analyze_results_interactive(analyzer: AIAnalyzer, all_results: 'list[BenchmarkResult]', current_lang: str,
+def analyze_results_interactive(analyzer: AIAnalyzer, all_results: list[BenchmarkResult], current_lang: str,
                                restart_method: str = 'manual', no_restart: bool = False,
-                               ssh_client = None, ollama_client = None):
+                               ssh_client: Any = None, ollama_client: Any = None) -> None:
     """Interactive workflow: list models, let user select, run analysis, show results.
 
     Args:

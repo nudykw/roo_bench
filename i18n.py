@@ -309,12 +309,12 @@ TRANSLATIONS = {
 AVAILABLE_LANGUAGES = ["en", "ua"]
 
 
-def get_available_languages():
+def get_available_languages() -> list[str]:
     """Повертає список доступних мов."""
     return AVAILABLE_LANGUAGES
 
 
-def set_language(lang):
+def set_language(lang: str) -> bool:
     """
     Встановлює поточну мову.
     
@@ -331,7 +331,7 @@ def set_language(lang):
     return False
 
 
-def get_text(key, *args, **kwargs):
+def get_text(key: str, *args: str, **kwargs: str) -> str:
     """
     Отримує текст за ключем з поточної мови.
     

@@ -6,6 +6,7 @@ import math
 import threading
 import time
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -23,7 +24,12 @@ logger = logging.getLogger('roo_bench')
 class BaseApiClient(ABC):
     """Abstract base class for API clients."""
 
-    def __init__(self, base_url: str, headers: dict = None, timeout: int = 300):
+    base_url: str
+    headers: dict[str, Any]
+    timeout: int
+    ssh_client: Any
+
+    def __init__(self, base_url: str, headers: dict[str, Any] | None = None, timeout: int = 300):
         """Initialize base API client.
 
         Args:
@@ -42,12 +48,12 @@ class BaseApiClient(ABC):
         pass
 
     @abstractmethod
-    def _monitor_vram(self, stop_event: threading.Event, max_vram_ref: list, vram_samples: list):
+    def _monitor_vram(self, stop_event: threading.Event, max_vram_ref: list[float], vram_samples: list[float]) -> None:
         """Internal VRAM monitoring implementation."""
         pass
 
     @staticmethod
-    def get_capabilities_from_model_info(model_info: dict) -> dict:
+    def get_capabilities_from_model_info(model_info: dict[str, Any]) -> dict[str, bool]:
         """Extract capabilities from Ollama API /api/show model_info.
 
         Uses both direct key detection and architecture-based heuristics.
@@ -120,7 +126,7 @@ class BaseApiClient(ABC):
 
         return capabilities
 
-    def get_models(self) -> list:
+    def get_models(self) -> list[dict[str, Any]]:
         """Get list of available models.
 
         Returns:
@@ -133,7 +139,7 @@ class BaseApiClient(ABC):
             )
             if response.status_code == 200:
                 data = response.json()
-                return data.get("models", [])
+                return data.get("models", [])  # type: ignore[no-any-return]
             return []
         except Exception as e:
             print(get_text("error_ollama_connection", error=str(e)))
@@ -142,10 +148,10 @@ class BaseApiClient(ABC):
     def run_generation(self, model_name: str, context_size: int, num_runs: int = 3,
                        disable_thinking: bool = True,
                        temperature: float | None = None,
-                       prompt: str = None,
-                       prompt_metadata: dict = None,
+                       prompt: str | None = None,
+                       prompt_metadata: dict[str, Any] | None = None,
                        num_predict: int = 8192,
-                       on_token_update: callable = None) -> tuple:
+                       on_token_update: Callable[..., Any] | None = None) -> tuple[float, int | None, list[dict[str, Any]], str | None, dict[str, Any] | None, float | None, dict[str, Any] | None]:
         """Run benchmark generation for a model with multiple runs for averaging.
 
         Args:
@@ -172,7 +178,7 @@ class BaseApiClient(ABC):
         if prompt is None:
             prompt = "Write a comprehensive Python script that implements a multithreaded web server. Explain every line in extreme detail."
 
-        tps_list = []
+        tps_list: list[dict[str, Any]] = []
         vram = None
         error = None
 
@@ -200,7 +206,7 @@ class BaseApiClient(ABC):
                 if num_predict is not None:
                     options["num_predict"] = num_predict
                 
-                payload = {
+                payload: dict[str, Any] = {
                     "model": model_name,
                     "prompt": prompt,
                     "stream": True,
@@ -209,12 +215,12 @@ class BaseApiClient(ABC):
                 if disable_thinking:
                     payload["think"] = False
                 if temperature is not None:
-                    payload["options"]["temperature"] = temperature
+                    payload["options"]["temperature"] = float(temperature)
 
                 response = None
-                max_vram_ref = [0]  # Use list for mutable reference in thread
+                max_vram_ref: list[float] = [0.0]  # Use list for mutable reference in thread
                 stop_monitoring = threading.Event()
-                vram_samples = []
+                vram_samples: list[float] = []
 
                 # Create token update callback for this run (or None)
                 run_on_token_update = on_token_update if on_token_update else None
@@ -276,7 +282,7 @@ class BaseApiClient(ABC):
                     buffer = b""
                     chunk_count = 0
                     callback_count = 0
-                    last_update_time = 0  # Track last callback time for throttling
+                    last_update_time: float = 0.0  # Track last callback time for throttling
                     generation_start_time = time.time()
                     logger.info("[DEBUG] Starting iter_content loop for run %d", run_num + 1)
                     
@@ -449,7 +455,7 @@ class BaseApiClient(ABC):
                 # Calculate standard deviation
                 if len(tps_list) > 1:
                     mean = avg_tps
-                    variance = sum((r['tps'] - mean) ** 2 for r in tps_list) / len(tps_list)
+                    variance = sum((float(r['tps']) - mean) ** 2 for r in tps_list) / len(tps_list)
                     std_dev = math.sqrt(variance)
                 else:
                     std_dev = 0.0
@@ -503,7 +509,7 @@ class BaseApiClient(ABC):
 
         return 0.1  # Default fallback
 
-    def get_model_info(self, model_name: str) -> dict:
+    def get_model_info(self, model_name: str) -> dict[str, Any]:
         """Get model information including current default parameters.
 
         Args:
@@ -519,7 +525,7 @@ class BaseApiClient(ABC):
                 timeout=self.timeout
             )
             if response.status_code == 200:
-                return response.json()
+                return response.json()  # type: ignore[no-any-return]
             return {}
         except Exception as e:
             print(f"⚠️  Error getting model info for {model_name}: {e}")
@@ -562,7 +568,7 @@ class BaseApiClient(ABC):
 
         return 2048
 
-    def get_running_models(self) -> list:
+    def get_running_models(self) -> list[dict[str, Any]]:
         """Get list of currently running models with their actual context usage.
 
         Uses the /api/ps endpoint which shows the actual context window being used.
@@ -580,10 +586,12 @@ class BaseApiClient(ABC):
                 data = response.json()
                 # API can return a dict with 'models' key or a list
                 if isinstance(data, dict) and 'models' in data:
-                    return data['models']
+                    models_data = data['models']
+                    if isinstance(models_data, list):
+                        return models_data
                 elif isinstance(data, list):
                     return data
-                elif isinstance(data, dict):
+                if isinstance(data, dict):
                     return [data]
                 return []
             return []
@@ -614,9 +622,9 @@ class BaseApiClient(ABC):
                 # /api/ps returns 'context_length' for running models
                 ctx_len = model.get('context_length', 0)
                 if ctx_len > 0:
-                    return ctx_len
+                    return int(ctx_len)
                 # Fallback to n_ctx (some Ollama versions)
-                return model.get('n_ctx', 0)
+                return int(model.get('n_ctx', 0))
         return 0
 
     def _get_vram_fallback(self, model_name: str) -> int | None:
@@ -630,9 +638,9 @@ class BaseApiClient(ABC):
         Returns:
             Optional[int]: VRAM usage in bytes, or None if unavailable
         """
-        return self.get_vram_from_api(model_name)
+        return None
 
-    def verify_num_ctx(self, model_name: str, expected_ctx: int) -> tuple:
+    def verify_num_ctx(self, model_name: str, expected_ctx: int) -> tuple[bool, int, str]:
         """Verify that the model's num_ctx matches the expected value.
 
         Args:
@@ -648,13 +656,13 @@ class BaseApiClient(ABC):
         actual_ctx = self.get_current_num_ctx(model_name)
 
         if actual_ctx == expected_ctx:
-            message = get_text("ctx_verified", actual=actual_ctx, expected=expected_ctx)
+            message = get_text("ctx_verified", actual=str(actual_ctx), expected=str(expected_ctx))
             return True, actual_ctx, message
 
-        message = get_text("ctx_mismatch", actual=actual_ctx, expected=expected_ctx)
+        message = get_text("ctx_mismatch", actual=str(actual_ctx), expected=str(expected_ctx))
         return False, actual_ctx, message
 
-    def verify_num_ctx_via_show(self, model_name: str, expected_ctx: int) -> tuple:
+    def verify_num_ctx_via_show(self, model_name: str, expected_ctx: int) -> tuple[bool, str, dict[str, Any]]:
         """Verify num_ctx by parsing the full /api/show response.
 
         This method looks for context_length in the model's architecture info.
@@ -735,7 +743,7 @@ class BaseApiClient(ABC):
 
         return False, "   🔍 via /api/show: No context values found in model info", found_values
 
-    def verify_ctx_via_generation(self, model_name: str, context_size: int, prompt: str) -> tuple:
+    def verify_ctx_via_generation(self, model_name: str, context_size: int, prompt: str) -> tuple[bool, int, float, str]:
         """Verify context size by sending a test generation and checking prompt_eval_count.
 
         This method sends a prompt and verifies that the model evaluates all tokens,

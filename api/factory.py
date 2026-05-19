@@ -1,5 +1,7 @@
 """API client factory for creating local or remote clients based on configuration."""
 
+from typing import Optional
+
 from api.local_client import LocalApiClient
 from api.remote_client import RemoteApiClient
 from system.ssh_client import SSHClient
@@ -9,7 +11,7 @@ class ApiClientFactory:
     """Factory for creating appropriate API client based on configuration."""
 
     @staticmethod
-    def is_remote_config(ssh_host: str = None) -> bool:
+    def is_remote_config(ssh_host: Optional[str] = None) -> bool:
         """Check if SSH configuration indicates remote mode.
 
         Args:
@@ -23,12 +25,12 @@ class ApiClientFactory:
     @staticmethod
     def create_client(
         base_url: str,
-        headers: dict = None,
+        headers: Optional[dict] = None,
         timeout: int = 300,
-        ssh_host: str = None,
-        ssh_user: str = None,
+        ssh_host: Optional[str] = None,
+        ssh_user: Optional[str] = None,
         ssh_port: int = 22,
-        ssh_key: str = None
+        ssh_key: Optional[str] = None
     ):
         """Create the appropriate API client based on SSH configuration.
 

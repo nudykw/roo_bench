@@ -1,11 +1,12 @@
 """Console output formatting and display utilities."""
 
+from typing import Any
 
 from benchmark.result import BenchmarkResult
 from i18n import get_text
 
 
-def _format_moe_display(moe_data) -> str:
+def _format_moe_display(moe_data: Any) -> str:
     """Format MoE status for display.
     
     Args:
@@ -29,7 +30,7 @@ def _format_moe_display(moe_data) -> str:
     return "❓"
 
 
-def print_model_list(models: list):
+def print_model_list(models: list[dict[str, Any]]) -> None:
     """Print formatted model list to console.
 
     Args:
@@ -49,7 +50,7 @@ def print_model_list(models: list):
             size_gb = 0.0
 
         print(get_text("model_list_header",
-            index=i,
+            index=str(i),
             name=m['name'],
             params=m['params'],
             size_gb=size_gb,
@@ -60,7 +61,7 @@ def print_model_list(models: list):
             thinking=m.get('thinking', '❌')))
 
 
-def print_benchmark_progress(model_name: str, context_size: int, tps: float, vram=None):
+def print_benchmark_progress(model_name: str, context_size: int, tps: float, vram: int | None = None) -> None:
     """Print benchmark progress information.
 
     Args:
@@ -74,7 +75,7 @@ def print_benchmark_progress(model_name: str, context_size: int, tps: float, vra
     print(f"  Context: {ctx_str} | TPS: {tps:.2f} | VRAM: {vram_str}")
 
 
-def print_results_table(results: list[BenchmarkResult]):
+def print_results_table(results: list[BenchmarkResult]) -> None:
     """Print formatted results table.
 
     Args:
@@ -107,10 +108,10 @@ def print_results_table(results: list[BenchmarkResult]):
 
             print(get_text("result_row",
                 ctx=ctx_str,
-                avg_tps=avg_tps,
-                min_tps=min_tps,
-                max_tps=max_tps,
-                std_dev=std_dev,
+                avg_tps=str(avg_tps),
+                min_tps=str(min_tps),
+                max_tps=str(max_tps),
+                std_dev=str(std_dev),
                 vram=vram_str), end="")
             if run.expert_score is not None:
                 print(f" | Expert Score: {run.expert_score:.1f}/100")
@@ -118,7 +119,7 @@ def print_results_table(results: list[BenchmarkResult]):
                 print()
 
 
-def print_recommendations(results: list[BenchmarkResult]):
+def print_recommendations(results: list[BenchmarkResult]) -> None:
     """Print recommendations output.
 
     Args:

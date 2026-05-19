@@ -4,6 +4,8 @@ import json
 import os
 import tempfile
 
+from typing import Any
+
 from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 
 
@@ -23,7 +25,7 @@ def compute_metric_key(model_name: str, metric: BenchmarkMetrics) -> str:
     )
 
 
-def atomic_write_json(file_path: str, data: dict) -> None:
+def atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
     """Atomically write JSON data to a file."""
     directory = os.path.dirname(os.path.abspath(file_path)) or "."
     os.makedirs(directory, exist_ok=True)
@@ -48,7 +50,7 @@ def atomic_write_json(file_path: str, data: dict) -> None:
         raise
 
 
-def load_results_file(file_path: str) -> tuple[list, dict]:
+def load_results_file(file_path: str) -> tuple[list[BenchmarkResult], dict[str, Any]]:
     """Load existing results from JSON file.
 
     Args:
@@ -79,8 +81,8 @@ def load_results_file(file_path: str) -> tuple[list, dict]:
         return [], {}
 
 
-def save_results_file(file_path: str, results: list, prompts_config: dict = None,
-                      run_config: dict = None) -> None:
+def save_results_file(file_path: str, results: list[BenchmarkResult], prompts_config: dict[str, Any] | None = None,
+                      run_config: dict[str, Any] | None = None) -> None:
     """Save results to JSON file.
 
     Args:
@@ -97,7 +99,7 @@ def save_results_file(file_path: str, results: list, prompts_config: dict = None
     atomic_write_json(file_path, export_data)
 
 
-def merge_single_result(existing_results: list, new_result: BenchmarkResult) -> list:
+def merge_single_result(existing_results: list[BenchmarkResult], new_result: BenchmarkResult) -> list[BenchmarkResult]:
     """Merge a single BenchmarkResult into existing results.
 
     Args:
@@ -131,8 +133,8 @@ def merge_single_result(existing_results: list, new_result: BenchmarkResult) -> 
     return existing_results
 
 
-def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_config: dict = None,
-                  run_config: dict = None) -> None:
+def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_config: dict[str, Any] | None = None,
+                  run_config: dict[str, Any] | None = None) -> None:
     """Merge new result into existing file.
 
     Args:
@@ -152,7 +154,7 @@ def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_confi
     save_results_file(existing_file, updated_results, prompts_config, run_config)
 
 
-def load_run_config(file_path: str) -> dict:
+def load_run_config(file_path: str) -> dict[str, Any]:
     """Load run_config from a results file."""
     if not file_path or not os.path.exists(file_path):
         return {}
@@ -165,7 +167,7 @@ def load_run_config(file_path: str) -> dict:
         return {}
 
 
-def normalize_run_config_for_merge(config: dict) -> dict:
+def normalize_run_config_for_merge(config: dict[str, Any]) -> dict[str, Any]:
     """Keep only fields that decide merge compatibility."""
     config = config or {}
     return {
@@ -176,12 +178,12 @@ def normalize_run_config_for_merge(config: dict) -> dict:
     }
 
 
-def run_configs_match(existing_config: dict, new_config: dict) -> bool:
+def run_configs_match(existing_config: dict[str, Any], new_config: dict[str, Any]) -> bool:
     """Return True when the fields required for merge compatibility match."""
     return normalize_run_config_for_merge(existing_config) == normalize_run_config_for_merge(new_config)
 
 
-def check_prompts_match(file_path: str, new_prompts_config: dict) -> bool:
+def check_prompts_match(file_path: str, new_prompts_config: dict[str, Any]) -> bool:
     """Check if prompts in file match new prompts.
 
     Args:

@@ -3,6 +3,7 @@
 import os
 import subprocess
 import time
+from typing import Optional
 
 
 def check_gpu_available() -> bool:
@@ -31,7 +32,7 @@ def check_gpu_available() -> bool:
     return False
 
 
-def get_vram_usage() -> int | None:
+def get_vram_usage() -> Optional[int]:
     """Get current VRAM usage in bytes.
 
     Returns:
@@ -80,7 +81,7 @@ def get_vram_usage() -> int | None:
     return None
 
 
-def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
+def get_vram_stats(samples: int = 10, interval: float = 0.5) -> Optional[dict[str, int | float]]:
     """Get comprehensive VRAM statistics with min/max/avg values.
 
     Args:
@@ -94,8 +95,8 @@ def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
     if not check_gpu_available():
         return None
 
-    usages = []
-    total_vram = None
+    usages: list[int] = []
+    total_vram: Optional[float] = None
 
     # Collect samples
     for _ in range(samples):
@@ -117,7 +118,7 @@ def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
             total_vram = int(result.stdout.strip()) * 1024 * 1024
     except Exception:
         # Fallback: use max observed usage as estimate
-        total_vram = max(usages) * 1.2  # Rough estimate
+        total_vram = float(max(usages)) * 1.2  # Rough estimate
 
     # Calculate statistics
     current_usage = usages[-1]
@@ -125,22 +126,25 @@ def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict:
     max_usage = max(usages)
     avg_usage = sum(usages) / len(usages)
 
+    if total_vram is None:
+        return None
+
     return {
         'current': current_usage,
         'min': min_usage,
         'max': max_usage,
         'avg': avg_usage,
         'total': total_vram,
-        'percent_current': (current_usage / total_vram) * 100 if total_vram > 0 else 0,
-        'percent_min': (min_usage / total_vram) * 100 if total_vram > 0 else 0,
-        'percent_max': (max_usage / total_vram) * 100 if total_vram > 0 else 0,
-        'percent_avg': (avg_usage / total_vram) * 100 if total_vram > 0 else 0,
+        'percent_current': (current_usage / total_vram) * 100,
+        'percent_min': (min_usage / total_vram) * 100,
+        'percent_max': (max_usage / total_vram) * 100,
+        'percent_avg': (avg_usage / total_vram) * 100,
         'samples_count': len(usages),
         'interval': interval
     }
 
 
-def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list:
+def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list[int]:
     """Get VRAM usage history over time.
 
     Args:
@@ -164,7 +168,7 @@ def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list:
     return usages
 
 
-def get_vram_total() -> int | None:
+def get_vram_total() -> Optional[int]:
     """Get total VRAM capacity.
 
     Returns:
@@ -186,7 +190,7 @@ def get_vram_total() -> int | None:
     return None
 
 
-def get_gpu_utilization() -> float | None:
+def get_gpu_utilization() -> Optional[float]:
     """Get current GPU utilization percentage.
 
     Returns:
@@ -208,7 +212,7 @@ def get_gpu_utilization() -> float | None:
     return None
 
 
-def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> dict:
+def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> Optional[dict[str, int | float | None]]:
     """Get comprehensive GPU statistics with min/max/avg values.
 
     Args:
@@ -222,8 +226,8 @@ def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> dict:
     if not check_gpu_available():
         return None
 
-    utilizations = []
-    vram_usages = []
+    utilizations: list[float] = []
+    vram_usages: list[int] = []
 
     for _ in range(samples):
         util = get_gpu_utilization()
@@ -239,11 +243,14 @@ def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> dict:
 
     total_vram = get_vram_total()
 
+    if total_vram is None:
+        return None
+
     return {
-        'utilization_current': utilizations[-1] if utilizations else 0,
-        'utilization_min': min(utilizations) if utilizations else 0,
-        'utilization_max': max(utilizations) if utilizations else 0,
-        'utilization_avg': sum(utilizations) / len(utilizations) if utilizations else 0,
+        'utilization_current': utilizations[-1],
+        'utilization_min': min(utilizations),
+        'utilization_max': max(utilizations),
+        'utilization_avg': sum(utilizations) / len(utilizations),
         'vram_current': vram_usages[-1] if vram_usages else None,
         'vram_min': min(vram_usages) if vram_usages else None,
         'vram_max': max(vram_usages) if vram_usages else None,

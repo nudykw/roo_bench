@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from typing import Any
 
 from benchmark.result import BenchmarkMetrics, BenchmarkResult
 
@@ -16,14 +17,14 @@ class ExpertResultsManager:
             output_file: Path to the expert results file.
         """
         self.output_file = output_file
-        self.entries: list[dict] = []
+        self.entries: list[dict[str, Any]] = []
         self.tested_model: str | None = None
         self.expert_model: str | None = None
         self.generated_at: str = ""
-        self.run_config: dict = {}
+        self.run_config: dict[str, Any] = {}
 
-    def start_session(self, tested_model=None, expert_model: str = None,
-                      run_config: dict = None) -> None:
+    def start_session(self, tested_model: str | list[str] | None = None, expert_model: str | None = None,
+                      run_config: dict[str, Any] | None = None) -> None:
         """Start a new expert evaluation session.
 
         Args:
@@ -69,7 +70,7 @@ class ExpertResultsManager:
         self.tested_model = previous_model
         self.save()
 
-    def _format_entry(self, entry: dict, index: int) -> str:
+    def _format_entry(self, entry: dict[str, Any], index: int) -> str:
         """Format a single entry as Markdown.
 
         Args:

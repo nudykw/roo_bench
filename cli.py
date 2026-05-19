@@ -2,6 +2,8 @@
 
 import argparse
 import logging
+from argparse import Namespace
+from typing import Any
 
 from constants import CONTEXT_SIZES
 from i18n import _current_language, get_available_languages, get_text
@@ -42,7 +44,7 @@ def parse_context_size(size_str: str) -> int:
     return int(size_str)
 
 
-def setup_logging(verbose_level: int = 0):
+def setup_logging(verbose_level: int = 0) -> None:
     """Configure logging based on verbose level.
     
     Args:
@@ -65,7 +67,7 @@ def setup_logging(verbose_level: int = 0):
     return logger
 
 
-def parse_args():
+def parse_args() -> Namespace:
     """Parse and validate command-line arguments.
 
     Returns:
@@ -133,7 +135,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_context_sizes(args) -> list:
+def get_context_sizes(args: Namespace) -> list[int]:
     """Get list of context sizes from CLI arguments.
 
     Args:
@@ -168,7 +170,7 @@ def get_context_sizes(args) -> list:
     return CONTEXT_SIZES
 
 
-def get_temperature_test_values(args) -> list:
+def get_temperature_test_values(args: Namespace) -> list[float]:
     """Get list of temperature test values from CLI arguments.
 
     Args:

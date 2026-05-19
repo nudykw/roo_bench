@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+from typing import Any
 
 from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from export.merge_utils import atomic_write_json
@@ -23,9 +24,9 @@ class ResultSaver:
         self.output_format = output_format
 
     def save(self, results: list[BenchmarkResult],
-             prompts_config: dict | None = None,
-             run_config: dict | None = None,
-             confirm_overwrite: bool = True):
+             prompts_config: dict[str, Any] | None = None,
+             run_config: dict[str, Any] | None = None,
+             confirm_overwrite: bool = True) -> None:
         """Save results to file.
 
         Args:
@@ -45,8 +46,8 @@ class ResultSaver:
             self._save_csv(export_data)
 
     def _prepare_export_data(self, results: list[BenchmarkResult],
-                             prompts_config: dict | None = None,
-                             run_config: dict | None = None) -> dict:
+                             prompts_config: dict[str, Any] | None = None,
+                             run_config: dict[str, Any] | None = None) -> dict[str, Any]:
         """Prepare data for export.
 
         Args:
@@ -57,7 +58,7 @@ class ResultSaver:
             dict: Export data with prompts_config at root level
         """
         # Include prompts configuration if provided
-        prompts_section = None
+        prompts_section: dict[str, Any] = {}
         if prompts_config:
             prompts_section = {}
             if 'independent' in prompts_config:
@@ -99,7 +100,7 @@ class ResultSaver:
             'results': results_list
         }
 
-    def _save_json(self, export_data: dict, confirm_overwrite: bool = True):
+    def _save_json(self, export_data: dict[str, Any], confirm_overwrite: bool = True) -> None:
         """Save results to JSON file.
 
         Args:
@@ -129,7 +130,7 @@ class ResultSaver:
         except Exception as e:
             print(get_text("error_unknown", error_details=f"JSON export failed: {e}"))
 
-    def _save_csv(self, export_data: dict):
+    def _save_csv(self, export_data: dict[str, Any]) -> None:
         """Save results to CSV file.
 
         Args:
@@ -224,7 +225,7 @@ class ResultSaver:
             print(get_text("error_unknown", error_details=f"CSV export failed: {e}"))
 
 
-def load_results_from_file(file_path: str) -> tuple:
+def load_results_from_file(file_path: str) -> tuple[list[BenchmarkResult], dict[str, Any] | None]:
     """Load benchmark results from a saved JSON or CSV file.
 
     Args:
@@ -237,7 +238,7 @@ def load_results_from_file(file_path: str) -> tuple:
     
     if not os.path.exists(file_path):
         print(get_text("analyze_file_not_found", file_path=file_path))
-        return None, None
+        return [], None
     
     ext = os.path.splitext(file_path)[1].lower()
     all_results: list[BenchmarkResult] = []
@@ -290,7 +291,7 @@ def load_results_from_file(file_path: str) -> tuple:
             
             if rows:
                 # Group by model_name
-                model_groups = {}
+                model_groups: dict[str, dict[str, Any]] = {}
                 for row in rows:
                     model_name = row.get('model_name', 'unknown')
                     if model_name not in model_groups:
@@ -308,7 +309,7 @@ def load_results_from_file(file_path: str) -> tuple:
                         }
                     
                     # Helper to parse values with proper None handling
-                    def parse_float(val, default=0.0):
+                    def parse_float(val: str | None, default: float = 0.0) -> float:
                         if not val or val.strip() == '':
                             return default
                         try:
@@ -316,7 +317,7 @@ def load_results_from_file(file_path: str) -> tuple:
                         except ValueError:
                             return default
                     
-                    def parse_int(val, default=0):
+                    def parse_int(val: str | None, default: int = 0) -> int:
                         if not val or val.strip() == '':
                             return default
                         try:
@@ -324,7 +325,7 @@ def load_results_from_file(file_path: str) -> tuple:
                         except ValueError:
                             return default
                     
-                    def parse_optional_int(val):
+                    def parse_optional_int(val: str | None) -> int | None:
                         if not val or val.strip() == '':
                             return None
                         try:
@@ -347,29 +348,29 @@ def load_results_from_file(file_path: str) -> tuple:
                     })
                 
                 # Create BenchmarkResult for each model
-                for model_name, data in model_groups.items():
-                    model_info = ModelInfo(**data['model'])
-                    metrics = [BenchmarkMetrics(**m) for m in data['results']]
+                for model_name, model_data in model_groups.items():
+                    model_info = ModelInfo(**model_data['model'])
+                    metrics = [BenchmarkMetrics(**m) for m in model_data['results']]
                     all_results.append(BenchmarkResult(model=model_info, results=metrics))
         else:
             print(get_text("analyze_file_unknown_format", ext=ext))
-            return None, None
+            return [], None
         
         if not all_results:
             print(get_text("analyze_file_empty"))
-            return None, None
+            return [], None
         
         return all_results, prompts_config
         
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(get_text("analyze_file_parse_error", error=str(e)))
-        return None, None
+        return [], None
 
 
 def save_results(results: list[BenchmarkResult], output_file: str, output_format: str,
-                 prompts_config: dict | None = None,
-                 run_config: dict | None = None,
-                 confirm_overwrite: bool = True):
+                 prompts_config: dict[str, Any] | None = None,
+                 run_config: dict[str, Any] | None = None,
+                 confirm_overwrite: bool = True) -> None:
     """Convenience function to save results.
 
     Args:

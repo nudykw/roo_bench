@@ -2,13 +2,14 @@
 
 import os
 import subprocess
+from typing import Optional
 
 
 class SSHClient:
     """Centralized SSH client for all remote operations."""
 
-    def __init__(self, host: str = None, user: str = None,
-                 port: int = 22, key_path: str = None):
+    def __init__(self, host: Optional[str] = None, user: Optional[str] = None,
+                 port: int = 22, key_path: Optional[str] = None):
         """Initialize SSH client.
 
         Args:
@@ -17,10 +18,10 @@ class SSHClient:
             port: SSH port
             key_path: Path to SSH private key (auto-detected if not specified)
         """
-        self.ssh_host = host
-        self.ssh_user = user
-        self.ssh_port = port
-        self.ssh_key = key_path
+        self.ssh_host: Optional[str] = host
+        self.ssh_user: Optional[str] = user
+        self.ssh_port: int = port
+        self.ssh_key: Optional[str] = key_path
 
     @property
     def is_configured(self) -> bool:
@@ -69,12 +70,12 @@ class SSHClient:
         Returns:
             Target string in user@host format
         """
-        target = self.ssh_host
-        if self.ssh_user and '@' not in self.ssh_host:
+        target = self.ssh_host or ""
+        if self.ssh_user and '@' not in target:
             target = f"{self.ssh_user}@{self.ssh_host}"
         return target
 
-    def build_command(self, remote_command: str) -> list:
+    def build_command(self, remote_command: str) -> list[str]:
         """Build complete SSH command.
 
         Args:
@@ -98,7 +99,7 @@ class SSHClient:
         return cmd
 
     def execute(self, remote_command: str, timeout: int = 30,
-                capture_output: bool = True) -> subprocess.CompletedProcess:
+                capture_output: bool = True) -> subprocess.CompletedProcess[str]:
         """Execute command on remote host via SSH.
 
         Args:
@@ -117,7 +118,7 @@ class SSHClient:
             timeout=timeout
         )
 
-    def get_vram_usage(self, timeout: int = 30) -> int | None:
+    def get_vram_usage(self, timeout: int = 30) -> Optional[int]:
         """Get VRAM usage from remote GPU via SSH.
 
         Returns:
@@ -125,7 +126,7 @@ class SSHClient:
         """
         if not self.is_configured:
             return None
-            
+
         cmd = self.build_command(
             "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader"
         )
@@ -154,7 +155,7 @@ class SSHClient:
             pass  # print(f"DEBUG: SSH VRAM exception")
         return None
 
-    def get_cpu_usage_remote(self, timeout: int = 30) -> float | None:
+    def get_cpu_usage_remote(self, timeout: int = 30) -> Optional[float]:
         """Get CPU usage from remote machine via SSH.
 
         Args:
@@ -165,7 +166,7 @@ class SSHClient:
         """
         if not self.is_configured:
             return None
-            
+
         cmd = self.build_command(
             "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1"
         )
@@ -187,7 +188,7 @@ class SSHClient:
             pass
         return None
 
-    def get_ram_usage_remote(self, timeout: int = 30) -> dict | None:
+    def get_ram_usage_remote(self, timeout: int = 30) -> Optional[dict[str, int | float]]:
         """Get RAM usage from remote machine via SSH.
 
         Args:
@@ -199,7 +200,7 @@ class SSHClient:
         """
         if not self.is_configured:
             return None
-            
+
         cmd = self.build_command(
             "free -m | grep '^Mem:' | awk '{print $3,$2,$7}'"
         )
@@ -227,7 +228,7 @@ class SSHClient:
             pass
         return None
 
-    def get_vram_total_remote(self, timeout: int = 30) -> int | None:
+    def get_vram_total_remote(self, timeout: int = 30) -> Optional[int]:
         """Get total VRAM capacity from remote machine via SSH.
 
         Args:
@@ -238,7 +239,7 @@ class SSHClient:
         """
         if not self.is_configured:
             return None
-            
+
         cmd = self.build_command(
             "nvidia-smi --query-gpu=memory.total --format=csv,nounits,noheader"
         )

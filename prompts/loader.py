@@ -17,7 +17,7 @@ class PromptLoader:
             prompts_file: Path to prompts.jsonc file. If None, uses default.
         """
         self.prompts_file = prompts_file or self.DEFAULT_PROMPTS_FILE
-        self._data: dict | None = None
+        self._data: dict[str, Any] | None = None
     
     def _strip_comments(self, jsonc: str) -> str:
         """Remove comments from JSONC content.
@@ -113,7 +113,7 @@ class PromptLoader:
         """Lazy-load and return prompts data."""
         if self._data is None:
             self.load()
-        return self._data
+        return self._data if self._data is not None else {}  # type: ignore[return-value]
     
     def get_independent_prompts(self, mode: str) -> list[dict[str, str]]:
         """Get independent prompts for a specific mode.
@@ -125,7 +125,7 @@ class PromptLoader:
             list: List of prompt dictionaries with 'id', 'name', 'prompt' keys
         """
         data = self.data
-        return data.get('independent', {}).get(mode, [])
+        return data.get('independent', {}).get(mode, [])  # type: ignore[no-any-return]
     
     def get_all_independent_modes(self) -> list[str]:
         """Get list of all available independent modes.
@@ -141,11 +141,11 @@ class PromptLoader:
         Returns:
             list: List of prompt dictionaries with 'mode', 'id', 'name', 'prompt' keys
         """
-        all_prompts = []
+        all_prompts: list[dict[str, Any]] = []
         for mode in ['architect', 'code', 'debug']:
             prompts = self.get_independent_prompts(mode)
             for prompt in prompts:
-                prompt_with_mode = prompt.copy()
+                prompt_with_mode = dict(prompt)
                 prompt_with_mode['mode'] = mode  # Add mode to each prompt
                 all_prompts.append(prompt_with_mode)
         return all_prompts
@@ -187,8 +187,8 @@ class PromptLoader:
         return None
     
     def build_chain_context(self, chain: dict[str, Any],
-                           architect_response: str = None,
-                           code_response: str = None) -> dict[str, str]:
+                           architect_response: str | None = None,
+                           code_response: str | None = None) -> dict[str, dict[str, str]]:
         """Build final prompts for a chain with context substitution.
         
         Args:
@@ -200,7 +200,7 @@ class PromptLoader:
             dict: Dictionary with mode keys and final prompt strings
         """
         prompts = chain.get('prompts', {})
-        result = {}
+        result: dict[str, dict[str, str]] = {}
         
         for mode in ['architect', 'code', 'debug']:
             if mode in prompts:

@@ -2,11 +2,12 @@
 
 import curses
 import sys
+from typing import Any, Optional
 
 from i18n import _current_language, get_text
 
 
-def interactive_model_select(stdscr, models: list, single_select: bool = False) -> list:
+def interactive_model_select(stdscr: Any, models: list[dict[str, Any]], single_select: bool = False) -> list[dict[str, Any]]:
     """Interactive model selection using curses with keyboard and mouse support.
 
     Args:
@@ -31,7 +32,7 @@ def interactive_model_select(stdscr, models: list, single_select: bool = False) 
     except Exception:
         pass
 
-    selected = set()  # Set of selected indices
+    selected: set[int] = set()  # Set of selected indices
     current_row = 0  # Currently highlighted row
     start_row = 0  # Starting row for scrolling
 
@@ -62,7 +63,7 @@ def interactive_model_select(stdscr, models: list, single_select: bool = False) 
     except Exception:
         pass
 
-    def draw():
+    def draw() -> None:
         """Draw the interface."""
         nonlocal start_row
         stdscr.erase()
@@ -273,7 +274,7 @@ def interactive_model_select(stdscr, models: list, single_select: bool = False) 
                     selected.add(current_row)
 
 
-def select_expert_model(stdscr, models: list) -> str:
+def select_expert_model(stdscr: Any, models: list[dict[str, Any]]) -> str | None:
     """Select a single expert model using curses interface.
 
     Args:
@@ -281,7 +282,7 @@ def select_expert_model(stdscr, models: list) -> str:
         models: List of model dictionaries
 
     Returns:
-        str: Selected model name, or None to cancel.
+        str | None: Selected model name, or None to cancel.
     """
     if not models:
         return None
@@ -291,10 +292,10 @@ def select_expert_model(stdscr, models: list) -> str:
     if not selected:
         return None
 
-    return selected[0]['name']
+    return selected[0]['name']  # type: ignore[no-any-return]
 
 
-def select_retest_decision(stdscr, model_name: str, tested_count: int, total_count: int) -> str:
+def select_retest_decision(stdscr: Any, model_name: str, tested_count: int, total_count: int) -> str:
     """Select retest decision using curses interface.
 
     Args:
@@ -342,7 +343,7 @@ def select_retest_decision(stdscr, model_name: str, tested_count: int, total_cou
     except Exception:
         pass
     
-    def draw():
+    def draw() -> None:
         stdscr.erase()
         
         # Header

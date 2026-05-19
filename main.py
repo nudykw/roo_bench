@@ -1,5 +1,7 @@
 """Main entry point for roo_bench - orchestration of all modules."""
 
+from typing import Any, Callable, Optional, cast
+
 import curses
 import logging
 import os
@@ -7,7 +9,8 @@ import signal
 import sys
 
 from api.factory import ApiClientFactory
-from benchmark.result import BenchmarkResult, Capability, ModelInfo
+from benchmark.result import BenchmarkResult, Capability, ModelInfo, BenchmarkMetrics
+from argparse import Namespace
 from benchmark.runner import BenchmarkRunner
 from cli import get_context_sizes, get_temperature_test_values, parse_args
 from config import OllamaConfig
@@ -107,7 +110,7 @@ def _prompt_existing_results_action(results_file: str, can_merge: bool) -> str:
         print("Please enter one of the listed options.")
 
 
-def _minimal_prompt(prompt: dict) -> dict:
+def _minimal_prompt(prompt: dict[str, Any]) -> dict[str, Any]:
     """Keep only prompt fields needed in benchmark_results.json."""
     return {
         'id': prompt.get('id'),
@@ -116,7 +119,7 @@ def _minimal_prompt(prompt: dict) -> dict:
     }
 
 
-def build_used_prompts_config(prompt_loader: PromptLoader, args, benchmark_runner: BenchmarkRunner) -> dict:
+def build_used_prompts_config(prompt_loader: PromptLoader, args: Namespace, benchmark_runner: BenchmarkRunner) -> dict[str, Any] | None:
     """Build prompts_config containing only prompts used by this run."""
     if not prompt_loader:
         return None
@@ -135,7 +138,7 @@ def build_used_prompts_config(prompt_loader: PromptLoader, args, benchmark_runne
         }
 
     if args.independent or prompt_loader.data.get('independent'):
-        independent = {}
+        independent: dict[str, list[dict[str, Any]]] = {}
         for prompt in benchmark_runner.get_used_independent_prompts():
             mode = prompt.get('mode')
             if not mode:
@@ -146,7 +149,7 @@ def build_used_prompts_config(prompt_loader: PromptLoader, args, benchmark_runne
     return None
 
 
-def _minimal_chain(chain: dict) -> dict:
+def _minimal_chain(chain: dict[str, Any]) -> dict[str, Any]:
     return {
         'id': chain.get('id'),
         'name': chain.get('name'),
@@ -157,15 +160,15 @@ def _minimal_chain(chain: dict) -> dict:
     }
 
 
-def build_run_config(prompt_loader: PromptLoader, args, benchmark_runner: BenchmarkRunner,
-                     test_models: list) -> dict:
+def build_run_config(prompt_loader: PromptLoader, args: Namespace, benchmark_runner: BenchmarkRunner,
+                     test_models: list[dict[str, Any]]) -> dict[str, Any]:
     """Build effective run config used for merge compatibility."""
-    context_sizes = set()
+    context_sizes: set[int] = set()
     for model in test_models:
         context_sizes.update(benchmark_runner.filter_contexts(model.get('max_ctx', 131072)))
 
-    used_prompt_ids = []
-    used_chain_ids = []
+    used_prompt_ids: list[str] = []
+    used_chain_ids: list[str] = []
 
     if args.chain:
         chain = prompt_loader.get_chain_by_id(args.chain) if prompt_loader else None
@@ -184,8 +187,8 @@ def build_run_config(prompt_loader: PromptLoader, args, benchmark_runner: Benchm
     }
 
 
-def prepare_results_output_file(results_file: str, run_config: dict,
-                                prompts_config: dict) -> str:
+def prepare_results_output_file(results_file: str, run_config: dict[str, Any],
+                                prompts_config: dict[str, Any]) -> str:
     """Prepare result-file save mode before benchmark starts."""
     if not results_file:
         return SAVE_MODE_DISABLED
@@ -206,7 +209,8 @@ def prepare_results_output_file(results_file: str, run_config: dict,
 
 
 def persist_model_result(save_mode: str, results_file: str, benchmark_result: BenchmarkResult,
-                         all_results: list, prompts_config: dict, run_config: dict) -> None:
+                         all_results: list[BenchmarkResult], prompts_config: dict[str, Any],
+                         run_config: dict[str, Any]) -> None:
     """Persist one finished model according to selected save mode."""
     if save_mode == SAVE_MODE_DISABLED or not results_file or not benchmark_result:
         return
@@ -218,7 +222,7 @@ def persist_model_result(save_mode: str, results_file: str, benchmark_result: Be
     print(f"   💾 Results saved atomically after model: {benchmark_result.model.name}")
 
 
-def make_model_info(model_data: dict) -> ModelInfo:
+def make_model_info(model_data: dict[str, Any]) -> ModelInfo:
     """Convert discovered model dict to ModelInfo."""
     moe_val = model_data.get('moe')
     moe_dict = moe_val if isinstance(moe_val, dict) else None
@@ -237,7 +241,7 @@ def make_model_info(model_data: dict) -> ModelInfo:
     )
 
 
-def _mode_from_metric(metric) -> str:
+def _mode_from_metric(metric: BenchmarkMetrics) -> str:
     """Return recommendation mode for a metric."""
     if metric.mode in ('architect', 'code', 'debug'):
         return metric.mode
@@ -248,7 +252,7 @@ def _mode_from_metric(metric) -> str:
     return 'debug'
 
 
-def _recommendation_score(mode: str, metric) -> float:
+def _recommendation_score(mode: str, metric: BenchmarkMetrics) -> float:
     """Score a metric for mode-specific recommendations."""
     expert = metric.expert_score if metric.expert_score is not None else 50.0
     ctx_score = min(metric.ctx / 131072, 2.0)
@@ -261,10 +265,10 @@ def _recommendation_score(mode: str, metric) -> float:
     return expert * 10 + speed_score * 18 + ctx_score * 18
 
 
-def _build_mode_recommendations(all_results: list, test_models: list) -> dict:
+def _build_mode_recommendations(all_results: list[BenchmarkResult], test_models: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     """Build top model recommendations per Roo mode."""
-    model_lookup = {m['name']: m for m in test_models}
-    best_by_mode_and_model = {
+    model_lookup: dict[str, dict[str, Any]] = {m['name']: m for m in test_models}
+    best_by_mode_and_model: dict[str, dict[str, BenchmarkMetrics]] = {
         'architect': {},
         'code': {},
         'debug': {},
@@ -278,9 +282,9 @@ def _build_mode_recommendations(all_results: list, test_models: list) -> dict:
             if current is None or _recommendation_score(mode, metric) > _recommendation_score(mode, current):
                 best_by_mode_and_model[mode][model_name] = metric
 
-    recommendations = {}
+    recommendations: dict[str, list[dict[str, Any]]] = {}
     for mode, model_metrics in best_by_mode_and_model.items():
-        ranked = []
+        ranked: list[dict[str, Any]] = []
         for model_name, metric in model_metrics.items():
             model_data = model_lookup.get(model_name, {})
             ranked.append({
@@ -299,7 +303,7 @@ def _format_ctx(ctx: int) -> str:
     return f"{ctx // 1024}K" if ctx >= 1024 else str(ctx)
 
 
-def _recommendation_reason(mode: str, metric) -> str:
+def _recommendation_reason(mode: str, metric: BenchmarkMetrics) -> str:
     """Explain why a metric is recommended for a mode."""
     score_text = (
         f"expert score {metric.expert_score:.1f}/100"
@@ -315,7 +319,7 @@ def _recommendation_reason(mode: str, metric) -> str:
     return f"{score_text}; debug fit balances enough {ctx_text} for traces/logs with practical speed ({speed_text})."
 
 
-def print_expert_recommendations(all_results: list, test_models: list) -> None:
+def print_expert_recommendations(all_results: list[BenchmarkResult], test_models: list[dict[str, Any]]) -> None:
     """Print top 3 expert-guided recommendations for Architect, Coder, and Debug."""
     recommendations = _build_mode_recommendations(all_results, test_models)
     mode_titles = [
@@ -354,7 +358,7 @@ def print_expert_recommendations(all_results: list, test_models: list) -> None:
             print(f"      Why: {_recommendation_reason(mode, metric)}")
 
 
-def get_ollama_config(args) -> OllamaConfig:
+def get_ollama_config(args: Namespace) -> OllamaConfig:
     """Get Ollama configuration from CLI arguments.
 
     Args:
@@ -373,7 +377,7 @@ def get_ollama_config(args) -> OllamaConfig:
     return OllamaConfig(cli_config)
 
 
-def run_benchmark_workflow(config: OllamaConfig, args):
+def run_benchmark_workflow(config: OllamaConfig, args: Namespace) -> None:
     """Main benchmark workflow orchestration.
 
     Args:
@@ -390,7 +394,7 @@ def run_benchmark_workflow(config: OllamaConfig, args):
 
 
 def _check_model_retest(model_name: str, tested_count: int, total_count: int,
-                         results_file: str, decision_state: dict) -> tuple:
+                         results_file: str, decision_state: dict[str, bool]) -> tuple[bool, bool]:
     """Check if model exists in results and prompt for retest decision.
     
     Args:
@@ -430,7 +434,7 @@ def _check_model_retest(model_name: str, tested_count: int, total_count: int,
     return True, False
 
 
-def _run_benchmark_workflow_impl(config: OllamaConfig, args):
+def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     """Implementation of benchmark workflow."""
     from i18n import get_text
 
@@ -442,10 +446,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         base_url=config.base_url,
         headers=config.get_headers(),
         timeout=config.timeout,
-        ssh_host=getattr(args, 'ssh_host', None),
-        ssh_user=getattr(args, 'ssh_user', None),
+        ssh_host=cast(Optional[str], getattr(args, 'ssh_host', None)),
+        ssh_user=cast(Optional[str], getattr(args, 'ssh_user', None)),
         ssh_port=getattr(args, 'ssh_port', 22),
-        ssh_key=getattr(args, 'ssh_key', None)
+        ssh_key=cast(Optional[str], getattr(args, 'ssh_key', None))
     )
 
     # Fetch models (capabilities are already extracted from model_info)
@@ -682,7 +686,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         logger.info(f"📝 Available independent modes: {', '.join(prompt_loader.get_all_independent_modes())}")
     if prompt_loader.data.get('chains'):
         chains = prompt_loader.get_chains()
-        logger.info(f"📝 Available chains: {', '.join(chain.get('name') for chain in chains)}")
+        logger.info(f"📝 Available chains: {', '.join(str(chain.get('name', '')) for chain in chains)}")
 
     # Expert-Evaluator setup
     expert_evaluator = None
@@ -768,7 +772,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     all_results: list[BenchmarkResult] = []
     
     # Initialize retest decision state
-    decision_state: dict = {}
+    decision_state: dict[str, bool] = {}
     
     # Determine output file - prompt user if not specified via --output
     # Track whether we should save results
@@ -789,18 +793,19 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
     if getattr(args, 'output_format', None) == 'csv':
         save_mode = SAVE_MODE_DISABLED
     else:
-        save_mode = prepare_results_output_file(results_file, run_config, used_prompts_config)
+        save_mode = prepare_results_output_file(results_file, run_config, used_prompts_config if used_prompts_config is not None else {})
     if save_mode == "abort":
         return
 
     expert_results_manager = ExpertResultsManager()
+    expert_model_for_session: str = expert_model_name if expert_model_name is not None else ""
     expert_results_manager.start_session(
         tested_model=model_names,
-        expert_model=expert_model_name,
+        expert_model=expert_model_for_session,
         run_config=run_config,
     )
 
-    def handle_completed_result(benchmark_result: BenchmarkResult):
+    def handle_completed_result(benchmark_result: BenchmarkResult) -> None:
         if not benchmark_result:
             return
         all_results.append(benchmark_result)
@@ -811,11 +816,11 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
             results_file,
             benchmark_result,
             all_results,
-            used_prompts_config,
+            used_prompts_config if used_prompts_config is not None else {},
             run_config,
         )
 
-    def run_model_benchmark(model_info: ModelInfo, runner_method, *method_args):
+    def run_model_benchmark(model_info: ModelInfo, runner_method: Callable[..., Any], *method_args: Any) -> Any:
         try:
             return runner_method(model_info, *method_args)
         except BaseException:
@@ -944,13 +949,14 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args):
         )
 
 
-def _post_benchmark_workflow(results_file: str, all_results: list, args):
+def _post_benchmark_workflow(results_file: str, all_results: list[BenchmarkResult], args: Namespace, base_url: str) -> None:
     """Post-benchmark workflow: ask about AI analysis and model selection.
     
     Args:
         results_file: Path to results file (can be None)
         all_results: List of BenchmarkResult objects
         args: Parsed arguments
+        base_url: Base URL for the Ollama API
     """
     from export.ai_analyzer import AIAnalyzer, analyze_results_interactive
     from i18n import get_text
@@ -962,9 +968,9 @@ def _post_benchmark_workflow(results_file: str, all_results: list, args):
     # Ask about AI analysis
     if prompt_user(get_text("ask_ai_analysis")):
         try:
-            analyzer = AIAnalyzer()
+            analyzer = AIAnalyzer(base_url=base_url)
             analyze_results_interactive(
-                analyzer, all_results, 
+                analyzer, all_results,
                 getattr(args, 'language', 'en'),
                 getattr(args, 'restart_method', 'manual'),
                 getattr(args, 'no_restart', False)
@@ -973,17 +979,17 @@ def _post_benchmark_workflow(results_file: str, all_results: list, args):
             print(f"⚠️  AI analysis failed: {e}")
 
 
-def signal_handler(signum, frame):
+def signal_handler(signum: int, frame: Any) -> None:
     """Handle SIGINT signal gracefully."""
     print("\n" + get_text("benchmark_interrupted"))
     sys.exit(0)
 
 
-def _main_impl():
+def _main_impl() -> None:
     """Main implementation with language setup."""
     from cli import setup_logging
     
-    args = parse_args()
+    args = parse_args()  # type: ignore[no-untyped-call]
     
     # Setup logging
     setup_logging(getattr(args, 'verbose', 0))
@@ -1002,7 +1008,7 @@ def _main_impl():
     run_benchmark_workflow(config, args)
 
 
-def main():
+def main() -> None:
     """Main entry point."""
     try:
         _main_impl()

@@ -11,6 +11,7 @@ import os
 import re
 import urllib.parse
 from datetime import datetime, timezone
+from typing import Any, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -111,7 +112,7 @@ class CapabilitiesFetcher:
     # Color class patterns (used for size badges, not capabilities)
     COLOR_PATTERN = re.compile(r'bg-\[#?[a-z0-9]+\]')
 
-    def __init__(self, cache_file: str = None, model_cache_file: str = None):
+    def __init__(self, cache_file: str | None = None, model_cache_file: str | None = None):
         """Initialize CapabilitiesFetcher with cache.
         
         Args:
@@ -124,7 +125,7 @@ class CapabilitiesFetcher:
         self.MODEL_CAPABILITIES = dict(self.DEFAULT_CAPABILITIES)
         self._load_cache()
         # Model metadata cache (full data from /api/show)
-        self.model_metadata = {}
+        self.model_metadata: dict[str, Any] = {}
         self._load_model_cache()
     
     def is_cache_fresh(self) -> bool:
@@ -153,7 +154,7 @@ class CapabilitiesFetcher:
         except (OSError, json.JSONDecodeError, ValueError):
             return False
     
-    def _load_model_cache(self):
+    def _load_model_cache(self) -> None:
         """Load cached model metadata from JSON file."""
         if not os.path.exists(self.model_cache_file):
             return
@@ -174,7 +175,7 @@ class CapabilitiesFetcher:
         except (OSError, json.JSONDecodeError) as e:
             print(f"⚠️  Error loading model cache: {e}")
 
-    def _load_cache(self):
+    def _load_cache(self) -> None:
         """Load cached capabilities from JSON file."""
         if not os.path.exists(self.cache_file):
             return
@@ -190,7 +191,7 @@ class CapabilitiesFetcher:
         except (OSError, json.JSONDecodeError) as e:
             print(f"⚠️  Error loading cache: {e}")
 
-    def add_model_from_api(self, model_name: str, capabilities: dict):
+    def add_model_from_api(self, model_name: str, capabilities: dict[str, Any]) -> None:
         """Add a model's capabilities to the cache.
         
         Args:
@@ -214,7 +215,7 @@ class CapabilitiesFetcher:
                 'thinking': capabilities.get('thinking', False)
             }
     
-    def save_cache(self):
+    def save_cache(self) -> None:
         """Save current MODEL_CAPABILITIES to JSON file.
         
         Saves only models that were discovered via HTML parsing or search API
@@ -247,7 +248,7 @@ class CapabilitiesFetcher:
     # Model Metadata Cache Methods
     # ========================================================================
     
-    def save_model_cache(self):
+    def save_model_cache(self) -> None:
         """Save model metadata to JSON cache file.
         
         Saves all discovered model metadata including capabilities, MoE info,
@@ -272,7 +273,7 @@ class CapabilitiesFetcher:
         except OSError as e:
             print(f"⚠️  Error saving model cache: {e}")
     
-    def add_model_metadata(self, model_name: str, metadata: dict):
+    def add_model_metadata(self, model_name: str, metadata: dict[str, Any]) -> None:
         """Add or update model metadata in the cache.
         
         Args:
@@ -310,7 +311,7 @@ class CapabilitiesFetcher:
                 base_entry['name'] = base_name
                 self.model_metadata[base_name] = base_entry
     
-    def get_model_from_cache(self, model_name: str) -> dict | None:
+    def get_model_from_cache(self, model_name: str) -> dict[str, Any] | None:
         """Get cached model metadata by name.
         
         Args:
@@ -321,37 +322,38 @@ class CapabilitiesFetcher:
         """
         # Direct lookup
         if model_name in self.model_metadata:
-            return self.model_metadata[model_name]
+            return cast(dict[str, Any] | None, self.model_metadata[model_name])
         
         # Try base name
         base_name = model_name.split(':')[0]
         if base_name in self.model_metadata:
-            return self.model_metadata[base_name]
+            return cast(dict[str, Any] | None, self.model_metadata[base_name])
         
         # Try dev-* prefix removal
         for prefix in ['dev-', '+']:
             if base_name.startswith(prefix):
                 clean_name = base_name[len(prefix):]
                 if clean_name in self.model_metadata:
-                    return self.model_metadata[clean_name]
+                    return cast(dict[str, Any] | None, self.model_metadata[clean_name])
         
         return None
     
-    def _extract_params(self, metadata: dict) -> str:
+    def _extract_params(self, metadata: dict[str, Any]) -> str:
         """Extract human-readable params string from model metadata."""
         details = metadata.get('details', {})
         if details:
-            return details.get('parameter_size', 'N/A')
+            val = details.get('parameter_size', 'N/A')
+            return str(val) if val is not None else 'N/A'
         return 'N/A'
     
-    def _extract_total_params(self, metadata: dict) -> str:
+    def _extract_total_params(self, metadata: dict[str, Any]) -> str:
         """Extract total parameters count."""
         details = metadata.get('details', {})
         if details:
             return str(details.get('total_parameters', 'N/A'))
         return 'N/A'
     
-    def _extract_active_params(self, metadata: dict) -> str:
+    def _extract_active_params(self, metadata: dict[str, Any]) -> str:
         """Extract active parameters count (for MoE models)."""
         details = metadata.get('details', {})
         if details:
@@ -368,25 +370,26 @@ class CapabilitiesFetcher:
             return str(details.get('total_parameters', 'N/A'))
         return 'N/A'
     
-    def _extract_quant(self, metadata: dict) -> str:
+    def _extract_quant(self, metadata: dict[str, Any]) -> str:
         """Extract quantization format."""
         details = metadata.get('details', {})
         if details:
             # Ollama API uses 'quantization_level' (e.g., 'Q4_K_M')
             quant = details.get('quantization_level', 'N/A')
             if quant and quant != 'N/A':
-                return quant
+                return str(quant)
             # Fallback: try 'quantization_format' for older API versions
-            return details.get('quantization_format', 'N/A')
+            qf = details.get('quantization_format', 'N/A')
+            return str(qf) if qf is not None else 'N/A'
         return 'N/A'
     
-    def _extract_architecture(self, metadata: dict) -> str:
+    def _extract_architecture(self, metadata: dict[str, Any]) -> str:
         """Extract model architecture from model_info."""
         model_info = metadata.get('model_info', {})
         architecture = model_info.get('general.architecture', '')
         return architecture if architecture else 'N/A'
     
-    def _extract_max_ctx(self, metadata: dict) -> int:
+    def _extract_max_ctx(self, metadata: dict[str, Any]) -> int:
         """Extract maximum context length."""
         max_ctx = 131072  # default
         
@@ -414,7 +417,7 @@ class CapabilitiesFetcher:
         
         return max_ctx
     
-    def _extract_capabilities(self, metadata: dict) -> dict:
+    def _extract_capabilities(self, metadata: dict[str, Any]) -> dict[str, bool]:
         """Extract capabilities from model metadata."""
         # Check top-level capabilities field (new Ollama API format)
         caps_list = metadata.get('capabilities', [])
@@ -436,7 +439,7 @@ class CapabilitiesFetcher:
     # MoE (Mixture of Experts) Detection
     # ========================================================================
     
-    def _detect_moe(self, metadata: dict, base_name: str) -> dict | bool | None:
+    def _detect_moe(self, metadata: dict[str, Any], base_name: str) -> dict[str, Any] | bool | None:
         """Detect if model is MoE and extract MoE details.
         
         Returns:
@@ -454,7 +457,7 @@ class CapabilitiesFetcher:
                 moe_fields[key] = val
         
         if moe_fields:
-            result = {'is_moe': True}
+            result: dict[str, Any] = {'is_moe': True}
             if 'moe.num_experts' in moe_fields:
                 try:
                     result['num_experts'] = int(moe_fields['moe.num_experts'])
@@ -548,7 +551,7 @@ class CapabilitiesFetcher:
         text = text.split('-')[0].strip()
         return bool(self.SIZE_PATTERN.match(text)) or bool(self.COLOR_PATTERN.match(text))
 
-    def get_capabilities_from_html(self, base_name: str) -> tuple:
+    def get_capabilities_from_html(self, base_name: str) -> tuple[str, str, str] | None:
         """Get capabilities by parsing the model page HTML.
         
         Returns:
@@ -592,7 +595,8 @@ class CapabilitiesFetcher:
             
             for span in spans:
                 text = span.get_text(strip=True).lower()
-                classes = ' '.join(span.get('class', []))
+                span_classes = span.get('class')
+                classes = ' '.join(span_classes) if span_classes else ''
                 
                 # Skip size tags (they have bg- color classes)
                 if 'bg-' in classes or self._is_size_tag(text):
@@ -620,7 +624,11 @@ class CapabilitiesFetcher:
         # Fallback: check meta description
         meta_desc = soup.find('meta', attrs={'name': 'description'})
         if meta_desc:
-            desc = meta_desc.get('content', '').lower()
+            content = meta_desc.get('content')
+            if isinstance(content, str):
+                desc = content.lower()
+            else:
+                desc = ''
             vision = "✅" if any(w in desc for w in ['vision', 'visual', 'multimodal', 'image']) else "❌"
             tools = "✅" if any(w in desc for w in ['tool', 'function', 'api']) else "❌"
             thinking = "✅" if any(w in desc for w in ['reasoning', 'think', 'chain of thought']) else "❌"
@@ -629,7 +637,7 @@ class CapabilitiesFetcher:
         
         return None  # Signal that HTML parsing didn't find anything definitive
 
-    def get_capabilities_from_model_db(self, base_name: str) -> tuple:
+    def get_capabilities_from_model_db(self, base_name: str) -> tuple[str, str, str] | None:
         """Get capabilities from the built-in model knowledge base or cache.
         
         Returns:
@@ -676,7 +684,7 @@ class CapabilitiesFetcher:
         
         return None
 
-    def get_capabilities(self, model_name: str) -> tuple:
+    def get_capabilities(self, model_name: str) -> tuple[str, str, str]:
         """Get model capabilities from multiple sources.
         
         Args:
@@ -733,7 +741,7 @@ class CapabilitiesFetcher:
         # Final fallback: heuristic based on model name patterns
         return self._heuristic_capabilities(base_name)
 
-    def _heuristic_capabilities(self, base_name: str) -> tuple:
+    def _heuristic_capabilities(self, base_name: str) -> tuple[str, str, str]:
         """Determine capabilities using heuristics based on model name patterns.
         
         This is the last resort when no other method succeeds.

@@ -1,7 +1,7 @@
 """Core benchmark execution orchestration."""
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from api.base_client import BaseApiClient
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
@@ -25,7 +25,7 @@ class BenchmarkRunner:
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
                  num_predict: int = 12000, independent_top: int | None = None,
-                 user_context_sizes: str = None):
+                 user_context_sizes: Optional[str] = None):
         """Initialize benchmark runner.
 
         Args:
