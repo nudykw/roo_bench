@@ -131,7 +131,7 @@ class OllamaConfig:
     @property
     def prompts_file(self) -> str:
         """Get path to prompts configuration file."""
-        return self._config.get('prompts_file', os.path.join(os.path.dirname(__file__), 'prompts.jsonc'))
+        return self._config.get('prompts_file', os.path.join(os.path.dirname(__file__), 'prompts', 'prompts.jsonc'))
     
     def get_headers(self) -> dict[str, str]:
         """Get headers for requests"""

@@ -2,10 +2,11 @@
 
 import json
 import os
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
-import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from prompts.loader import PromptLoader
@@ -176,8 +177,8 @@ class TestPromptLoaderFileResolution(unittest.TestCase):
                 md_path = md_f.name
 
             try:
-                with unittest.mock.patch.object(PromptLoader, 'DEFAULT_PROMPTS_FILE', md_path), \
-                     unittest.mock.patch.object(PromptLoader, 'DEFAULT_JSONC_FALLBACK', jsonc_path):
+                with mock.patch.object(PromptLoader, 'DEFAULT_PROMPTS_FILE', md_path), \
+                     mock.patch.object(PromptLoader, 'DEFAULT_JSONC_FALLBACK', jsonc_path):
                     loader = PromptLoader()
                     self.assertEqual(loader.prompts_file, md_path)
             finally:

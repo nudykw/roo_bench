@@ -225,7 +225,7 @@ Prompts support two formats with automatic detection:
    - Human-readable and editable
    - Generated from JSONC with `--generate-md`
 
-2. **JSONC format** (`prompts.jsonc`, fallback):
+2. **JSONC format** (`prompts/prompts.jsonc`, fallback):
    - JSON with comments support
 
 **Priority:** `.md` files > `.jsonc` fallback
@@ -648,8 +648,13 @@ roo_bench/
 │
 ├── prompts/
 │   ├── __init__.py
-│   ├── loader.py              # JSONC prompt loader
-│   └── prompts.jsonc          # Prompt configuration (JSONC format)
+│   ├── loader.py              # Markdown/JSONC prompt loader
+│   ├── analysis_prompt_loader.py # Analysis prompt loader
+│   ├── generate_md.py         # Markdown generator from JSONC
+│   ├── prompts.md             # Markdown prompt configuration
+│   ├── prompts.jsonc          # Prompt configuration (JSONC format, fallback)
+│   ├── analysis_prompt.md     # Markdown analysis prompt configuration
+│   └── analysis_prompt.jsonc  # Analysis prompt configuration (JSONC format, fallback)
 │
 └── data/
     └── capabilities_cache.json # Model capabilities cache

@@ -234,7 +234,7 @@ def generate_all_markdown() -> bool:
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
     # Generate prompts.md from prompts.jsonc
-    prompts_jsonc_path = os.path.join(base_dir, "prompts.jsonc")
+    prompts_jsonc_path = os.path.join(base_dir, "prompts", "prompts.jsonc")
     prompts_md_path = os.path.join(base_dir, "prompts", "prompts.md")
     
     if not os.path.exists(prompts_jsonc_path):

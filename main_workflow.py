@@ -167,8 +167,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
                 print(f"  - {p['name']} ({p['id']})")
         return
 
-    # Create prompt loader
-    prompts_file = args.prompts_file or config.prompts_file
+    # Create prompt loader - pass None to use default resolution logic (.md priority)
+    prompts_file = args.prompts_file
     prompt_loader = PromptLoader(prompts_file)
     logger.info("📝 Loaded prompts from: %s", prompts_file)
     if prompt_loader.data.get('independent'):
@@ -393,7 +393,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
 
     else:
         if prompt_loader and prompt_loader.data.get('independent'):
-            print(get_text("using_independent_prompts_default"))
+            actual_file = prompt_loader.file_path
+            print(f"{get_text('using_independent_prompts_default')}: {actual_file}")
             for i, m in enumerate(test_models):
                 from main_helpers import _check_model_retest
                 should_test, should_stop = _check_model_retest(
@@ -412,8 +413,9 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
                     continue
         else:
             logger.warning(
-                "⚠️  No independent prompts found in prompts.jsonc, "
-                "using default benchmark prompt"
+                "⚠️  No independent prompts found in %s, "
+                "using default benchmark prompt",
+                prompt_loader.file_path if prompt_loader else "unknown"
             )
             for i, m in enumerate(test_models):
                 from main_helpers import _check_model_retest

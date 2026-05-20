@@ -10,7 +10,7 @@ class PromptLoader:
     """Load and manage benchmark prompts from .md or .jsonc files."""
     
     DEFAULT_PROMPTS_FILE = os.path.join(os.path.dirname(__file__), 'prompts.md')
-    DEFAULT_JSONC_FALLBACK = os.path.join(os.path.dirname(__file__), '..', 'prompts.jsonc')
+    DEFAULT_JSONC_FALLBACK = os.path.join(os.path.dirname(__file__), 'prompts.jsonc')
     
     def __init__(self, prompts_file: str | None = None):
         """Initialize prompt loader.
