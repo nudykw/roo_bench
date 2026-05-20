@@ -29,6 +29,8 @@ class ExpertEvaluator:
         self._prompt_loader = AnalysisPromptLoader(analysis_prompt_file)
         self.prompts = self._load_prompts()
         logger.info("[Expert] Loaded analysis prompts from: %s", self._prompt_loader.file_path)
+        from i18n import get_text
+        print(f"✅ [Expert] {get_text('using_analysis_prompts')}: {self._prompt_loader.file_path}")
 
     def _load_prompts(self) -> dict:
         """Load expert evaluation prompts from AnalysisPromptLoader.
