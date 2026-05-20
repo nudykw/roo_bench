@@ -75,7 +75,7 @@ def parse_args() -> Namespace:
     """
     parser = argparse.ArgumentParser(description=get_text("cli_help"))
     parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help='Increase verbosity level (use -v, -vv, -vvv for more debug output)')
+                        help=get_text("cli_verbose"))
     parser.add_argument('--models', type=str, help=get_text("cli_models"))
     parser.add_argument('--capabilities', '-f', type=str, help=get_text("cli_capabilities"))
     parser.add_argument('--lang', type=str, dest='language', choices=get_available_languages(),
@@ -84,10 +84,10 @@ def parse_args() -> Namespace:
     parser.add_argument('--restart-method', type=str, default='manual',
                         choices=['systemctl', 'docker', 'kill_start', 'manual', 'ssh'],
                         help=get_text("cli_restart_method"))
-    parser.add_argument('--ssh-host', type=str, help='SSH host for remote restart')
-    parser.add_argument('--ssh-user', type=str, help='SSH user for remote restart')
-    parser.add_argument('--ssh-port', type=int, default=22, help='SSH port for remote restart')
-    parser.add_argument('--ssh-key', type=str, help='Path to SSH private key')
+    parser.add_argument('--ssh-host', type=str, help=get_text("cli_ssh_host"))
+    parser.add_argument('--ssh-user', type=str, help=get_text("cli_ssh_user"))
+    parser.add_argument('--ssh-port', type=int, default=22, help=get_text("cli_ssh_port"))
+    parser.add_argument('--ssh-key', type=str, help=get_text("cli_ssh_key"))
     parser.add_argument('--no-restart', action='store_true', help=get_text("cli_no_restart"))
     parser.add_argument('--num-runs', type=int, default=3, help=get_text("cli_num_runs"))
     parser.add_argument('--context-sizes', type=str, help=get_text("cli_context_sizes"))
@@ -95,41 +95,41 @@ def parse_args() -> Namespace:
     parser.add_argument('--output', type=str, help=get_text("cli_output"))
     parser.add_argument('--output-format', type=str, choices=['json', 'csv'],
                         help=get_text("cli_output_format"))
-    parser.add_argument('--ollama-url', type=str, help='Ollama server URL')
-    parser.add_argument('--ollama-port', type=int, help='Ollama server port')
-    parser.add_argument('--ollama-api-key', type=str, help='API key for authentication')
-    parser.add_argument('--ollama-timeout', type=int, help='Connection timeout')
-    parser.add_argument('--config', type=str, help='Path to configuration file')
+    parser.add_argument('--ollama-url', type=str, help=get_text("cli_ollama_url"))
+    parser.add_argument('--ollama-port', type=int, help=get_text("cli_ollama_port"))
+    parser.add_argument('--ollama-api-key', type=str, help=get_text("cli_ollama_api_key"))
+    parser.add_argument('--ollama-timeout', type=int, help=get_text("cli_ollama_timeout"))
+    parser.add_argument('--config', type=str, help=get_text("cli_config"))
     parser.add_argument('--update-cache', action='store_true',
-                        help='Force update capabilities cache from Ollama API')
+                        help=get_text("cli_update_cache"))
     parser.add_argument('--no-interactive', action='store_true',
-                        help='Disable interactive post-benchmark prompts')
+                        help=get_text("cli_no_interactive"))
     parser.add_argument('--analyze-file', type=str, metavar='FILE',
                         help=get_text('cli_analyze_file'))
     parser.add_argument('--analysis-model', type=str, default=None,
                         help=get_text('cli_analysis_model'))
     parser.add_argument('--no-stream', action='store_true', default=False,
-                        help='Disable streaming mode for AI analysis output (default: enabled)')
+                        help=get_text("cli_no_stream"))
     parser.add_argument('--no-thinking', action='store_true', default=True,
-                        help='Disable thinking mode on all models to prevent reasoning loops (default: enabled)')
+                        help=get_text("cli_no_thinking"))
     parser.add_argument('--thinking', action='store_false', dest='no_thinking',
-                        help='Enable thinking mode on thinking-capable models')
+                        help=get_text("cli_thinking"))
     parser.add_argument('--independent', action='store_true',
-                        help='Run only independent prompts test mode')
+                        help=get_text("cli_independent"))
     parser.add_argument('--chains', action='store_true',
-                        help='Run all prompt chains (full lifecycle tests)')
+                        help=get_text("cli_chains"))
     parser.add_argument('--chain', type=str, metavar='CHAIN_ID',
-                        help='Run only the specified prompt chain (e.g., chain_rest_api)')
+                        help=get_text("cli_chain"))
     parser.add_argument('--prompts-file', type=str, metavar='FILE',
-                        help='Path to prompts.jsonc configuration file')
+                        help=get_text("cli_prompts_file"))
     parser.add_argument('--list-chains', action='store_true',
-                        help='List available prompt chains and exit')
+                        help=get_text("cli_list_chains"))
     parser.add_argument('--list-independent', action='store_true',
-                        help='List available independent prompts and exit')
+                        help=get_text("cli_list_independent"))
     parser.add_argument('--independent-top', type=int, default=None, metavar='N',
                         help=get_text("cli_independent_top"))
     parser.add_argument('--num-predict', type=int, default=12000,
-                        help='Maximum number of tokens to predict in generation (default: 12000). Use -1 for unlimited.')
+                        help=get_text("cli_num_predict"))
     parser.add_argument('--temperature', type=str, default=None,
                         help=get_text("cli_temperature"))
     return parser.parse_args()
