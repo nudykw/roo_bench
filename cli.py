@@ -78,7 +78,7 @@ def parse_args() -> Namespace:
                         help='Increase verbosity level (use -v, -vv, -vvv for more debug output)')
     parser.add_argument('--models', type=str, help=get_text("cli_models"))
     parser.add_argument('--capabilities', '-f', type=str, help=get_text("cli_capabilities"))
-    parser.add_argument('--lang', type=str, choices=get_available_languages(),
+    parser.add_argument('--lang', type=str, dest='language', choices=get_available_languages(),
                         default=_current_language if _current_language else "en",
                         help=get_text("cli_lang"))
     parser.add_argument('--restart-method', type=str, default='manual',
