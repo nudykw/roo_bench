@@ -1,5 +1,6 @@
 {
   "url": "http://192.168.1.100:11434",
+  "backend_type": "ollama",
   "port": 11434,
   "api_key": null,
   "timeout": 300,

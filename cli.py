@@ -94,10 +94,13 @@ def parse_args() -> Namespace:
     parser.add_argument('--output', type=str, help=get_text("cli_output"))
     parser.add_argument('--output-format', type=str, choices=['json', 'csv'],
                         help=get_text("cli_output_format"))
-    parser.add_argument('--ollama-url', type=str, help=get_text("cli_ollama_url"))
+    parser.add_argument('--ollama-url', '--url', type=str, dest='ollama_url',
+                        help=get_text("cli_ollama_url"))
     parser.add_argument('--ollama-port', type=int, help=get_text("cli_ollama_port"))
     parser.add_argument('--ollama-api-key', type=str, help=get_text("cli_ollama_api_key"))
     parser.add_argument('--ollama-timeout', type=int, help=get_text("cli_ollama_timeout"))
+    parser.add_argument('--backend', type=str, choices=['ollama', 'llama_cpp'],
+                        default='ollama', help=get_text("cli_backend"))
     parser.add_argument('--config', type=str, help=get_text("cli_config"))
     parser.add_argument('--update-cache', action='store_true',
                         help=get_text("cli_update_cache"))

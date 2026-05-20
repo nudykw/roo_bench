@@ -9,6 +9,7 @@ class OllamaConfig:
     DEFAULTS = {
         'url': 'http://localhost:11434',
         'port': 11434,
+        'backend_type': 'ollama',
         'api_key': None,
         'timeout': 300,
         'config_file': 'config.json'
@@ -38,6 +39,7 @@ class OllamaConfig:
         env_vars = {
             'url': 'OLLAMA_URL',
             'port': 'OLLAMA_PORT',
+            'backend_type': 'ROO_BENCH_BACKEND_TYPE',
             'api_key': 'OLLAMA_API_KEY',
             'timeout': 'OLLAMA_TIMEOUT',
             'temperature_test_values': 'OLLAMA_TEMPERATURE_TEST_VALUES'
@@ -53,6 +55,7 @@ class OllamaConfig:
         cli_vars = {
             'url': 'ollama_url',
             'port': 'ollama_port',
+            'backend_type': 'backend_type',
             'api_key': 'ollama_api_key',
             'timeout': 'ollama_timeout',
             'temperature_test_values': 'temperature_test_values'
@@ -133,6 +136,11 @@ class OllamaConfig:
         """Get path to prompts configuration file."""
         return self._config.get('prompts_file', os.path.join(os.path.dirname(__file__), 'prompts', 'prompts.jsonc'))
     
+    @property
+    def backend_type(self) -> str:
+        """Get backend type (ollama or llama_cpp)."""
+        return self._config.get('backend_type', self.DEFAULTS['backend_type'])
+
     def get_headers(self) -> dict[str, str]:
         """Get headers for requests"""
         headers = {}

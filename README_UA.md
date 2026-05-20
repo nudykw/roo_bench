@@ -907,4 +907,51 @@ curl http://192.168.1.100:11434/api/tags
 
 ---
 
+## Підтримка llama.cpp server
+
+Roo Bench підтримує llama.cpp server через OpenAI-сумісний API як альтернативу Ollama.
+
+### Швидкий старт
+
+```bash
+# 1. Запустити llama.cpp server
+./server -m models/llama.gguf --host 127.0.0.1 --port 8080 --jinja
+
+# 2. Запустити бенчмарк
+python main.py --backend llama_cpp --ollama-url http://127.0.0.1:8080
+```
+
+### Віддалений сервер через SSH
+
+```bash
+python main.py --backend llama_cpp --ollama-url http://remote-server:8080 \
+    --ssh-host remote-server --ssh-user user
+```
+
+### Конфігураційний файл
+
+```json
+{
+  "url": "http://localhost:8080",
+  "backend_type": "llama_cpp",
+  "timeout": 300
+}
+```
+
+### Змінні середовища
+
+```bash
+export ROO_BENCH_BACKEND_TYPE=llama_cpp
+export OLLAMA_URL=http://localhost:8080
+python main.py
+```
+
+### Обмеження
+
+- Перезапуск моделей не підтримується (автоматично пропускається)
+- Моніторинг GPU вимагає `nvidia-smi` (тільки NVIDIA GPU)
+- Деякі метрики Ollama-specific недоступні
+
+---
+
 📖 **English version:** [README_EN.md](README_EN.md)

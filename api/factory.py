@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from api.llama_cpp_client import LlamaCppApiClient, LlamaCppRemoteApiClient
 from api.local_client import LocalApiClient
 from api.remote_client import RemoteApiClient
 from system.ssh_client import SSHClient
@@ -27,41 +28,67 @@ class ApiClientFactory:
         base_url: str,
         headers: Optional[dict] = None,
         timeout: int = 300,
+        backend_type: str = "ollama",
         ssh_host: Optional[str] = None,
         ssh_user: Optional[str] = None,
         ssh_port: int = 22,
-        ssh_key: Optional[str] = None
+        ssh_key: Optional[str] = None,
     ):
-        """Create the appropriate API client based on SSH configuration.
+        """Create the appropriate API client based on backend type and SSH config.
 
         Args:
-            base_url: Ollama API base URL (used for HTTP requests)
-            headers: HTTP headers (e.g., authentication)
+            base_url: API base URL
+            headers: HTTP headers
             timeout: Request timeout in seconds
-            ssh_host: SSH host for remote mode (used only for SSH commands)
-            ssh_user: SSH user for remote mode
-            ssh_port: SSH port for remote mode
+            backend_type: "ollama" or "llama_cpp"
+            ssh_host: SSH host for remote mode
+            ssh_user: SSH user
+            ssh_port: SSH port
             ssh_key: Path to SSH private key
 
         Returns:
-            BaseApiClient: Either LocalApiClient or RemoteApiClient
+            BaseApiClient: Appropriate client for the configured backend
         """
-        if ApiClientFactory.is_remote_config(ssh_host):
-            ssh_client = SSHClient(
-                host=ssh_host,
-                user=ssh_user,
-                port=ssh_port,
-                key_path=ssh_key
-            )
-            return RemoteApiClient(
-                base_url=base_url,
-                headers=headers,
-                timeout=timeout,
-                ssh_client=ssh_client
-            )
+        is_remote = ApiClientFactory.is_remote_config(ssh_host)
+
+        if backend_type == "llama_cpp":
+            if is_remote:
+                ssh_client = SSHClient(
+                    host=ssh_host,
+                    user=ssh_user,
+                    port=ssh_port,
+                    key_path=ssh_key,
+                )
+                return LlamaCppRemoteApiClient(
+                    base_url=base_url,
+                    headers=headers,
+                    timeout=timeout,
+                    ssh_client=ssh_client,
+                )
+            else:
+                return LlamaCppApiClient(
+                    base_url=base_url,
+                    headers=headers,
+                    timeout=timeout,
+                )
         else:
-            return LocalApiClient(
-                base_url=base_url,
-                headers=headers,
-                timeout=timeout
-            )
+            # Default: Ollama backend
+            if is_remote:
+                ssh_client = SSHClient(
+                    host=ssh_host,
+                    user=ssh_user,
+                    port=ssh_port,
+                    key_path=ssh_key,
+                )
+                return RemoteApiClient(
+                    base_url=base_url,
+                    headers=headers,
+                    timeout=timeout,
+                    ssh_client=ssh_client,
+                )
+            else:
+                return LocalApiClient(
+                    base_url=base_url,
+                    headers=headers,
+                    timeout=timeout,
+                )

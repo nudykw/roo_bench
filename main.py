@@ -81,6 +81,7 @@ def get_ollama_config(args: Namespace) -> OllamaConfig:
         'ollama_port': getattr(args, 'ollama_port', None),
         'ollama_api_key': getattr(args, 'ollama_api_key', None),
         'ollama_timeout': getattr(args, 'ollama_timeout', None),
+        'backend_type': getattr(args, 'backend', 'ollama'),
         'config': getattr(args, 'config', None)
     }
     return OllamaConfig(cli_config)

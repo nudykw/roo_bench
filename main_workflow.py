@@ -53,6 +53,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
         base_url=config.base_url,
         headers=config.get_headers(),
         timeout=config.timeout,
+        backend_type=config.backend_type,
         ssh_host=cast(Optional[str], getattr(args, 'ssh_host', None)),
         ssh_user=cast(Optional[str], getattr(args, 'ssh_user', None)),
         ssh_port=getattr(args, 'ssh_port', 22),
