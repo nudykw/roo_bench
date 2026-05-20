@@ -32,12 +32,12 @@ class BenchmarkRunner:
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
                  num_predict: int = 12000, independent_top: int | None = None,
-                 user_context_sizes: str | None = None):
+                 user_context_sizes: list[int] | None = None):
         """Initialize benchmark runner.
 
         Args:
             ollama_client: BaseApiClient instance (LocalApiClient or RemoteApiClient)
-            context_sizes: List of context sizes to test
+            context_sizes: List of default context sizes to test
             num_runs: Number of runs per configuration
             restart_method: Ollama restart method
             no_restart: If True, restart is not performed
@@ -46,7 +46,7 @@ class BenchmarkRunner:
             temperature_test_values: List of temperature values for testing (default: None)
             expert_evaluator: Optional ExpertEvaluator instance for response quality assessment
             num_predict: Maximum number of tokens to generate (default: 12000, use -1 for unlimited)
-            user_context_sizes: Raw string from --context-sizes CLI arg (None if not specified)
+            user_context_sizes: User-specified context sizes from --context-sizes CLI arg (None if not specified)
         """
         self.ollama_client = ollama_client
         self.context_sizes = context_sizes
@@ -83,8 +83,10 @@ class BenchmarkRunner:
         Returns:
             dict: Test parameters including context sizes, num runs, etc.
         """
+        # Use user_context_sizes if specified, otherwise fall back to default context_sizes
+        effective_context_sizes = self.user_context_sizes if self.user_context_sizes is not None else self.context_sizes
         return {
-            "context_sizes": self.context_sizes,
+            "context_sizes": effective_context_sizes,
             "num_runs": self.num_runs,
             "num_predict": self.num_predict,
             "temperature_test_values": self.temperature_test_values,
@@ -248,12 +250,12 @@ class BenchmarkRunner:
         Returns:
             list: Filtered list of valid context sizes
         """
-        MIN_CONTEXT = 32_768  # 32K minimum
+        MIN_CONTEXT = 32_768  # 32K minimum for default list only
 
         if self.user_context_sizes is not None:
             # User explicitly specified context sizes - only use those
-            # Check each one against model's max_ctx
-            valid_contexts = [c for c in self.user_context_sizes if MIN_CONTEXT <= c <= max_ctx]
+            # Check each one against model's max_ctx (no MIN_CONTEXT filter for user values)
+            valid_contexts = [c for c in self.user_context_sizes if 0 < c <= max_ctx]
             logger.info(f"[DIAGNOSIS] filter_contexts: user-specified sizes={self.user_context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
         else:
             # Default mode - use default list and add max_ctx if not already present
@@ -267,7 +269,6 @@ class BenchmarkRunner:
                 valid_contexts.sort()
 
             logger.info(f"[DIAGNOSIS] filter_contexts: default sizes={self.context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
-
         logger.info(f"[DIAGNOSIS] filter_contexts result: {valid_contexts}")
         return valid_contexts
 

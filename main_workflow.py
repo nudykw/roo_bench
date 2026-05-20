@@ -269,7 +269,9 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     # Display test parameters
     model_names = [m["name"] for m in test_models]
     test_params = benchmark_runner.get_test_params(model_names, expert_model_name)
-    test_params.update(run_config)
+    # Merge run_config excluding context_sizes to preserve user-specified values
+    run_config_copy = {k: v for k, v in run_config.items() if k != 'context_sizes'}
+    test_params.update(run_config_copy)
     print("\n" + "=" * 60)
     print(get_text("test_parameters_header", default="Test Parameters"))
     print("=" * 60)
