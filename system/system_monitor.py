@@ -183,6 +183,7 @@ class BaseMonitor(ABC):
         if not all_cpu_samples:
             return None
         
+        ram_total = self.stats_history[0].ram_total if self.stats_history and self.stats_history[0].ram_total else 0
         aggregated = {
             'cpu': {
                 'avg': sum(all_cpu_samples) / len(all_cpu_samples),
@@ -191,9 +192,9 @@ class BaseMonitor(ABC):
                 'samples_count': len(all_cpu_samples)
             },
             'ram': {
-                'avg_percent': sum(s / self.stats_history[0].ram_total * 100 for s in all_ram_samples) / len(all_ram_samples) if all_ram_samples else 0,
-                'min_percent': min(s / self.stats_history[0].ram_total * 100 for s in all_ram_samples) if all_ram_samples else 0,
-                'max_percent': max(s / self.stats_history[0].ram_total * 100 for s in all_ram_samples) if all_ram_samples else 0,
+                'avg_percent': sum(s / ram_total * 100 for s in all_ram_samples) / len(all_ram_samples) if all_ram_samples and ram_total else 0,
+                'min_percent': min(s / ram_total * 100 for s in all_ram_samples) if all_ram_samples and ram_total else 0,
+                'max_percent': max(s / ram_total * 100 for s in all_ram_samples) if all_ram_samples and ram_total else 0,
                 'samples_count': len(all_ram_samples)
             }
         }
