@@ -13,7 +13,8 @@ from export.merge_utils import (
     run_configs_match,
     save_results_file,
 )
-from main import _build_mode_recommendations, build_used_prompts_config
+from main_helpers import build_used_prompts_config
+from main_recommendations import _build_mode_recommendations
 
 
 class FakePromptLoader:
