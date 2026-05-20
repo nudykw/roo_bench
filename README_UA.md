@@ -238,6 +238,68 @@ Architect → Code → Debug
 }
 ```
 
+**Підтримка Markdown форматів:**
+
+Roo Bench підтримує Markdown формат для файлів промтів. Markdown файли зручніші для читання та редагування порівняно з JSONC.
+
+**Генерація Markdown файлів:**
+
+```bash
+# Згенерувати Markdown файли з JSONC конфігурації
+./venv/bin/python roo_bench.py --generate-md
+```
+
+Ця команда створить:
+- `prompts/prompts.md` — з `prompts.jsonc`
+- `prompts/analysis_prompt.md` — з `prompts/analysis_prompt.jsonc`
+
+**Пріоритет завантаження:**
+
+Система використовує наступний пріоритет при пошуку промтів:
+1. Кастомний файл (якщо вказано через `--prompts-file`)
+2. `.md` файл (якщо існує)
+3. `.jsonc` файл (якщо `.md` не знайдено)
+
+```bash
+# Використовувіть .md файл автоматично (якщо існує)
+./venv/bin/python roo_bench.py --prompts-file prompts/prompts.md
+
+# Або вкажіть шлях явно
+./venv/bin/python roo_bench.py --prompts-file custom_prompts.md
+
+# Використовувати кастомний файл аналізу
+./venv/bin/python roo_bench.py --analysis-prompt-file custom_analysis.md
+```
+
+**Редагування Markdown файлів:**
+
+Markdown файли мають наступну структуру:
+
+```markdown
+# independent
+
+## arch_cache_system
+**Name:** Cache System Design
+**Description:** Design a thread-safe caching system
+**Prompt:** Design a thread-safe caching system...
+
+## code_thread_pool
+**Name:** Thread Pool Implementation
+**Prompt:** Implement a thread pool...
+```
+
+Для промт-цепочок:
+
+```markdown
+## chain_rest_api
+**Name:** REST API Server
+**Description:** Full cycle: design -> implementation -> debugging
+
+- **architect:** Design a REST API...
+- **code:** Implement the REST API...
+- **debug:** Debug the REST API...
+```
+
 ### AI аналіз після бенчмарку
 
 Після завершення бенчмарку, якщо ви не вказали `--output`, Roo Bench запропонує вам:
@@ -374,7 +436,9 @@ Roo Bench автоматично кешує можливості моделей 
 | `--independent-top N` | Обмежити кількість незалежних промтів на режим (напр., `--independent-top 1` запускає лише перший промт на режим) | `None` |
 | `--chain CHAIN_ID` | Запуск тільки вказаної промт-цепочки (напр., `chain_rest_api`) | None |
 | `--chains` | Запустити всі промт-цепочки (повні цикли тестування) | False |
-| `--prompts-file FILE` | Шлях до файлу конфігурації промтів | `prompts.jsonc` |
+| `--prompts-file FILE` | Шлях до файлу конфігурації промтів (.md або .jsonc) | `prompts.jsonc` |
+| `--generate-md` | Згенерувати Markdown-файли промтів з JSONC-конфігурації | False |
+| `--analysis-prompt-file FILE` | Шлях до файлу промтів аналізу (.md або .jsonc) | None |
 | `--num-predict` | Максимальна кількість токенів для генерації (використовуйте -1 для необмежено) | `12000` |
 | `--temperature` | Значення температури для тестування (через кому, наприклад, `0.0,0.7,1.0`) | `0.0,0.66,1.0` |
 
@@ -491,9 +555,10 @@ usage: main.py [-h] [-v] [--models MODELS] [--capabilities CAPABILITIES]
                [--ollama-port OLLAMA_PORT] [--ollama-api-key OLLAMA_API_KEY]
                [--ollama-timeout OLLAMA_TIMEOUT] [--config CONFIG]
                [--update-cache] [--no-interactive] [--analyze-file FILE]
-               [--analysis-model ANALYSIS_MODEL] [--no-stream] [--no-thinking]
-               [--thinking] [--independent] [--chains] [--chain CHAIN_ID]
-               [--prompts-file FILE] [--list-chains] [--list-independent]
+               [--analysis-model ANALYSIS_MODEL] [--analysis-prompt-file FILE]
+               [--no-stream] [--no-thinking] [--thinking] [--independent]
+               [--chains] [--chain CHAIN_ID] [--prompts-file FILE]
+               [--generate-md] [--list-chains] [--list-independent]
                [--independent-top N] [--num-predict NUM_PREDICT]
                [--temperature TEMPERATURE]
 
@@ -538,6 +603,8 @@ options:
   --analysis-model ANALYSIS_MODEL
                         Model name to use for analysis (used with --analyze-
                         file)
+  --analysis-prompt-file FILE
+                        Path to analysis prompts file (.md or .jsonc)
   --no-stream           Disable streaming mode for AI analysis output
                         (default: enabled)
   --no-thinking         Disable thinking mode on all models to prevent
@@ -547,7 +614,8 @@ options:
   --chains              Run all prompt chains (full lifecycle tests)
   --chain CHAIN_ID      Run only the specified prompt chain (e.g.,
                         chain_rest_api)
-  --prompts-file FILE   Path to prompts.jsonc configuration file
+  --prompts-file FILE   Path to prompts configuration file (.md or .jsonc)
+  --generate-md         Generate Markdown prompt files from JSONC configuration
   --list-chains         List available prompt chains and exit
   --list-independent    List available independent prompts and exit
   --independent-top N   Limit the number of independent prompts per mode
@@ -606,8 +674,13 @@ roo_bench/
 │
 ├── prompts/
 │   ├── __init__.py
-│   ├── loader.py              # Загрузчик JSONC промтів
-│   └── prompts.jsonc          # Конфігурація промтів (формат JSONC)
+│   ├── loader.py              # Загрузчик промтів (.md або .jsonc)
+│   ├── analysis_prompt_loader.py # Загрузчик промтів аналізу
+│   ├── generate_md.py         # Генератор Markdown з JSONC
+│   ├── prompts.md             # Markdown конфігурація промтів
+│   ├── prompts.jsonc          # Конфігурація промтів (формат JSONC, fallback)
+│   ├── analysis_prompt.md     # Markdown конфігурація аналізу
+│   └── analysis_prompt.jsonc  # Конфігурація аналізу (формат JSONC, fallback)
 │
 └── data/
     └── capabilities_cache.json # Кеш можливостей моделей
@@ -640,7 +713,9 @@ graph TD
     config --> i18n
     constants --> i18n
     
-    loader --> jsonc[JSONC parsing]
+    loader --> md_or_jsonc[Markdown/JSONC parsing]
+    analysis_prompt_loader[export/ai_analyzer.py] --> analysis_loader[prompts/analysis_prompt_loader.py]
+    expert_evaluator[benchmark/expert_evaluator.py] --> analysis_loader
 ```
 
 **Основні принципи дизайну:**
@@ -660,6 +735,22 @@ graph TD
 **1. Незалежні промти:** Кожен промт запускається окремо без контексту з інших режимів. Ідеально для тестування конкретних можливостей.
 
 **2. Промт-цепочки:** Повний цикл тестування з передачею контексту між режимами (Architect → Code → Debug). Кожен режим отримує контекст від попереднього режиму.
+
+**Формати файлів промтів:**
+
+Система підтримує два формати файлів промтів:
+
+- **Markdown (.md)** — пріоритетний формат, зручний для читання та редагування
+- **JSONC (.jsonc)** — формат з коментарями, використовується як fallback
+
+Якщо обидва формати існують, система автоматично використовує `.md` файл.
+
+**Генерація Markdown файлів:**
+
+```bash
+# Згенерувати Markdown файли з JSONC конфігурації
+./venv/bin/python roo_bench.py --generate-md
+```
 
 **Передача контексту в промт-цепочці:**
 

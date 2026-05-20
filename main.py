@@ -5,7 +5,6 @@ import os
 import signal
 import sys
 from argparse import Namespace
-from typing import Any
 
 from cli import parse_args
 from config import OllamaConfig
@@ -112,7 +111,8 @@ def _post_benchmark_workflow(results_file, all_results, args, base_url) -> None:
 
     if prompt_user(get_text("ask_ai_analysis")):
         try:
-            analyzer = AIAnalyzer(base_url=base_url)
+            analysis_prompt_file = getattr(args, 'analysis_prompt_file', None)
+            analyzer = AIAnalyzer(base_url=base_url, analysis_prompt_file=analysis_prompt_file)
             analyze_results_interactive(
                 analyzer, all_results,
                 getattr(args, 'language', 'en'),
@@ -128,6 +128,12 @@ def _main_impl() -> None:
     from cli import setup_logging
 
     args = parse_args()
+
+    # Handle --generate-md flag
+    if getattr(args, 'generate_md', False):
+        from prompts.generate_md import generate_all_markdown
+        success = generate_all_markdown()
+        sys.exit(0 if success else 1)
 
     # Setup logging
     setup_logging(getattr(args, 'verbose', 0))

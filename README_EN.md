@@ -211,12 +211,48 @@ Architect → Code → Debug
 ./venv/bin/python roo_bench.py --chains
 
 # Run with custom prompts file
-./venv/bin/python roo_bench.py --prompts-file custom_prompts.jsonc
+./venv/bin/python roo_bench.py --prompts-file custom_prompts.md
+
+# Generate Markdown prompt files from JSONC
+./venv/bin/python roo_bench.py --generate-md
 ```
 
 **Prompt Configuration:**
 
-Prompts are stored in `prompts.jsonc` (JSONC format with comment support):
+Prompts support two formats with automatic detection:
+
+1. **Markdown format** (recommended, `prompts/prompts.md`):
+   - Human-readable and editable
+   - Generated from JSONC with `--generate-md`
+
+2. **JSONC format** (`prompts.jsonc`, fallback):
+   - JSON with comments support
+
+**Priority:** `.md` files > `.jsonc` fallback
+
+```jsonc
+{
+  // Independent prompts for each mode
+  "independent": {
+    "architect": [...],
+    "code": [...],
+    "debug": [...]
+  },
+  // Prompt chains with context flow
+  "chains": [
+    {
+      "id": "chain_rest_api",
+      "name": "REST API Server",
+      "description": "Full lifecycle: design -> implement -> debug",
+      "prompts": {
+        "architect": {...},
+        "code": {...},
+        "debug": {...}
+      }
+    }
+  ]
+}
+```
 
 ```jsonc
 {
@@ -378,7 +414,9 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--independent-top N` | Limit the number of independent prompts per mode (e.g., `--independent-top 1` runs only the first prompt per mode) | `None` |
 | `--chain CHAIN_ID` | Run only the specified prompt chain (e.g., `chain_rest_api`) | None |
 | `--chains` | Run all prompt chains (full lifecycle tests) | False |
-| `--prompts-file FILE` | Path to prompts.jsonc configuration file | `prompts.jsonc` |
+| `--prompts-file FILE` | Path to prompts configuration file (.md or .jsonc) | `prompts/prompts.md` |
+| `--analysis-prompt-file FILE` | Path to analysis prompts file (.md or .jsonc) | Auto-detected |
+| `--generate-md` | Generate Markdown prompt files from JSONC configuration files | False |
 | `--num-predict` | Maximum tokens to generate per request (use -1 for unlimited) | `12000` |
 | `--temperature` | Temperature values to test (comma-separated, e.g., `0.0,0.7,1.0`) | `0.0,0.66,1.0` |
 

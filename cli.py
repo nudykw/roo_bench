@@ -3,7 +3,6 @@
 import argparse
 import logging
 from argparse import Namespace
-from typing import Any
 
 from constants import CONTEXT_SIZES
 from i18n import _current_language, get_available_languages, get_text
@@ -128,6 +127,10 @@ def parse_args() -> Namespace:
                         help=get_text("cli_list_independent"))
     parser.add_argument('--independent-top', type=int, default=None, metavar='N',
                         help=get_text("cli_independent_top"))
+    parser.add_argument('--generate-md', action='store_true',
+                        help=get_text("cli_generate_md"))
+    parser.add_argument('--analysis-prompt-file', type=str, default=None, metavar='FILE',
+                        help=get_text("cli_analysis_prompt_file"))
     parser.add_argument('--num-predict', type=int, default=12000,
                         help=get_text("cli_num_predict"))
     parser.add_argument('--temperature', type=str, default=None,

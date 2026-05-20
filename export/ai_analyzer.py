@@ -2,12 +2,11 @@
 
 import json
 import logging
-import os
-import re
 from typing import Any, cast
 
 from benchmark.result import BenchmarkResult
 from i18n import get_text
+from prompts.analysis_prompt_loader import AnalysisPromptLoader
 from ui.markdown_renderer import display_markdown
 
 logger = logging.getLogger(__name__)
@@ -16,22 +15,29 @@ logger = logging.getLogger(__name__)
 class AIAnalyzer:
     """Handles AI analysis of benchmark results via Ollama."""
 
-    def __init__(self, base_url: str, headers: dict[str, Any] | None = None, timeout: int = 300):
-        """Initialize AIAnalyzer with Ollama connection details."""
+    def __init__(self, base_url: str, headers: dict[str, Any] | None = None, timeout: int = 300,
+                 analysis_prompt_file: str | None = None):
+        """Initialize AIAnalyzer with Ollama connection details.
+        
+        Args:
+            base_url: Ollama API base URL.
+            headers: Optional headers for API requests.
+            timeout: Request timeout in seconds.
+            analysis_prompt_file: Optional path to analysis prompts file.
+                                 If None, uses default .md or .jsonc.
+        """
         self.base_url = base_url
         self.headers = headers or {}
         self.timeout = timeout
+        self._prompt_loader = AnalysisPromptLoader(analysis_prompt_file)
         self.prompts = self._load_prompts()
+        logger.info("[AIAnalyzer] Loaded analysis prompts from: %s", self._prompt_loader.file_path)
 
     def _load_prompts(self) -> dict[str, Any]:
-        """Load prompt templates from prompts/analysis_prompt.jsonc."""
-        prompts_file = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'analysis_prompt.jsonc')
+        """Load prompt templates from AnalysisPromptLoader."""
         try:
-            with open(prompts_file, encoding='utf-8') as f:
-                content = f.read()
-                # Remove comments (// style)
-                content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
-                return cast(dict[str, Any], json.loads(content))
+            data = self._prompt_loader.data
+            return data
         except Exception as e:
             logger.warning("Could not load prompts file: %s", e)
             return self._get_fallback_prompts()

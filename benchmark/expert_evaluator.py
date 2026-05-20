@@ -2,11 +2,11 @@
 
 import logging
 
-import json5
 import requests
 
 from api.base_client import BaseApiClient
 from benchmark.expert_evaluator_types import ExpertEvaluationEntry
+from prompts.analysis_prompt_loader import AnalysisPromptLoader
 
 logger = logging.getLogger('roo_bench.benchmark')
 
@@ -14,27 +14,31 @@ logger = logging.getLogger('roo_bench.benchmark')
 class ExpertEvaluator:
     """Evaluates benchmark responses using an expert LLM model."""
 
-    def __init__(self, ollama_client: BaseApiClient, expert_model_name: str):
+    def __init__(self, ollama_client: BaseApiClient, expert_model_name: str,
+                 analysis_prompt_file: str | None = None):
         """Initialize expert evaluator.
 
         Args:
             ollama_client: API client for Ollama communication.
             expert_model_name: Name of the expert model to use.
+            analysis_prompt_file: Optional path to analysis prompts file.
+                                 If None, uses default .md or .jsonc.
         """
         self.ollama_client = ollama_client
         self.expert_model_name = expert_model_name
+        self._prompt_loader = AnalysisPromptLoader(analysis_prompt_file)
         self.prompts = self._load_prompts()
+        logger.info("[Expert] Loaded analysis prompts from: %s", self._prompt_loader.file_path)
 
     def _load_prompts(self) -> dict:
-        """Load expert evaluation prompts from JSON5 file.
+        """Load expert evaluation prompts from AnalysisPromptLoader.
 
         Returns:
             Dict with prompt templates. Returns defaults if file not found.
         """
         try:
-            with open('prompts/analysis_prompt.jsonc', encoding='utf-8') as f:
-                data = json5.load(f)
-            logger.debug("[Expert] Prompts loaded from analysis_prompt.jsonc, keys: %s", list(data.keys()))
+            data = self._prompt_loader.data
+            logger.debug("[Expert] Prompts loaded, keys: %s", list(data.keys()))
             return data
         except FileNotFoundError:
             logger.warning("Prompts file not found, using default templates")
@@ -42,17 +46,6 @@ class ExpertEvaluator:
         except Exception as e:
             logger.warning(f"Error loading prompts: {e}, using defaults")
             return self._default_prompts()
-
-    def _default_prompts(self) -> dict:
-        """Return default evaluation prompts if file loading fails."""
-        return {
-            'expert': {
-                'system_prompt': 'You are an expert LLM evaluator. Assess quality 0-100.',
-                'architect_eval': 'Evaluate this response on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):',
-                'code_eval': 'Evaluate this code on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):',
-                'debug_eval': 'Evaluate this debug response on 0-100 scale.\nResponse:\n{response}\n\nScore (0-100 only):'
-            }
-        }
 
     def evaluate_batch(self, entries: list[ExpertEvaluationEntry]) -> None:
         """Evaluate all responses in batch mode and assign scores directly.

@@ -42,7 +42,6 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     from api.factory import ApiClientFactory
     from cli import get_context_sizes, get_temperature_test_values
     from main import validate_expert_prompts
-    from main_helpers import _prompt_existing_results_action
     from ui.curses_selector import interactive_model_select, select_expert_model
     from ui.output_formatter import print_model_list, print_results_table
 
@@ -206,7 +205,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
                 )
                 if expert_model_name:
                     from benchmark.expert_evaluator import ExpertEvaluator
-                    expert_evaluator = ExpertEvaluator(ollama_client, expert_model_name)
+                    analysis_prompt_file = getattr(args, 'analysis_prompt_file', None)
+                    expert_evaluator = ExpertEvaluator(ollama_client, expert_model_name, analysis_prompt_file)
                     print(f"✅ Expert evaluator initialized with model: {expert_model_name}")
                     logger.info("[Expert] ExpertEvaluator created successfully")
                 else:
@@ -282,19 +282,15 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     all_results: list[BenchmarkResult] = []
     decision_state: dict[str, bool] = {}
 
-    should_save_results = False
     if args.output:
         results_file = args.output
-        should_save_results = True
     else:
         enable_save = input(f"{get_text('ask_save_results')} (y/n): ").strip().lower()
         if enable_save in ['y', 'yes']:
             from main import prompt_output_filename
             results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)
-            should_save_results = True
         else:
             results_file = None
-            should_save_results = False
 
     if getattr(args, 'output_format', None) == 'csv':
         save_mode = SAVE_MODE_DISABLED
