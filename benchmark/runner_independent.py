@@ -138,6 +138,24 @@ def run_independent_prompts(
                     else:
                         std_dev = 0.0
 
+                    # Print resource statistics if available
+                    if resource_stats:
+                        if 'cpu' in resource_stats:
+                            cpu = resource_stats['cpu']
+                            print(f"            CPU: {cpu.get('avg', 0):.1f}% (min: {cpu.get('min', 0):.1f}%, max: {cpu.get('max', 0):.1f}%)")
+                        if 'ram' in resource_stats:
+                            ram = resource_stats['ram']
+                            print(f"            RAM: {ram.get('avg_percent', 0):.1f}% (min: {ram.get('min_percent', 0):.1f}%, max: {ram.get('max_percent', 0):.1f}%)")
+                        if 'vram' in resource_stats:
+                            vram_data = resource_stats['vram']
+                            if vram_data.get('total', 0) > 0:
+                                print(f"            VRAM: {vram_data.get('percent_current', 0):.1f}% (avg: {vram_data.get('avg_percent', 0):.1f}%, max: {vram_data.get('max_percent', 0):.1f}%) — {vram_data.get('used_current', 0) / 1024 / 1024:.1f} MiB / {vram_data.get('total', 0) / 1024 / 1024:.1f} MiB")
+                            else:
+                                print(f"            VRAM: {vram_data.get('percent_current', 0):.1f}% (avg: {vram_data.get('avg_percent', 0):.1f}%, max: {vram_data.get('max_percent', 0):.1f}%)")
+                        if 'gpu' in resource_stats:
+                            gpu = resource_stats['gpu']
+                            print(f"            GPU: {gpu.get('avg', 0):.1f}% (min: {gpu.get('min', 0):.1f}%, max: {gpu.get('max', 0):.1f}%)")
+
                     # Create BenchmarkMetrics instance
                     response = tps_list[0]['response'] if tps_list and tps_list[0].get('response') else None
                     metrics = BenchmarkMetrics(

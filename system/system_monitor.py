@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger('roo_bench.system_monitor')
 
@@ -63,21 +63,27 @@ class SystemStats:
                 'used_current': self.ram_used,
                 'total': self.ram_total,
                 'percent_current': self.ram_percent,
-                'avg_percent': sum(s / self.ram_total * 100 for s in self.ram_samples) / len(self.ram_samples) if self.ram_samples else 0,
-                'min_percent': min(s / self.ram_total * 100 for s in self.ram_samples) if self.ram_samples else 0,
-                'max_percent': max(s / self.ram_total * 100 for s in self.ram_samples) if self.ram_samples else 0,
+                'avg_percent': (sum(s / self.ram_total * 100 for s in self.ram_samples) / len(self.ram_samples)
+                               if self.ram_samples and self.ram_total else 0),
+                'min_percent': (min(s / self.ram_total * 100 for s in self.ram_samples)
+                                if self.ram_samples and self.ram_total else 0),
+                'max_percent': (max(s / self.ram_total * 100 for s in self.ram_samples)
+                                if self.ram_samples and self.ram_total else 0),
                 'samples_count': len(self.ram_samples)
             }
         }
         
-        if self.vram_used is not None and self.vram_total is not None:
+        if self.vram_used is not None and self.vram_total is not None and self.vram_total > 0:
             vram_stats: dict[str, Any] = {
                 'used_current': self.vram_used,
                 'total': self.vram_total,
                 'percent_current': self.vram_percent if self.vram_percent is not None else 0.0,
-                'avg_percent': sum(s / self.vram_total * 100 for s in self.vram_samples) / len(self.vram_samples) if self.vram_samples else 0,
-                'min_percent': min(s / self.vram_total * 100 for s in self.vram_samples) if self.vram_samples else 0,
-                'max_percent': max(s / self.vram_total * 100 for s in self.vram_samples) if self.vram_samples else 0,
+                'avg_percent': (sum(s / self.vram_total * 100 for s in self.vram_samples) / len(self.vram_samples)
+                                if self.vram_samples else 0),
+                'min_percent': (min(s / self.vram_total * 100 for s in self.vram_samples)
+                                if self.vram_samples else 0),
+                'max_percent': (max(s / self.vram_total * 100 for s in self.vram_samples)
+                                if self.vram_samples else 0),
                 'samples_count': len(self.vram_samples)
             }
             stats['vram'] = vram_stats
@@ -167,7 +173,8 @@ class BaseMonitor(ABC):
     def get_aggregated_stats(self) -> dict[str, Any] | None:
         """Получить агрегированную статистику по всем собранным метрикам."""
         if not self.stats_history:
-            return None
+            # Return empty stats dict instead of None so caller knows monitoring was active
+            return {}
         
         # Агрегация по всем метрикам
         all_cpu_samples = []
@@ -180,34 +187,51 @@ class BaseMonitor(ABC):
             if stats.vram_samples:
                 all_vram_samples.extend(stats.vram_samples)
         
-        if not all_cpu_samples:
-            return None
-        
         ram_total = self.stats_history[0].ram_total if self.stats_history and self.stats_history[0].ram_total else 0
-        aggregated = {
-            'cpu': {
+        vram_total = self.stats_history[0].vram_total if self.stats_history and self.stats_history[0].vram_total else 0
+        
+        # Only return non-empty stats
+        has_data = bool(all_cpu_samples) or bool(all_ram_samples) or bool(all_vram_samples)
+        if not has_data:
+            return {}
+        
+        aggregated: dict[str, Any] = {}
+        
+        if all_cpu_samples:
+            aggregated['cpu'] = {
                 'avg': sum(all_cpu_samples) / len(all_cpu_samples),
                 'min': min(all_cpu_samples),
                 'max': max(all_cpu_samples),
                 'samples_count': len(all_cpu_samples)
-            },
-            'ram': {
-                'avg_percent': sum(s / ram_total * 100 for s in all_ram_samples) / len(all_ram_samples) if all_ram_samples and ram_total else 0,
-                'min_percent': min(s / ram_total * 100 for s in all_ram_samples) if all_ram_samples and ram_total else 0,
-                'max_percent': max(s / ram_total * 100 for s in all_ram_samples) if all_ram_samples and ram_total else 0,
+            }
+        
+        if all_ram_samples and ram_total:
+            aggregated['ram'] = {
+                'avg_percent': sum(s / ram_total * 100 for s in all_ram_samples) / len(all_ram_samples),
+                'min_percent': min(s / ram_total * 100 for s in all_ram_samples),
+                'max_percent': max(s / ram_total * 100 for s in all_ram_samples),
                 'samples_count': len(all_ram_samples)
             }
-        }
+        elif all_ram_samples:
+            aggregated['ram'] = {
+                'avg_percent': 0,
+                'min_percent': 0,
+                'max_percent': 0,
+                'samples_count': len(all_ram_samples)
+            }
         
-        if all_vram_samples and self.stats_history[0].vram_total:
+        if all_vram_samples and vram_total:
             aggregated['vram'] = {
-                'avg_percent': sum(s / self.stats_history[0].vram_total * 100 for s in all_vram_samples) / len(all_vram_samples),
-                'min_percent': min(s / self.stats_history[0].vram_total * 100 for s in all_vram_samples),
-                'max_percent': max(s / self.stats_history[0].vram_total * 100 for s in all_vram_samples),
+                'used_current': all_vram_samples[-1],
+                'total': vram_total,
+                'percent_current': all_vram_samples[-1] / vram_total * 100,
+                'avg_percent': sum(s / vram_total * 100 for s in all_vram_samples) / len(all_vram_samples),
+                'min_percent': min(s / vram_total * 100 for s in all_vram_samples),
+                'max_percent': max(s / vram_total * 100 for s in all_vram_samples),
                 'samples_count': len(all_vram_samples)
             }
         
-        return aggregated
+        return aggregated if aggregated else {}
     
     def get_stats_history(self) -> list[SystemStats]:
         """Получить историю собранных метрик."""

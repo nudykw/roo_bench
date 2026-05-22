@@ -79,6 +79,8 @@ class BaseApiClientGenerate:
         # Start resource monitoring if available
         if resource_monitor:
             resource_monitor.start_monitoring()
+            # Wait for at least one sample to be collected before starting generation
+            time.sleep(0.6)
         
         try:
             for run_num in range(num_runs):

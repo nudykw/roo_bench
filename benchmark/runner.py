@@ -196,37 +196,98 @@ class BenchmarkRunner:
             model_name: Name of the model being tested.
         """
         from system.system_monitor import ResourceMonitor
-
-        # Get VRAM stats
-        vram_stats = get_vram_stats(samples=5, interval=0.2)
-
-        # Get CPU/RAM stats
-        resource_monitor = ResourceMonitor('local', 0.2)
-        resource_monitor.start_monitoring(duration=0.5)
         import time
-        time.sleep(0.6)
-        resource_monitor.stop_monitoring()
-        resource_stats = resource_monitor.get_aggregated_stats()
 
         print(f"\n   📊 System Resource Statistics for {model_name}:")
 
-        # CPU stats
-        if resource_stats and 'cpu' in resource_stats:
-            cpu = resource_stats['cpu']
-            print(f"      CPU: {cpu.get('avg', 0):.1f}% (min: {cpu.get('min', 0):.1f}%, max: {cpu.get('max', 0):.1f}%)")
+        # Check if we're connected to a remote server via SSH
+        if self.ssh_client and self.ssh_client.is_configured:
+            # Use SSH monitoring for remote server
+            # Get VRAM total once
+            vram_total_bytes = None
+            vram_samples = []
 
-        # RAM stats
-        if resource_stats and 'ram' in resource_stats:
-            ram = resource_stats['ram']
-            print(f"      RAM: {ram.get('avg_percent', 0):.1f}% (min: {ram.get('min_percent', 0):.1f}%, max: {ram.get('max_percent', 0):.1f}%)")
+            try:
+                result = self.ssh_client.execute(
+                    "nvidia-smi --query-gpu=memory.total --format=csv,nounits,noheader",
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    vram_total_bytes = int(result.stdout.strip()) * 1024 * 1024
+            except Exception:
+                pass
 
-        # VRAM stats
-        if vram_stats:
-            print(f"      VRAM: {vram_stats['avg'] / 1024 / 1024:.1f} MiB (min: {vram_stats['min'] / 1024 / 1024:.1f} MiB, max: {vram_stats['max'] / 1024 / 1024:.1f} MiB)")
-            if vram_stats['total']:
-                print(f"      VRAM Total: {vram_stats['total'] / 1024 / 1024:.1f} MiB")
+            # Collect VRAM samples via SSH
+            for _ in range(5):
+                try:
+                    result = self.ssh_client.execute(
+                        "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader",
+                        timeout=5,
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        lines = result.stdout.strip().split("\n")
+                        v = int(lines[0].strip()) * 1024 * 1024
+                        vram_samples.append(v)
+                except Exception:
+                    pass
+                time.sleep(0.2)
+
+            # Get CPU/RAM stats via SSH
+            resource_monitor = ResourceMonitor('remote', 0.2, self.ssh_client)
+            resource_monitor.start_monitoring(duration=0.5)
+            time.sleep(0.6)
+            resource_monitor.stop_monitoring()
+            resource_stats = resource_monitor.get_aggregated_stats()
+
+            # CPU stats
+            if resource_stats and 'cpu' in resource_stats:
+                cpu = resource_stats['cpu']
+                print(f"      CPU: {cpu.get('avg', 0):.1f}% (min: {cpu.get('min', 0):.1f}%, max: {cpu.get('max', 0):.1f}%)")
+
+            # RAM stats
+            if resource_stats and 'ram' in resource_stats:
+                ram = resource_stats['ram']
+                print(f"      RAM: {ram.get('avg_percent', 0):.1f}% (min: {ram.get('min_percent', 0):.1f}%, max: {ram.get('max_percent', 0):.1f}%)")
+
+            # VRAM stats
+            if vram_samples:
+                avg_vram = sum(vram_samples) / len(vram_samples)
+                min_vram = min(vram_samples)
+                max_vram = max(vram_samples)
+                print(f"      VRAM: {avg_vram / 1024 / 1024:.1f} MiB (min: {min_vram / 1024 / 1024:.1f} MiB, max: {max_vram / 1024 / 1024:.1f} MiB)")
+                if vram_total_bytes:
+                    print(f"      VRAM Total: {vram_total_bytes / 1024 / 1024:.1f} MiB")
+            else:
+                print("      VRAM: N/A (GPU not available)")
         else:
-            print("      VRAM: N/A (GPU not available)")
+            # Use local monitoring
+            # Get VRAM stats
+            vram_stats = get_vram_stats(samples=5, interval=0.2)
+
+            # Get CPU/RAM stats
+            resource_monitor = ResourceMonitor('local', 0.2)
+            resource_monitor.start_monitoring(duration=0.5)
+            time.sleep(0.6)
+            resource_monitor.stop_monitoring()
+            resource_stats = resource_monitor.get_aggregated_stats()
+
+            # CPU stats
+            if resource_stats and 'cpu' in resource_stats:
+                cpu = resource_stats['cpu']
+                print(f"      CPU: {cpu.get('avg', 0):.1f}% (min: {cpu.get('min', 0):.1f}%, max: {cpu.get('max', 0):.1f}%)")
+
+            # RAM stats
+            if resource_stats and 'ram' in resource_stats:
+                ram = resource_stats['ram']
+                print(f"      RAM: {ram.get('avg_percent', 0):.1f}% (min: {ram.get('min_percent', 0):.1f}%, max: {ram.get('max_percent', 0):.1f}%)")
+
+            # VRAM stats
+            if vram_stats:
+                print(f"      VRAM: {vram_stats['avg'] / 1024 / 1024:.1f} MiB (min: {vram_stats['min'] / 1024 / 1024:.1f} MiB, max: {vram_stats['max'] / 1024 / 1024:.1f} MiB)")
+                if vram_stats['total']:
+                    print(f"      VRAM Total: {vram_stats['total'] / 1024 / 1024:.1f} MiB")
+            else:
+                print("      VRAM: N/A (GPU not available)")
 
     def _store_response(self, entry: ExpertEvaluationEntry) -> None:
         """Store response for later expert evaluation.
