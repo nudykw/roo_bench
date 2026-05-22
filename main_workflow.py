@@ -336,8 +336,14 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
             benchmark_runner._unload_tested_model(model_info.name)
             raise
 
-    # Run based on mode
-    if args.independent:
+    # Validation: --chain and --all are incompatible
+    if getattr(args, 'chain', None) and getattr(args, 'all', False):
+        print(get_text("error_chain_all_conflict"))
+        return
+
+    # Helper function to run tests for all models
+    def _run_tests_for_models(runner_method, *method_args):
+        """Run tests for all models with the given runner method."""
         for i, m in enumerate(test_models):
             from main_helpers import _check_model_retest
             should_test, should_stop = _check_model_retest(
@@ -349,48 +355,27 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
                 continue
             model_info = make_model_info(m)
             benchmark_result, error = run_model_benchmark(
-                model_info, benchmark_runner.run_all_independent_prompts
+                model_info, runner_method, *method_args
             )
             handle_completed_result(benchmark_result)
             if error:
                 continue
+
+    # Run based on mode
+    if args.all:
+        # Run independent tests first
+        _run_tests_for_models(benchmark_runner.run_all_independent_prompts)
+        # Then run all chains
+        _run_tests_for_models(benchmark_runner.run_all_chains)
+
+    elif args.independent:
+        _run_tests_for_models(benchmark_runner.run_all_independent_prompts)
 
     elif args.chains:
-        for i, m in enumerate(test_models):
-            from main_helpers import _check_model_retest
-            should_test, should_stop = _check_model_retest(
-                m['name'], i, len(test_models), results_file, decision_state
-            )
-            if should_stop:
-                break
-            if not should_test:
-                continue
-            model_info = make_model_info(m)
-            benchmark_result, error = run_model_benchmark(
-                model_info, benchmark_runner.run_all_chains
-            )
-            handle_completed_result(benchmark_result)
-            if error:
-                continue
+        _run_tests_for_models(benchmark_runner.run_all_chains)
 
     elif args.chain:
-        chain = selected_chain
-        for i, m in enumerate(test_models):
-            from main_helpers import _check_model_retest
-            should_test, should_stop = _check_model_retest(
-                m['name'], i, len(test_models), results_file, decision_state
-            )
-            if should_stop:
-                break
-            if not should_test:
-                continue
-            model_info = make_model_info(m)
-            benchmark_result, error = run_model_benchmark(
-                model_info, benchmark_runner.run_chain, chain
-            )
-            handle_completed_result(benchmark_result)
-            if error:
-                continue
+        _run_tests_for_models(benchmark_runner.run_chain, selected_chain)
 
     else:
         if prompt_loader and prompt_loader.data.get('independent'):

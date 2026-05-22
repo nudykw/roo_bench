@@ -151,6 +151,8 @@ chmod +x roo_bench.py
 ./venv/bin/python roo_bench.py --list-chains       # Список промт-цепочок
 ./venv/bin/python roo_bench.py --independent       # Тільки незалежні промти
 ./venv/bin/python roo_bench.py --independent --independent-top 1  # Тільки перший промт на режим
+./venv/bin/python roo_bench.py --chains            # Запустити всі промт-цепочки
+./venv/bin/python roo_bench.py --all               # Запустити всі тести (незалежні + цепочки)
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Конкретна цепочка
 
 # Контроль довжини генерації (токени)
@@ -205,6 +207,9 @@ Architect → Code → Debug
 
 # Запуск всіх промт-цепочок
 ./venv/bin/python roo_bench.py --chains
+
+# Запуск всіх тестів (незалежні промти + цепочки)
+./venv/bin/python roo_bench.py --all
 
 # Запуск з кастомним файлом промтів
 ./venv/bin/python roo_bench.py --prompts-file custom_prompts.jsonc
@@ -436,6 +441,7 @@ Roo Bench автоматично кешує можливості моделей 
 | `--independent-top N` | Обмежити кількість незалежних промтів на режим (напр., `--independent-top 1` запускає лише перший промт на режим) | `None` |
 | `--chain CHAIN_ID` | Запуск тільки вказаної промт-цепочки (напр., `chain_rest_api`) | None |
 | `--chains` | Запустити всі промт-цепочки (повні цикли тестування) | False |
+| `--all` | Запустити всі тести (незалежні промти + цепочки) за один запуск | False |
 | `--prompts-file FILE` | Шлях до файлу конфігурації промтів (.md або .jsonc) | `prompts.jsonc` |
 | `--generate-md` | Згенерувати Markdown-файли промтів з JSONC-конфігурації | False |
 | `--analysis-prompt-file FILE` | Шлях до файлу промтів аналізу (.md або .jsonc) | None |
@@ -614,6 +620,8 @@ options:
   --chains              Run all prompt chains (full lifecycle tests)
   --chain CHAIN_ID      Run only the specified prompt chain (e.g.,
                         chain_rest_api)
+  --all                 Run all tests (independent prompts + chains)
+                        in a single run
   --prompts-file FILE   Path to prompts configuration file (.md or .jsonc)
   --generate-md         Generate Markdown prompt files from JSONC configuration
   --list-chains         List available prompt chains and exit

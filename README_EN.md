@@ -155,6 +155,8 @@ The project uses a modular architecture. You can run it in two ways:
 ./venv/bin/python roo_bench.py --list-chains       # List all prompt chains
 ./venv/bin/python roo_bench.py --independent       # Run only independent prompts
 ./venv/bin/python roo_bench.py --independent --independent-top 1  # Run only first prompt per mode
+./venv/bin/python roo_bench.py --chains            # Run all prompt chains
+./venv/bin/python roo_bench.py --all               # Run all tests (independent + chains)
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Run specific chain
 
 # Control generation length (tokens)
@@ -209,6 +211,9 @@ Architect → Code → Debug
 
 # Run all prompt chains
 ./venv/bin/python roo_bench.py --chains
+
+# Run all tests (independent prompts + chains)
+./venv/bin/python roo_bench.py --all
 
 # Run with custom prompts file
 ./venv/bin/python roo_bench.py --prompts-file custom_prompts.md
@@ -414,6 +419,7 @@ The cache is also automatically saved after model discovery during benchmark run
 | `--independent-top N` | Limit the number of independent prompts per mode (e.g., `--independent-top 1` runs only the first prompt per mode) | `None` |
 | `--chain CHAIN_ID` | Run only the specified prompt chain (e.g., `chain_rest_api`) | None |
 | `--chains` | Run all prompt chains (full lifecycle tests) | False |
+| `--all` | Run all tests (independent prompts + chains) in a single run | False |
 | `--prompts-file FILE` | Path to prompts configuration file (.md or .jsonc) | `prompts/prompts.md` |
 | `--analysis-prompt-file FILE` | Path to analysis prompts file (.md or .jsonc) | Auto-detected |
 | `--generate-md` | Generate Markdown prompt files from JSONC configuration files | False |
@@ -589,6 +595,8 @@ options:
   --chains              Run all prompt chains (full lifecycle tests)
   --chain CHAIN_ID      Run only the specified prompt chain (e.g.,
                         chain_rest_api)
+  --all                 Run all tests (independent prompts + chains)
+                        in a single run
   --prompts-file FILE   Path to prompts.jsonc configuration file
   --list-chains         List available prompt chains and exit
   --list-independent    List available independent prompts and exit

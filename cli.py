@@ -122,6 +122,8 @@ def parse_args() -> Namespace:
                         help=get_text("cli_chains"))
     parser.add_argument('--chain', type=str, metavar='CHAIN_ID',
                         help=get_text("cli_chain"))
+    parser.add_argument('--all', action='store_true',
+                        help=get_text("cli_all"))
     parser.add_argument('--prompts-file', type=str, metavar='FILE',
                         help=get_text("cli_prompts_file"))
     parser.add_argument('--list-chains', action='store_true',
