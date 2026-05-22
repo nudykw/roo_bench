@@ -186,6 +186,23 @@ def run_independent_prompts(
                     )
                     all_metrics.append(metrics)
 
+                    # DIAGNOSTIC: Log response storage decision
+                    logger.info(
+                        "[Expert] run_independent_prompts store check: "
+                        "model=%s prompt_id=%s mode=%s "
+                        "tps_list_len=%d "
+                        "has_first_entry=%s "
+                        "has_response_key=%s "
+                        "response_len=%d "
+                        "response_preview=%s",
+                        model_name, prompt_id, mode,
+                        len(tps_list),
+                        len(tps_list) > 0,
+                        'response' in tps_list[0] if tps_list else False,
+                        len(tps_list[0].get('response', '')) if tps_list else 0,
+                        tps_list[0].get('response', '')[:100] if tps_list else None,
+                    )
+
                     if tps_list and tps_list[0].get('response'):
                         response = tps_list[0]['response']
                         store_entry = ExpertEvaluationEntry(

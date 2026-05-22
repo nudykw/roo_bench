@@ -255,6 +255,7 @@ class LlamaCppApiClient(BaseApiClient):
                     response_text = ""
                     prompt_token_count = 0
                     completion_token_count = 0
+                    token_count_estimate = 0  # Running estimate from chunks received
                     generation_start_time = time.time()
                     buffer = b""
                     last_update_time: float = 0.0
@@ -284,9 +285,12 @@ class LlamaCppApiClient(BaseApiClient):
                                 choices = data.get("choices", [])
                                 if choices:
                                     choice = choices[0]
-                                    delta = choice.get("delta", {})
-                                    if "content" in delta:
-                                        response_text += delta["content"]
+                                    # /v1/completions uses choice["text"], not choice["delta"]["content"]
+                                    text_chunk = choice.get("text", "")
+                                    if text_chunk:
+                                        response_text += text_chunk
+                                        # Estimate tokens from text length (~4 chars per token)
+                                        token_count_estimate += max(1, len(text_chunk) // 4)
 
                                     # Get token counts from usage (in final chunk)
                                     usage = data.get("usage", {})
@@ -312,9 +316,11 @@ class LlamaCppApiClient(BaseApiClient):
                                                 current_time - generation_start_time,
                                                 0.001,
                                             )
+                                            # Use estimate during streaming, final count at end
+                                            active_count = completion_token_count if data.get("done", False) else token_count_estimate
                                             current_tps = (
-                                                completion_token_count / elapsed
-                                                if completion_token_count > 0
+                                                active_count / elapsed
+                                                if active_count > 0
                                                 else 0.0
                                             )
 
@@ -346,7 +352,7 @@ class LlamaCppApiClient(BaseApiClient):
                                             on_token_update(
                                                 prompt_token_count,
                                                 completion_token_count,
-                                                completion_token_count,
+                                                token_count_estimate,
                                                 len(response_text),
                                                 data.get("done", False),
                                                 current_tps,
@@ -364,6 +370,23 @@ class LlamaCppApiClient(BaseApiClient):
                         completion_token_count / total_duration
                         if total_duration > 0
                         else 0
+                    )
+
+                    # DIAGNOSTIC: Log response parsing results for local client
+                    logger.info(
+                        "[LlamaCpp] run_generation result: "
+                        "run=%d model=%s "
+                        "response_text_len=%d "
+                        "prompt_token_count=%d "
+                        "completion_token_count=%d "
+                        "tps=%.2f "
+                        "response_preview=%s",
+                        run_num + 1, model_name,
+                        len(response_text),
+                        prompt_token_count,
+                        completion_token_count,
+                        tps,
+                        response_text[:200] if response_text else "EMPTY"
                     )
 
                     run_data = {
@@ -522,10 +545,13 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
         max_vram_ref: list[float] = [0.0]
         stop_monitoring = threading.Event()
         vram_samples: list[float] = []
+        gpu_samples: list[float] = []
+        cpu_samples: list[float] = []
+        ram_samples: list[float] = []
         vram_total: int | None = None
 
         def remote_resource_monitor():
-            """Monitor remote VRAM via SSH using nvidia-smi."""
+            """Monitor remote VRAM, GPU, CPU, RAM via SSH using nvidia-smi and top/free."""
             nonlocal vram_total
             if not self.ssh_client or not self.ssh_client.is_configured:
                 return
@@ -543,18 +569,48 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
 
             while not stop_monitoring.is_set():
                 try:
+                    # VRAM + GPU utilization in single query (faster)
                     result = self.ssh_client.execute(
-                        "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader",
+                        "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,nounits,noheader",
                         timeout=5,
                     )
                     if result.returncode == 0 and result.stdout.strip():
-                        lines = result.stdout.strip().split("\n")
-                        v = int(lines[0].strip()) * 1024 * 1024
-                        vram_samples.append(v)
-                        if v > max_vram_ref[0]:
-                            max_vram_ref[0] = v
+                        line = result.stdout.strip().split("\n")[0]
+                        parts = [p.strip() for p in line.split(",")]
+                        if len(parts) >= 1:
+                            v = int(parts[0]) * 1024 * 1024
+                            vram_samples.append(v)
+                            if v > max_vram_ref[0]:
+                                max_vram_ref[0] = v
+                        if len(parts) >= 2:
+                            gpu_util = float(parts[1])
+                            gpu_samples.append(gpu_util)
                 except Exception:
                     pass
+
+                # CPU usage via SSH
+                try:
+                    result = self.ssh_client.execute(
+                        "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1",
+                        timeout=5,
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        val = result.stdout.strip().replace(',', '.')
+                        cpu_samples.append(float(val))
+                except Exception:
+                    pass
+
+                # RAM usage via SSH
+                try:
+                    result = self.ssh_client.execute(
+                        "free | grep Mem | awk '{print $3/$2 * 100.0}'",
+                        timeout=5,
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        ram_samples.append(float(result.stdout.strip()))
+                except Exception:
+                    pass
+
                 stop_monitoring.wait(0.5)
 
         monitor_thread = threading.Thread(target=remote_resource_monitor, daemon=True)
@@ -598,6 +654,7 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
                     response_text = ""
                     prompt_token_count = 0
                     completion_token_count = 0
+                    token_count_estimate = 0  # Running estimate from chunks received
                     generation_start_time = time.time()
                     buffer = b""
                     last_update_time: float = 0.0
@@ -626,9 +683,12 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
                                 choices = data.get("choices", [])
                                 if choices:
                                     choice = choices[0]
-                                    delta = choice.get("delta", {})
-                                    if "content" in delta:
-                                        response_text += delta["content"]
+                                    # /v1/completions uses choice["text"], not choice["delta"]["content"]
+                                    text_chunk = choice.get("text", "")
+                                    if text_chunk:
+                                        response_text += text_chunk
+                                        # Estimate tokens from text length (~4 chars per token)
+                                        token_count_estimate += max(1, len(text_chunk) // 4)
 
                                     usage = data.get("usage", {})
                                     if usage:
@@ -651,34 +711,43 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
                                                 current_time - generation_start_time,
                                                 0.001,
                                             )
+                                            # Use estimate during streaming, final count at end
+                                            active_count = completion_token_count if data.get("done", False) else token_count_estimate
                                             current_tps = (
-                                                completion_token_count / elapsed
-                                                if completion_token_count > 0
+                                                active_count / elapsed
+                                                if active_count > 0
                                                 else 0.0
                                             )
 
-                                            # Calculate remote VRAM percent
+                                            # Calculate remote metrics from monitoring samples
                                             vram_percent = 0.0
                                             gpu_percent = 0.0
-                                            if vram_total and vram_total > 0:
-                                                vram_percent = (
-                                                    (vram_samples[-1] / vram_total * 100)
-                                                    if vram_samples else 0
-                                                )
-                                                # Use VRAM percent as proxy for GPU percent
-                                                gpu_percent = vram_percent
+                                            cpu_percent = 0.0
+                                            ram_percent = 0.0
+
+                                            if vram_total and vram_total > 0 and vram_samples:
+                                                vram_percent = vram_samples[-1] / vram_total * 100
+
+                                            if gpu_samples:
+                                                gpu_percent = gpu_samples[-1]
+
+                                            if cpu_samples:
+                                                cpu_percent = cpu_samples[-1]
+
+                                            if ram_samples:
+                                                ram_percent = ram_samples[-1]
 
                                             last_update_time = current_time
 
                                             on_token_update(
                                                 prompt_token_count,
                                                 completion_token_count,
-                                                completion_token_count,
+                                                token_count_estimate,
                                                 len(response_text),
                                                 data.get("done", False),
                                                 current_tps,
-                                                0.0,  # cpu_percent (not available remotely)
-                                                0.0,  # ram_percent (not available remotely)
+                                                cpu_percent,
+                                                ram_percent,
                                                 vram_percent,
                                                 gpu_percent,
                                             )
@@ -690,6 +759,23 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
                         completion_token_count / total_duration
                         if total_duration > 0
                         else 0
+                    )
+
+                    # DIAGNOSTIC: Log response parsing results for remote client
+                    logger.info(
+                        "[LlamaCppRemote] run_generation result: "
+                        "run=%d model=%s "
+                        "response_text_len=%d "
+                        "prompt_token_count=%d "
+                        "completion_token_count=%d "
+                        "tps=%.2f "
+                        "response_preview=%s",
+                        run_num + 1, model_name,
+                        len(response_text),
+                        prompt_token_count,
+                        completion_token_count,
+                        tps,
+                        response_text[:200] if response_text else "EMPTY"
                     )
 
                     run_data = {
@@ -727,20 +813,59 @@ class LlamaCppRemoteApiClient(LlamaCppApiClient):
         else:
             avg_tps = 0.0
 
-        # Build resource stats dict from vram_samples
+        # Build resource stats dict from all monitoring samples
         resource_stats: dict[str, Any] | None = None
+        has_stats = False
+        stats_dict: dict[str, Any] = {}
+
+        # VRAM stats
         if vram_samples and vram_total is not None and vram_total > 0:
-            resource_stats = {
-                "vram": {
-                    "used_current": vram_samples[-1],
-                    "total": vram_total,
-                    "percent_current": (vram_samples[-1] / vram_total * 100),
-                    "avg_percent": sum(s / vram_total * 100 for s in vram_samples) / len(vram_samples),
-                    "min_percent": min(s / vram_total * 100 for s in vram_samples),
-                    "max_percent": max(s / vram_total * 100 for s in vram_samples),
-                    "samples_count": len(vram_samples),
-                }
+            has_stats = True
+            stats_dict["vram"] = {
+                "used_current": vram_samples[-1],
+                "total": vram_total,
+                "percent_current": (vram_samples[-1] / vram_total * 100),
+                "avg_percent": sum(s / vram_total * 100 for s in vram_samples) / len(vram_samples),
+                "min_percent": min(s / vram_total * 100 for s in vram_samples),
+                "max_percent": max(s / vram_total * 100 for s in vram_samples),
+                "samples_count": len(vram_samples),
             }
+
+        # GPU utilization stats
+        if gpu_samples:
+            has_stats = True
+            stats_dict["gpu"] = {
+                "current": gpu_samples[-1],
+                "avg": sum(gpu_samples) / len(gpu_samples),
+                "min": min(gpu_samples),
+                "max": max(gpu_samples),
+                "samples_count": len(gpu_samples),
+            }
+
+        # CPU stats
+        if cpu_samples:
+            has_stats = True
+            stats_dict["cpu"] = {
+                "current": cpu_samples[-1],
+                "avg": sum(cpu_samples) / len(cpu_samples),
+                "min": min(cpu_samples),
+                "max": max(cpu_samples),
+                "samples_count": len(cpu_samples),
+            }
+
+        # RAM stats
+        if ram_samples:
+            has_stats = True
+            stats_dict["ram"] = {
+                "percent_current": ram_samples[-1],
+                "avg_percent": sum(ram_samples) / len(ram_samples),
+                "min_percent": min(ram_samples),
+                "max_percent": max(ram_samples),
+                "samples_count": len(ram_samples),
+            }
+
+        if has_stats:
+            resource_stats = stats_dict
 
         return avg_tps, vram, tps_list, error, prompt_metadata, temperature, resource_stats
 

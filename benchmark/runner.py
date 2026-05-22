@@ -169,8 +169,75 @@ class BenchmarkRunner:
 
         entries = [e for e in self._response_store if e.model_name == model_name]
         if not entries:
-            logger.warning("[Expert] No stored responses for model=%s", model_name)
-            return
+            # Собираем расширенную диагностическую информацию
+            models_in_store = set(e.model_name for e in self._response_store)
+            store_by_model: dict[str, int] = {}
+            for e in self._response_store:
+                store_by_model[e.model_name] = store_by_model.get(e.model_name, 0) + 1
+
+            # Детали по каждому entry в хранилище (если есть)
+            store_details = ""
+            if self._response_store:
+                detail_lines = []
+                for i, e in enumerate(self._response_store, 1):
+                    detail_lines.append(
+                        f"  [{i}] model={e.model_name}, prompt_id={e.prompt_id!r}, "
+                        f"mode={e.mode!r}, chain_id={e.chain_id!r}, "
+                        f"ctx={e.ctx}, temp={e.temperature}, "
+                        f"response_len={len(e.response)}, "
+                        f"has_metrics={e.metrics_ref is not None}"
+                    )
+                store_details = "\n" + "\n".join(detail_lines)
+            else:
+                store_details = "\n  (store is completely empty)"
+
+            # Конфигурация тестирования
+            effective_ctx = self.user_context_sizes if self.user_context_sizes is not None else self.context_sizes
+            
+            error_details = (
+                f"\n{'='*70}\n"
+                f"[ERROR] Expert evaluation interrupted for model={model_name}\n"
+                f"{'='*70}\n"
+                f"Reason: No stored responses found for the tested model.\n"
+                f"\n"
+                f"--- Test Configuration ---\n"
+                f"Tested model: {model_name}\n"
+                f"Context sizes configured: {effective_ctx}\n"
+                f"User context sizes: {self.user_context_sizes}\n"
+                f"Default context sizes: {self.context_sizes}\n"
+                f"Temperature values: {self.temperature_test_values}\n"
+                f"Num runs: {self.num_runs}\n"
+                f"Num predict: {self.num_predict}\n"
+                f"Disable thinking: {self.disable_thinking}\n"
+                f"Independent top: {self.independent_top}\n"
+                f"Prompt loader: {'set' if self.prompt_loader else 'NONE'}\n"
+                f"Expert evaluator: {'set' if self.expert_evaluator else 'NONE'}\n"
+                f"API client type: {type(self.ollama_client).__name__}\n"
+                f"\n"
+                f"--- Response Store Status ---\n"
+                f"Total responses in store: {len(self._response_store)}\n"
+                f"Models in store: {models_in_store if models_in_store else 'NONE'}\n"
+                f"Responses by model: {store_by_model if store_by_model else 'EMPTY'}\n"
+                f"\n"
+                f"--- Store Entries Detail ---{store_details}\n"
+                f"\n"
+                f"--- Possible Causes ---\n"
+                f"1. Model failed to generate any responses (check API errors above)\n"
+                f"2. Condition 'tps_list and tps_list[0].get(\"response\")' was False\n"
+                f"3. All requests returned empty/None responses\n"
+                f"4. Model was unloaded before responses were stored\n"
+                f"{'='*70}"
+            )
+            
+            logger.error("[Expert] %s", error_details)
+            print(error_details)
+            
+            raise RuntimeError(
+                f"No stored responses for model={model_name}. "
+                f"Total stored: {len(self._response_store)}, "
+                f"Models in store: {models_in_store}. "
+                "Benchmark interrupted — see diagnostic output above for details."
+            )
 
         print("\n" + "=" * 60)
         print(f"Starting expert evaluation for: {model_name}")

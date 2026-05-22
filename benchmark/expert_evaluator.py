@@ -147,10 +147,12 @@ class ExpertEvaluator:
         return templates.get(mode, templates.get('architect', ''))
 
     def _call_expert_api(self, prompt: str) -> float:
-        """Call Ollama API for evaluation.
+        """Call API for expert evaluation.
 
         Uses temperature=0.1 for consistent scoring.
         Parses integer response from 0-100 range.
+
+        Supports both Ollama (/api/generate) and llama.cpp (/v1/completions) backends.
 
         Args:
             prompt: Evaluation prompt to send.
@@ -158,21 +160,42 @@ class ExpertEvaluator:
         Returns:
             Float score between 0 and 100.
         """
-        payload = {
-            "model": self.expert_model_name,
-            "prompt": prompt,
-            "stream": False,
-            "think": False,
-            "options": {
-                "temperature": 0.1,
-            },
-        }
+        # Determine which API endpoint to use based on client type
+        client_type = type(self.ollama_client).__name__
+        is_llama_cpp = 'LlamaCpp' in client_type
 
-        logger.debug("[Expert] _call_expert_api: model=%s prompt_len=%d", self.expert_model_name, len(prompt))
+        if is_llama_cpp:
+            # llama.cpp uses OpenAI-compatible /v1/completions endpoint
+            payload = {
+                "model": self.expert_model_name,
+                "prompt": prompt,
+                "stream": False,
+                "temperature": 0.1,
+                "max_tokens": 100,
+            }
+            endpoint = f"{self.ollama_client.base_url}/v1/completions"
+        else:
+            # Ollama uses /api/generate endpoint
+            payload = {
+                "model": self.expert_model_name,
+                "prompt": prompt,
+                "stream": False,
+                "think": False,
+                "options": {
+                    "temperature": 0.1,
+                },
+            }
+            endpoint = f"{self.ollama_client.base_url}/api/generate"
+
+        logger.info(
+            "[Expert] _call_expert_api: client=%s model=%s endpoint=%s prompt_len=%d",
+            client_type, self.expert_model_name, endpoint, len(prompt)
+        )
         logger.debug("[Expert] Prompt (first 300 chars): %s", prompt[:300])
+
         try:
             response = requests.post(
-                f"{self.ollama_client.base_url}/api/generate",
+                endpoint,
                 json=payload,
                 headers=self.ollama_client.headers,
                 timeout=120
@@ -180,11 +203,20 @@ class ExpertEvaluator:
 
             logger.debug("[Expert] API response status: %d", response.status_code)
             if response.status_code != 200:
-                logger.warning(f"Expert evaluation failed: {response.text}")
+                logger.warning("[Expert] Expert evaluation failed (HTTP %d): %s",
+                              response.status_code, response.text[:200])
                 return 50.0
 
             result = response.json()
-            response_text = result.get("response", "5")
+            # Different response formats for different backends
+            if is_llama_cpp:
+                # OpenAI format: choices[0].text
+                choices = result.get("choices", [])
+                response_text = choices[0].get("text", "5") if choices else "5"
+            else:
+                # Ollama format: response
+                response_text = result.get("response", "5")
+
             logger.debug("[Expert] Raw response text: %r", response_text)
 
             score = self._parse_score(response_text)
@@ -192,7 +224,7 @@ class ExpertEvaluator:
             return score
 
         except Exception as e:
-            logger.warning(f"Expert API error: {e}")
+            logger.warning("[Expert] Expert API error: %s", e)
             return 50.0
 
     @staticmethod
