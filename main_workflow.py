@@ -191,7 +191,13 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     logger.info("[Expert] validate_expert_prompts() returned %s", expert_prompts_valid)
 
     if expert_prompts_valid:
-        enable_expert = input(f"{get_text('ask_enable_expert')} (y/n): ").strip().lower()
+        try:
+            try:
+                enable_expert = input(f"{get_text('ask_enable_expert')} (y/n): ").strip().lower()
+            except EOFError:
+                enable_expert = "n"
+        except EOFError:
+            enable_expert = "n"
         enable_expert = enable_expert in ['y', 'yes']
         logger.info("[Expert] User answered enable_expert=%s", enable_expert)
 
@@ -286,7 +292,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     if args.output:
         results_file = args.output
     else:
-        enable_save = input(f"{get_text('ask_save_results')} (y/n): ").strip().lower()
+        try:
+            enable_save = input(f"{get_text('ask_save_results')} (y/n): ").strip().lower()
+        except EOFError:
+            enable_save = "n"
         if enable_save in ['y', 'yes']:
             from main import prompt_output_filename
             results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)

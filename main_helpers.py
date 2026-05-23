@@ -101,6 +101,9 @@ def build_run_config(
             used_chain_ids = [chain['id']]
     elif args.chains:
         used_chain_ids = benchmark_runner.get_used_chain_ids()
+    elif args.all:
+        used_chain_ids = benchmark_runner.get_used_chain_ids()
+        used_prompt_ids = benchmark_runner.get_used_prompt_ids()
     elif args.independent or (prompt_loader and prompt_loader.data.get('independent')):
         used_prompt_ids = benchmark_runner.get_used_prompt_ids()
 

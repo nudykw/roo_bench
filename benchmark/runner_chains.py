@@ -1,4 +1,6 @@
-"""Prompt chains benchmark execution methods."""
+"""Prompt chains benchmark execution methods.
+Added debug logging to trace chain execution and used_chain_ids population.
+"""
 
 import logging
 from typing import Any
@@ -225,6 +227,20 @@ def run_all_chains(
     model: ModelInfo,
     temperature: float | None = None,
 ) -> tuple[BenchmarkResult | None, str | None]:
+    """Run ALL chains for a model.
+
+    Execution order:
+        Model -> Chains (sequentially) -> Contexts -> Temperatures -> Modes
+
+    Args:
+        model: ModelInfo instance containing model metadata.
+        temperature: Temperature value to use (None for default).
+
+    Returns:
+        tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
+    """
+    # Debug: start of run_all_chains
+    print("[DEBUG] Starting run_all_chains")
     """Run ALL chains for a model.
 
     Execution order:
