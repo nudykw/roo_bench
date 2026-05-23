@@ -314,7 +314,11 @@ class PromptLoader:
         Returns:
             list: List of chain dictionaries
         """
-        return self.data.get('chains', [])
+        chains = self.data.get('chains', [])
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("[DEBUG] PromptLoader.get_chains(): returning %d chains, data keys: %s", len(chains), list(self.data.keys()))
+        return chains
     
     def get_chain_by_id(self, chain_id: str) -> dict[str, Any] | None:
         """Get a specific chain by ID.

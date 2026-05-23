@@ -275,8 +275,13 @@ def run_all_chains(
         temps = [temperature]
 
     chains = self.prompt_loader.get_chains()  # type: ignore[attr-defined]
+    logger.info("[DEBUG] run_all_chains: found %d chains: %s", len(chains), [c.get('id') for c in chains])
+    if not chains:
+        logger.warning("[DEBUG] run_all_chains: NO CHAINS FOUND - skipping chain tests")
+        return
 
     for chain in chains:
+        logger.info("[DEBUG] Processing chain: %s", chain.get('id'))
         chain_id = chain.get('id', 'unknown')
         chain_name = chain.get('name', 'Unknown Chain')
 
