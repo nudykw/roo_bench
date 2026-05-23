@@ -19,6 +19,7 @@ from export.retest_dialog import (
     should_skip_model,
     should_stop_testing,
 )
+from ui.input_validator import InputValidator
 
 # Default output file for benchmark results
 DEFAULT_OUTPUT_FILE = "benchmark_results.json"
@@ -132,11 +133,7 @@ def _prompt_existing_results_action(results_file: str, can_merge: bool) -> str:
             "a": "abort", "abort": "abort",
         }
 
-    while True:
-        response = input("> ").strip().lower()
-        if response in valid:
-            return valid[response]
-        print("Please enter one of the listed options.")
+    return InputValidator.prompt_choice("> ", valid, default="abort")
 
 
 def prepare_results_output_file(

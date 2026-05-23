@@ -8,6 +8,7 @@ from typing import Any
 from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
 from export.merge_utils import atomic_write_json
 from i18n import get_text
+from ui.input_validator import InputValidator
 
 
 class ResultSaver:
@@ -143,17 +144,9 @@ class ResultSaver:
                 print(get_text("output_file_exists",
                               output_file=self.output_file,
                               file_size=f"{file_size / 1024:.1f} KB"))
-                while True:
-                    try:
-                        response = input(get_text("ask_overwrite") + " (y/n): ").strip().lower()
-                        if response in ('y', 'yes', 'так', 'т', 'да', 'д'):
-                            break
-                        elif response in ('n', 'no', 'н', 'ні', 'не', 'нет', 'н'):
-                            print(get_text("save_cancelled"))
-                            return
-                    except (EOFError, KeyboardInterrupt):
-                        print(get_text("save_cancelled"))
-                        return
+                if not InputValidator.prompt_yes_no(get_text("ask_overwrite")):
+                    print(get_text("save_cancelled"))
+                    return
 
             # Extract results list from export_data
             results_list = export_data.get('results', [])

@@ -10,6 +10,7 @@ from cli import parse_args
 from config import OllamaConfig
 from i18n import get_text, set_language
 from main_workflow import _run_benchmark_workflow_impl, signal_handler
+from ui.input_validator import InputValidator
 
 # Setup logging
 logger = logging.getLogger('roo_bench')
@@ -36,19 +37,6 @@ def validate_expert_prompts() -> bool:
         "Expert evaluation prompts not found. Expert-Evaluator will use default templates."
     )
     return False
-
-
-def prompt_user(message: str) -> bool:
-    """Prompt user for yes/no confirmation.
-
-    Args:
-        message: Message to display
-
-    Returns:
-        bool: True if user confirms, False otherwise
-    """
-    response = input(f"{message} (y/n): ").strip().lower()
-    return response in ['y', 'yes']
 
 
 def prompt_output_filename(default: str = DEFAULT_OUTPUT_FILE) -> str:
@@ -110,7 +98,7 @@ def _post_benchmark_workflow(results_file, all_results, args, base_url) -> None:
     if not all_results or not results_file:
         return
 
-    if prompt_user(get_text("ask_ai_analysis")):
+    if InputValidator.prompt_yes_no(get_text("ask_ai_analysis")):
         try:
             analysis_prompt_file = getattr(args, 'analysis_prompt_file', None)
             analyzer = AIAnalyzer(base_url=base_url, analysis_prompt_file=analysis_prompt_file)

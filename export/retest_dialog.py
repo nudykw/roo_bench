@@ -4,6 +4,7 @@ import curses
 from enum import Enum
 
 from i18n import _current_language, get_text
+from ui.input_validator import InputValidator
 
 
 class RetestDecision(Enum):
@@ -89,7 +90,7 @@ def _prompt_retest_decision_fallback(model_name: str, tested_count: int, total_c
                         return options[idx][0]
                 except ValueError:
                     pass
-                print(f"❌ {get_text('invalid_input')}")
+                InputValidator._show_invalid_input_message()
         except (EOFError, KeyboardInterrupt):
             print(f"\n{get_text('save_cancelled')}")
             return RetestDecision.NO

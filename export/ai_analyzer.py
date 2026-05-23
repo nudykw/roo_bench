@@ -7,6 +7,7 @@ from typing import Any, cast
 from benchmark.result import BenchmarkResult
 from i18n import get_text
 from prompts.analysis_prompt_loader import AnalysisPromptLoader
+from ui.input_validator import InputValidator
 from ui.markdown_renderer import display_markdown
 
 logger = logging.getLogger(__name__)
@@ -168,15 +169,6 @@ class AIAnalyzer:
         return True
 
 
-def prompt_user(question: str) -> bool:
-    """Ask user a yes/no question."""
-    try:
-        response = input(f"\n{question} (y/n): ").strip().lower()
-        return response in ('y', 'yes', 'так', 'т')
-    except (EOFError, KeyboardInterrupt):
-        return False
-
-
 def prompt_filename(default: str = "benchmark_results.json") -> str:
     """Ask for filename with default value."""
     try:
@@ -203,7 +195,7 @@ def save_results_interactive(all_results: list[BenchmarkResult], base_url: str, 
         final_filename = filename
     else:
         # Ask user if they want to save
-        if not prompt_user(get_text("ask_save_results")):
+        if not InputValidator.prompt_yes_no(get_text("ask_save_results")):
             return None
         default_filename = get_text("save_filename_default")
         final_filename = prompt_filename(default_filename)

@@ -15,6 +15,7 @@ from config import OllamaConfig
 from export.expert_results import ExpertResultsManager
 from i18n import get_text
 from prompts.loader import PromptLoader
+from ui.input_validator import InputValidator
 
 from main_helpers import (
     DEFAULT_OUTPUT_FILE,
@@ -191,14 +192,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     logger.info("[Expert] validate_expert_prompts() returned %s", expert_prompts_valid)
 
     if expert_prompts_valid:
-        try:
-            try:
-                enable_expert = input(f"{get_text('ask_enable_expert')} (y/n): ").strip().lower()
-            except EOFError:
-                enable_expert = "n"
-        except EOFError:
-            enable_expert = "n"
-        enable_expert = enable_expert in ['y', 'yes']
+        enable_expert = InputValidator.prompt_yes_no(get_text('ask_enable_expert'))
         logger.info("[Expert] User answered enable_expert=%s", enable_expert)
 
         if enable_expert:
@@ -292,11 +286,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     if args.output:
         results_file = args.output
     else:
-        try:
-            enable_save = input(f"{get_text('ask_save_results')} (y/n): ").strip().lower()
-        except EOFError:
-            enable_save = "n"
-        if enable_save in ['y', 'yes']:
+        enable_save = InputValidator.prompt_yes_no(get_text('ask_save_results'))
+        if enable_save:
             from main import prompt_output_filename
             results_file = prompt_output_filename(DEFAULT_OUTPUT_FILE)
         else:
