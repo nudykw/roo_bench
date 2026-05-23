@@ -382,9 +382,9 @@ class BenchmarkRunner:
 
         if self.user_context_sizes is not None:
             # User explicitly specified context sizes - only use those
-            # Check each one against model's max_ctx (no MIN_CONTEXT filter for user values)
-            valid_contexts = [c for c in self.user_context_sizes if 0 < c <= max_ctx]
-            logger.info(f"[DIAGNOSIS] filter_contexts: user-specified sizes={self.user_context_sizes}, max_ctx={max_ctx}, valid_contexts={valid_contexts}")
+            # No max_ctx filter for user values - allow testing contexts beyond model's declared max
+            valid_contexts = [c for c in self.user_context_sizes if 0 < c]
+            logger.info(f"[DIAGNOSIS] filter_contexts: user-specified sizes={self.user_context_sizes}, valid_contexts={valid_contexts} (no max_ctx filter)")
         else:
             # Default mode - use default list and add max_ctx if not already present
             valid_contexts = [c for c in self.context_sizes if MIN_CONTEXT <= c <= max_ctx]
