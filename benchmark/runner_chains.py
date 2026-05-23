@@ -229,22 +229,8 @@ def run_all_chains(
 ) -> tuple[BenchmarkResult | None, str | None]:
     """Run ALL chains for a model.
 
-    Execution order:
-        Model -> Chains (sequentially) -> Contexts -> Temperatures -> Modes
-
-    Args:
-        model: ModelInfo instance containing model metadata.
-        temperature: Temperature value to use (None for default).
-
-    Returns:
-        tuple: (BenchmarkResult, None) on success, or (None, error_message) on error.
-    """
-    # Debug: start of run_all_chains
-    print("[DEBUG] Starting run_all_chains")
-    """Run ALL chains for a model.
-
-    Execution order:
-        Model -> Chains (sequentially) -> Contexts -> Temperatures -> Modes
+    Execution order (NEW):
+        Model -> Contexts -> Temperatures -> Chains -> Modes
 
     Args:
         model: ModelInfo instance containing model metadata.
@@ -280,23 +266,24 @@ def run_all_chains(
         logger.warning("[DEBUG] run_all_chains: NO CHAINS FOUND - skipping chain tests")
         return
 
-    for chain in chains:
-        logger.info("[DEBUG] Processing chain: %s", chain.get('id'))
-        chain_id = chain.get('id', 'unknown')
-        chain_name = chain.get('name', 'Unknown Chain')
+    # NEW ORDER: Contexts -> Temperatures -> Chains -> Modes
+    for ctx in valid_contexts:
+        logger.info(f"   📏 Context size: {ctx}")
+        print(f"      📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"      📏 Context: {ctx}")
 
-        print(f"\n   🔗 Running chain: {chain_name} ({chain_id})")
-        logger.info(f"🔗 Running chain: {chain_name} ({chain_id})")
+        for temp in temps:
+            logger.info(f"   🌡️  Temperature: {temp:.2f}")
+            print(f"         🌡️  Temperature: {temp:.2f}")
 
-        chain_prompts = self.prompt_loader.build_chain_context(chain)  # type: ignore[attr-defined]
+            for chain in chains:
+                chain_id = chain.get('id', 'unknown')
+                chain_name = chain.get('name', 'Unknown Chain')
+                logger.info("[DEBUG] Processing chain: %s", chain_id)
 
-        for ctx in valid_contexts:
-            logger.info(f"   📏 Context size: {ctx}")
-            print(f"      📏 Context: {ctx // 1024}K" if ctx >= 1024 else f"      📏 Context: {ctx}")
+                print(f"\n      🔗 Chain: {chain_name} ({chain_id})")
+                logger.info(f"🔗 Chain: {chain_name} ({chain_id})")
 
-            for temp in temps:
-                logger.info(f"   🌡️  Temperature: {temp:.2f}")
-                print(f"         🌡️  Temperature: {temp:.2f}")
+                chain_prompts = self.prompt_loader.build_chain_context(chain)  # type: ignore[attr-defined]
 
                 for mode in ['architect', 'code', 'debug']:
                     if mode not in chain_prompts:
@@ -385,6 +372,7 @@ def run_all_chains(
                         all_metrics.append(metrics)
 
                         if response:
+                            logger.info("[DEBUG] Storing response: model=%s prompt_id=%s mode=%s chain_id=%s", model_name, prompt_id, mode, chain_id)
                             store_entry = ExpertEvaluationEntry(
                                 model_name=model_name,
                                 ctx=ctx,
@@ -407,6 +395,10 @@ def run_all_chains(
                         return None, error_message
 
     self._unload_tested_model(model_name)  # type: ignore[attr-defined]
+
+    # Debug: log total responses stored for this model
+    total_stored = len([e for e in self._response_store if e.model_name == model_name])  # type: ignore[attr-defined]
+    logger.info("[DEBUG] run_all_chains completed for %s: total responses in store=%d, chain results collected=%d", model_name, total_stored, len(all_metrics))
 
     self._print_vram_stats(model_name)  # type: ignore[attr-defined]
     benchmark_result = BenchmarkResult(model=model, results=all_metrics)

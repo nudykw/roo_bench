@@ -363,13 +363,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
 
     # Run based on mode
     if args.all:
-        # Run independent tests first
-        logger.info("[DEBUG] Running independent prompts for all models...")
-        _run_tests_for_models(benchmark_runner.run_all_independent_prompts)
-        # Then run all chains
-        logger.info("[DEBUG] Running chains for all models...")
-        logger.info("[DEBUG] Available chains count: %d", len(prompt_loader.get_chains()) if prompt_loader else 0)
-        _run_tests_for_models(benchmark_runner.run_all_chains)
+        # Run combined independent + chains tests with correct order:
+        # Contexts -> Temperatures -> Independent prompts -> Chains
+        logger.info("[DEBUG] Running combined independent + chains tests for all models...")
+        _run_tests_for_models(benchmark_runner.run_all_combined)
 
     elif args.independent:
         _run_tests_for_models(benchmark_runner.run_all_independent_prompts)

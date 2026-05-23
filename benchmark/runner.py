@@ -168,6 +168,7 @@ class BenchmarkRunner:
             return
 
         entries = [e for e in self._response_store if e.model_name == model_name]
+        logger.info("[DEBUG] run_expert_evaluation_for_model: model=%s, total_store=%d, entries_for_model=%d", model_name, len(self._response_store), len(entries))
         if not entries:
             # Собираем расширенную диагностическую информацию
             models_in_store = set(e.model_name for e in self._response_store)
@@ -416,6 +417,14 @@ class BenchmarkRunner:
     def run_all_chains(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run ALL chains for a model."""
         return run_all_chains(self, model, temperature)  # type: ignore[misc]
+
+    def run_all_combined(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
+        """Run ALL independent prompts followed by ALL chains for a model.
+        
+        Execution order: Contexts -> Temperatures -> Independent prompts -> Chains
+        """
+        from benchmark.runner_combined import run_all_combined as _run_all_combined
+        return _run_all_combined(self, model, temperature)  # type: ignore[misc]
 
     def run_for_model(self, model: ModelInfo, temperature: float | None = None) -> tuple[BenchmarkResult | None, str | None]:
         """Run benchmarks for a single model across valid contexts."""
