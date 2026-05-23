@@ -183,7 +183,7 @@ def phase2_raw_api_call(eval_prompt: str) -> dict | None:
         print("\n  ── Score parsing ──")
         print(f"  ExpertEvaluator._parse_score({response_field!r}) → {parsed_score}")
         if not isinstance(response_field, str) or response_field.strip() == "":
-            print("  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 50.0!")
+            print("  ⚠️  WARNING: 'response' field is empty/missing — _parse_score will return default 50!")
 
         return data
 

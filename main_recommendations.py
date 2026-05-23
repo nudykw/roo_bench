@@ -75,7 +75,7 @@ def _format_ctx(ctx: int) -> str:
 def _recommendation_reason(mode: str, metric: BenchmarkMetrics) -> str:
     """Explain why a metric is recommended for a mode."""
     score_text = (
-        f"expert score {metric.expert_score:.1f}/100"
+        f"expert score {int(metric.expert_score)}/100"
         if metric.expert_score is not None
         else "no expert score, using performance fallback"
     )
@@ -129,7 +129,7 @@ def print_expert_recommendations(
             quant = model_data.get('quant', 'N/A')
             size_gb = model_data.get('size_gb', 'N/A')
             score = (
-                f"{metric.expert_score:.1f}/100"
+                f"{int(metric.expert_score)}/100"
                 if metric.expert_score is not None
                 else "N/A"
             )

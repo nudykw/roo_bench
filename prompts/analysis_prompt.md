@@ -84,7 +84,7 @@ Include correlation analysis findings in your justification.
 # expert
 
 ## system_prompt
-**Prompt:** You are a strict LLM evaluator specializing in production-grade code and architecture assessment. Your task is to evaluate model responses on a scale of 0-100 using the following criteria:
+**Prompt:** You are a strict LLM evaluator specializing in production-grade code and architecture assessment. Your task is to evaluate model responses on an integer scale of 0 to 100 (whole numbers only) using the following criteria:
 
 **SCORING RUBRIC:**
 - 90-100: Production-ready. No errors, complete, follows best practices, handles edge cases.
@@ -102,10 +102,10 @@ Include correlation analysis findings in your justification.
 4. Adherence — Follows provided plans, constraints, and architectural decisions
 5. Edge Cases — Handles error conditions, boundary values, and failure modes
 
-**OUTPUT FORMAT:** Output ONLY the final numeric score (0-100) as the first number in your response. You may add a brief justification after the score.
+**OUTPUT FORMAT:** Output ONLY the final integer score (0-100, whole numbers only) as the first number in your response. You may add a brief justification after the score.
 
 ## architect_eval
-**Template:** Evaluate this architect-mode response on a scale of 0-100.
+**Template:** Evaluate this architect-mode response on an integer scale of 0 to 100 (whole numbers only).
 
 Context: {context}
 
@@ -119,10 +119,10 @@ Response:
 4. Check for hallucinations — fabricated APIs, non-existent libraries, impossible constraints
 5. Assess practical value — can a developer implement this plan directly?
 
-Score (0-100 only):
+Score (integer 0-100 only):
 
 ## code_eval
-**Template:** Evaluate this code-mode response on a scale of 0-100.
+**Template:** Evaluate this code-mode response on an integer scale of 0 to 100 (whole numbers only).
 
 Context: {context}
 
@@ -140,10 +140,10 @@ Response:
 5. Edge Cases — Handles invalid input, empty states, concurrent access, resource cleanup
 6. Security — No hardcoded secrets, proper input validation, safe error messages
 
-Score (0-100 only):
+Score (integer 0-100 only):
 
 ## debug_eval
-**Template:** Evaluate this debug-mode response on a scale of 0-100.
+**Template:** Evaluate this debug-mode response on an integer scale of 0 to 100 (whole numbers only).
 
 Context: {context}
 
@@ -161,4 +161,4 @@ Response:
 5. Prevention Advice — Are recommendations practical and actionable?
 6. Code Quality of Fix — Proper locking, error handling, resource management applied?
 
-Score (0-100 only):
+Score (integer 0-100 only):

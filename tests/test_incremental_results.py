@@ -197,10 +197,10 @@ class TestExpertRecommendations(unittest.TestCase):
         self.assertEqual(recs['code'][0]['model_name'], 'smart-slower')
 
     def test_expert_score_parser_uses_100_point_scale(self):
-        self.assertEqual(ExpertEvaluator._parse_score("Score: 87"), 87.0)
-        self.assertEqual(ExpertEvaluator._parse_score("100"), 100.0)
-        self.assertEqual(ExpertEvaluator._parse_score("0"), 0.0)
-        self.assertEqual(ExpertEvaluator._parse_score("Score: 150"), 50.0)
+        self.assertEqual(ExpertEvaluator._parse_score("Score: 87"), 87)
+        self.assertEqual(ExpertEvaluator._parse_score("100"), 100)
+        self.assertEqual(ExpertEvaluator._parse_score("0"), 0)
+        self.assertEqual(ExpertEvaluator._parse_score("Score: 150"), 50)
 
 
 if __name__ == '__main__':

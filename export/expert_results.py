@@ -103,7 +103,7 @@ class ExpertResultsManager:
 
         if entry['expert_score'] is not None:
             lines.extend([
-                f"**Expert Score:** {entry['expert_score']:.1f}/100",
+                f"**Expert Score:** {int(entry['expert_score'])}/100",
                 "",
             ])
 

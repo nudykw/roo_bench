@@ -80,7 +80,7 @@ class ExpertEvaluator:
 
             if entry.metrics_ref is not None:
                 entry.metrics_ref.expert_score = score
-                logger.debug("[Expert] Wrote score %.1f to metrics_ref for entry[%d]", score, i)
+                logger.debug("[Expert] Wrote score %d to metrics_ref for entry[%d]", score, i)
             else:
                 logger.debug("[Expert] metrics_ref is None for entry[%d], score not written", i)
 
@@ -89,7 +89,7 @@ class ExpertEvaluator:
             mode_label = entry.mode or "default"
             print(
                 f"      Expert evaluation: {i + 1}/{len(entries)} ({progress:.0f}%) "
-                f"[{mode_label}:{prompt_label}] - Score: {score:.1f}/100"
+                f"[{mode_label}:{prompt_label}] - Score: {int(score):.0f}/100"
             )
 
     def _evaluate_single(self, entry: ExpertEvaluationEntry) -> float:
@@ -99,7 +99,7 @@ class ExpertEvaluator:
             entry: Evaluation entry containing the response.
 
         Returns:
-            Float score between 0 and 100.
+            Integer score from 0 to 100.
         """
         context = (
             f"ctx={entry.ctx}, temp={entry.temperature}, "
@@ -150,7 +150,7 @@ class ExpertEvaluator:
         """Call API for expert evaluation.
 
         Uses temperature=0.1 for consistent scoring.
-        Parses integer response from 0-100 range.
+        Parses integer response from 0 to 100 range.
 
         Supports both Ollama (/api/generate) and llama.cpp (/v1/completions) backends.
 
@@ -158,7 +158,7 @@ class ExpertEvaluator:
             prompt: Evaluation prompt to send.
 
         Returns:
-            Float score between 0 and 100.
+            Integer score from 0 to 100.
         """
         # Determine which API endpoint to use based on client type
         client_type = type(self.ollama_client).__name__
@@ -205,7 +205,7 @@ class ExpertEvaluator:
             if response.status_code != 200:
                 logger.warning("[Expert] Expert evaluation failed (HTTP %d): %s",
                               response.status_code, response.text[:200])
-                return 50.0
+                return 50
 
             result = response.json()
             # Different response formats for different backends
@@ -220,26 +220,26 @@ class ExpertEvaluator:
             logger.debug("[Expert] Raw response text: %r", response_text)
 
             score = self._parse_score(response_text)
-            logger.debug("[Expert] Parsed score: %.1f", score)
+            logger.debug("[Expert] Parsed score: %d", score)
             return score
 
         except Exception as e:
             logger.warning("[Expert] Expert API error: %s", e)
-            return 50.0
+            return 50
 
     @staticmethod
-    def _parse_score(response_text: str) -> float:
+    def _parse_score(response_text: str) -> int:
         """Extract numeric score from model response.
 
         Args:
             response_text: Raw text response from expert model.
 
         Returns:
-            Float score clamped to 0-100 range.
+            Integer score from 0 to 100.
         """
         import re
         match = re.search(r'\b(100|[1-9]?[0-9])\b', response_text.strip())
         if match:
             score = int(match.group(1))
-            return float(min(100, max(0, score)))
-        return 50.0
+            return min(100, max(0, score))
+        return 50
