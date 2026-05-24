@@ -12,3 +12,8 @@ tests/temp/
 export/expert_results.md
 .DS_Store
 _/expert_results.md
+
+
+# Local AI Agent (codegraph & mcp-gateway)
+.agent/*.log
+.codegraph/
