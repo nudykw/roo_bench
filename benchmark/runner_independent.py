@@ -31,8 +31,12 @@ def run_independent_prompts(
     max_ctx = model.max_ctx
     prompts = self.prompt_loader.get_independent_prompts(mode)  # type: ignore[attr-defined]
 
-    # Apply independent_top filter if specified
-    if self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
+    # Apply prompts_top filter if specified (takes priority over independent_top)
+    if self.prompts_top is not None and self.prompts_top > 0:  # type: ignore[attr-defined]
+        prompts = prompts[:self.prompts_top]  # type: ignore[attr-defined]
+        logger.info("[prompts_top] Limited %s prompts to first %d: %d prompts",
+                   mode, self.prompts_top, len(prompts))  # type: ignore[attr-defined]
+    elif self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
         prompts = prompts[:self.independent_top]  # type: ignore[attr-defined]
         logger.info("[independent_top] Limited %s prompts to first %d: %d prompts",
                    mode, self.independent_top, len(prompts))  # type: ignore[attr-defined]
@@ -292,8 +296,24 @@ def run_all_independent_prompts(
 
     all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()  # type: ignore[attr-defined]
 
-    # Apply independent_top filter if specified
-    if self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
+    # Apply prompts_top filter if specified (takes priority over independent_top)
+    if self.prompts_top is not None and self.prompts_top > 0:  # type: ignore[attr-defined]
+        prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
+        for p in all_prompts:
+            mode = p['mode']
+            if mode not in prompts_by_mode:
+                prompts_by_mode[mode] = []
+            prompts_by_mode[mode].append(p)
+
+        filtered_prompts = []
+        for mode in ['architect', 'code', 'debug']:
+            mode_prompts = prompts_by_mode.get(mode, [])
+            filtered_prompts.extend(mode_prompts[:self.prompts_top])  # type: ignore[attr-defined]
+
+        all_prompts = filtered_prompts
+        logger.info("[prompts_top] Limited to first %d prompts per mode: %d total prompts",
+                   self.prompts_top, len(all_prompts))  # type: ignore[attr-defined]
+    elif self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
         prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
         for p in all_prompts:
             mode = p['mode']

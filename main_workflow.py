@@ -246,6 +246,8 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
         expert_evaluator=expert_evaluator,
         num_predict=getattr(args, 'num_predict', 12000),
         independent_top=getattr(args, 'independent_top', None),
+        chunks_top=getattr(args, 'chunks_top', None),
+        prompts_top=getattr(args, 'prompts_top', None),
         user_context_sizes=context_sizes,
     )
     logger.info(

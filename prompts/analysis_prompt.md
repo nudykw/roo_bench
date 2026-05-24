@@ -18,7 +18,7 @@
 - std_dev: TPS standard deviation — lower means more stable and predictable generation.
 - vram: VRAM consumed (MB). Models that exceed GPU VRAM fall back to RAM, causing severe TPS slowdown.
 - ctx: Context window size tested (e.g. 8K / 16K / 32K / 64K / 128K tokens).
-- expert_score: AI-assigned quality score (0–100) evaluating response relevance, technical accuracy, and completeness.
+- expert_score: AI-assigned integer quality score (0 to 100, whole numbers only) evaluating response relevance, technical accuracy, and completeness.
   - 90-100: Production-ready, 80-89: High quality, 70-79: Acceptable, 60-69: Below average, <60: Poor
 - duration_sec: Total wall-clock time for the generation run.
 
@@ -39,7 +39,7 @@ Before making recommendations, analyze the following correlations:
 
 ## Mode-Specific Requirements
 
-### 🏗️ Architect Mode — System Design & Planning
+### Architect Mode — System Design & Planning
 **Priority: Quality of analysis and depth of reasoning over speed**
 - ctx: CRITICAL — the more the better (32K+ strongly preferred). Architect must analyze entire codebases and project structures.
 - avg_tps: Secondary — slower generation is acceptable if quality is high. Users can wait minutes for a well-thought-out architecture.
@@ -48,7 +48,7 @@ Before making recommendations, analyze the following correlations:
 - architecture: MoE or Dense are both acceptable; prefer higher parameter count for deeper reasoning capacity.
 - std_dev: Less critical — some TPS variance is acceptable for this mode.
 
-### 💻 Code Mode — Code Generation & Implementation
+### Code Mode — Code Generation & Implementation
 **Priority: Speed + strict correctness of code output**
 - avg_tps: CRITICAL — fast code generation directly reduces developer wait time. Target >20 TPS.
 - ctx: Medium (8K–32K) — sufficient for file-level context, function bodies, and class definitions.
@@ -58,7 +58,7 @@ Before making recommendations, analyze the following correlations:
 - std_dev: Should be low — consistent generation speed is important for a smooth developer experience.
 - vram: Monitor carefully — VRAM overflow causes dramatic TPS drops and unpredictable behavior.
 
-### 🐛 Debug Mode — Bug Detection & Root Cause Analysis
+### Debug Mode — Bug Detection & Root Cause Analysis
 **Priority: Factual accuracy + maximum sustained speed**
 - avg_tps: CRITICAL — fast iteration is essential for tight debugging cycles. Target maximum possible TPS.
 - ctx: HIGH (32K+) — must simultaneously hold full stack traces, file contents, error messages, and surrounding code context.

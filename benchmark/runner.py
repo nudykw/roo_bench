@@ -32,6 +32,7 @@ class BenchmarkRunner:
                  restart_method: str = 'manual', no_restart: bool = False, disable_thinking: bool = True,
                  prompt_loader=None, temperature_test_values: list = None, expert_evaluator=None,
                  num_predict: int = 12000, independent_top: int | None = None,
+                 chunks_top: int | None = None, prompts_top: int | None = None,
                  user_context_sizes: list[int] | None = None):
         """Initialize benchmark runner.
 
@@ -72,6 +73,19 @@ class BenchmarkRunner:
         self.expert_evaluator = expert_evaluator
         self._response_store: list[ExpertEvaluationEntry] = []
         self.independent_top = independent_top  # Limit prompts per mode for independent tests
+        self.chunks_top = chunks_top  # Limit number of chains
+        self.prompts_top = prompts_top  # Universal limit - overrides independent_top and chunks_top
+
+        # Priority: prompts_top > independent_top / chunks_top
+        if prompts_top is not None and prompts_top > 0:
+            self.effective_top = prompts_top
+            if independent_top is not None or chunks_top is not None:
+                logger.warning(
+                    "Both --prompts-top and --independent-top/--chunks-top specified. "
+                    "Using --prompts-top for all filtering."
+                )
+        else:
+            self.effective_top = independent_top
 
     def get_test_params(self, model_names: list, expert_model: str | None = None) -> dict:
         """Get test parameters as a dictionary.
@@ -93,6 +107,9 @@ class BenchmarkRunner:
             "used_prompt_ids": self.get_used_prompt_ids(),
             "used_chain_ids": self.get_used_chain_ids(),
             "independent_top": self.independent_top,
+            "chunks_top": self.chunks_top,
+            "prompts_top": self.prompts_top,
+            "effective_top": self.effective_top,
             "disable_thinking": self.disable_thinking,
             "models": model_names,
             "expert_model": expert_model
@@ -104,7 +121,7 @@ class BenchmarkRunner:
             return []
 
         all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()
-        if self.independent_top is None or self.independent_top <= 0:
+        if self.effective_top is None or self.effective_top <= 0:
             return all_prompts
 
         prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
@@ -113,7 +130,7 @@ class BenchmarkRunner:
 
         filtered_prompts: list[dict[str, Any]] = []
         for mode in ['architect', 'code', 'debug']:
-            filtered_prompts.extend(prompts_by_mode.get(mode, [])[:self.independent_top])
+            filtered_prompts.extend(prompts_by_mode.get(mode, [])[:self.effective_top])
         return filtered_prompts
 
     def get_used_prompt_ids(self) -> list[str]:

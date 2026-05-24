@@ -152,7 +152,9 @@ chmod +x roo_bench.py
 ./venv/bin/python roo_bench.py --independent       # Тільки незалежні промти
 ./venv/bin/python roo_bench.py --independent --independent-top 1  # Тільки перший промт на режим
 ./venv/bin/python roo_bench.py --chains            # Запустити всі промт-цепочки
+./venv/bin/python roo_bench.py --chains --chunks-top 1  # Запустити тільки перший промт-цепочку
 ./venv/bin/python roo_bench.py --all               # Запустити всі тести (незалежні + цепочки)
+./venv/bin/python roo_bench.py --all --prompts-top 1  # Універсальне обмеження (замінює --independent-top і --chunks-top)
 ./venv/bin/python roo_bench.py --chain chain_rest_api  # Конкретна цепочка
 
 # Контроль довжини генерації (токени)
@@ -201,6 +203,15 @@ Architect → Code → Debug
 
 # Запуск перших двох промтів на режим
 ./venv/bin/python roo_bench.py --independent --independent-top 2
+
+# Запуск тільки першого промт-цепочки (обмеження цепочок)
+./venv/bin/python roo_bench.py --chains --chunks-top 1
+
+# Запуск перших двох цепочок
+./venv/bin/python roo_bench.py --chains --chunks-top 2
+
+# Універсальне обмеження - замінює --independent-top і --chunks-top
+./venv/bin/python roo_bench.py --all --prompts-top 1
 
 # Запуск конкретної промт-цепочки
 ./venv/bin/python roo_bench.py --chain chain_rest_api
@@ -439,6 +450,8 @@ Roo Bench автоматично кешує можливості моделей 
 | `--list-chains` | Список доступних промт-цепочок та вихід | False |
 | `--independent` | Запуск тільки незалежних промтів | False |
 | `--independent-top N` | Обмежити кількість незалежних промтів на режим (напр., `--independent-top 1` запускає лише перший промт на режим) | `None` |
+| `--chunks-top N` | Обмежити кількість промт-цепочок (напр., `--chunks-top 1` запускає лише першу цепочку) | `None` |
+| `--prompts-top N` | Універсальне обмеження для незалежних промтів та цепочок (замінює `--independent-top` і `--chunks-top`) | `None` |
 | `--chain CHAIN_ID` | Запуск тільки вказаної промт-цепочки (напр., `chain_rest_api`) | None |
 | `--chains` | Запустити всі промт-цепочки (повні цикли тестування) | False |
 | `--all` | Запустити всі тести (незалежні промти + цепочки) за один запуск | False |
@@ -629,6 +642,11 @@ options:
   --independent-top N   Limit the number of independent prompts per mode
                         (e.g., --independent-top 1 runs only the first prompt
                         per mode)
+  --chunks-top N        Limit the number of prompt chains/chunks to run
+                        (e.g., --chunks-top 1 runs only the first chain)
+  --prompts-top N       Universal limit for both independent prompts and
+                        chains (replaces both --independent-top and
+                        --chunks-top)
   --num-predict NUM_PREDICT
                         Maximum number of tokens to predict in generation
                         (default: 12000). Use -1 for unlimited.

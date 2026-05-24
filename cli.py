@@ -132,6 +132,10 @@ def parse_args() -> Namespace:
                         help=get_text("cli_list_independent"))
     parser.add_argument('--independent-top', type=int, default=None, metavar='N',
                         help=get_text("cli_independent_top"))
+    parser.add_argument('--chunks-top', type=int, default=None, metavar='N',
+                        help=get_text("cli_chunks_top"))
+    parser.add_argument('--prompts-top', type=int, default=None, metavar='N',
+                        help=get_text("cli_prompts_top"))
     parser.add_argument('--generate-md', action='store_true',
                         help=get_text("cli_generate_md"))
     parser.add_argument('--analysis-prompt-file', type=str, default=None, metavar='FILE',

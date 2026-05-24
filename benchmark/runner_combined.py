@@ -417,8 +417,24 @@ def run_all_combined(
     # Get all independent prompts
     all_prompts = self.prompt_loader.get_all_independent_prompts_ordered()  # type: ignore[attr-defined]
 
-    # Apply independent_top filter if specified
-    if self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
+    # Apply prompts_top filter if specified (takes priority over independent_top)
+    if self.prompts_top is not None and self.prompts_top > 0:  # type: ignore[attr-defined]
+        prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
+        for p in all_prompts:
+            mode = p['mode']
+            if mode not in prompts_by_mode:
+                prompts_by_mode[mode] = []
+            prompts_by_mode[mode].append(p)
+
+        filtered_prompts = []
+        for mode in ['architect', 'code', 'debug']:
+            mode_prompts = prompts_by_mode.get(mode, [])
+            filtered_prompts.extend(mode_prompts[:self.prompts_top])  # type: ignore[attr-defined]
+
+        all_prompts = filtered_prompts
+        logger.info("[prompts_top] Limited independent to first %d prompts per mode: %d total prompts",
+                   self.prompts_top, len(all_prompts))  # type: ignore[attr-defined]
+    elif self.independent_top is not None and self.independent_top > 0:  # type: ignore[attr-defined]
         prompts_by_mode: dict[str, list[dict[str, Any]]] = {}
         for p in all_prompts:
             mode = p['mode']
@@ -437,6 +453,17 @@ def run_all_combined(
 
     # Get all chains
     chains = self.prompt_loader.get_chains()  # type: ignore[attr-defined]
+
+    # Apply prompts_top filter to chains (takes priority over chunks_top)
+    if self.prompts_top is not None and self.prompts_top > 0:  # type: ignore[attr-defined]
+        chains = chains[:self.prompts_top]  # type: ignore[attr-defined]
+        logger.info("[prompts_top] Limited chains to first %d: %d total chains",
+                   self.prompts_top, len(chains))  # type: ignore[attr-defined]
+    elif self.chunks_top is not None and self.chunks_top > 0:  # type: ignore[attr-defined]
+        chains = chains[:self.chunks_top]  # type: ignore[attr-defined]
+        logger.info("[chunks_top] Limited chains to first %d: %d total chains",
+                   self.chunks_top, len(chains))  # type: ignore[attr-defined]
+
     logger.info("[DEBUG] run_all_combined: found %d chains: %s", len(chains), [c.get('id') for c in chains])
 
     logger.debug(
