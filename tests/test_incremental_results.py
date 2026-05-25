@@ -146,7 +146,9 @@ class TestMergeUtils(unittest.TestCase):
             loaded, _ = load_results_file(path)
 
         metric = loaded[0].results[0]
-        self.assertEqual(metric.response, 'new')
+        # NOTE: 'response' is no longer saved to JSON to keep file size small.
+        # It's only stored in export/expert_results.md.
+        self.assertIsNone(metric.response)
         self.assertEqual(metric.avg_tps, 9.0)
         self.assertEqual(metric.expert_score, 90.0)
 

@@ -12,6 +12,16 @@ known-first-party = ["api", "benchmark", "data", "export", "prompts", "system", 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501", "E402", "E741"]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-m 'not integration'"
+
 [tool.mypy]
 python_version = "3.10"
 strict = true

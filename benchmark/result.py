@@ -189,13 +189,14 @@ class BenchmarkMetrics(BaseModel):
             'prompt_name': self.prompt_name,
             'duration_sec': round(self.duration_sec, 3),
             'prompt_tokens': self.prompt_tokens,
-            'response_tokens': self.response_tokens,
-            'mode': self.mode,
-            'chain_id': self.chain_id,
-            'chain_name': self.chain_name,
-            'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
-            'response': self.response,
-        }
+                        'response_tokens': self.response_tokens,
+                        'mode': self.mode,
+                        'chain_id': self.chain_id,
+                        'chain_name': self.chain_name,
+                        'expert_score': round(self.expert_score, 1) if self.expert_score is not None else None,
+                        # NOTE: 'response' is intentionally excluded from JSON export to keep file size small.
+                        # Responses are stored in export/expert_results.md instead.
+                    }
         
         # Добавляем расширенную статистику ресурсов
         if self.cpu_stats is not None:

@@ -305,7 +305,32 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
     if save_mode == "abort":
         return
 
-    expert_results_manager = ExpertResultsManager()
+    # Determine expert results file path based on output file
+    # If output is test_no_response.json -> expert results is test_no_response.md
+    # If output is benchmark_results.json -> expert results is export/expert_results.md
+    if results_file:
+        base_name = os.path.splitext(results_file)[0]
+        expert_results_file = base_name + ".md"
+    else:
+        expert_results_file = "export/expert_results.md"
+
+    expert_merge_mode = "overwrite"
+    if os.path.exists(expert_results_file):
+        print(f"\nExpert results file exists: {expert_results_file}")
+        expert_action = InputValidator.prompt_choice(
+            "Choose expert results action: [m]erge, [o]verwrite, [a]bort: ",
+            {
+                "m": "merge", "merge": "merge",
+                "o": "overwrite", "overwrite": "overwrite",
+                "a": "abort", "abort": "abort",
+            },
+            default="merge"
+        )
+        if expert_action == "abort":
+            return
+        expert_merge_mode = expert_action
+
+    expert_results_manager = ExpertResultsManager(output_file=expert_results_file)
     expert_model_for_session = (
         expert_model_name if expert_model_name is not None else ""
     )
@@ -313,6 +338,7 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
         tested_model=model_names,
         expert_model=expert_model_for_session,
         run_config=run_config,
+        merge_mode=expert_merge_mode,
     )
 
     def handle_completed_result(benchmark_result: BenchmarkResult) -> None:

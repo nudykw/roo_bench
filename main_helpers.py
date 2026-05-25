@@ -65,10 +65,21 @@ def build_used_prompts_config(
             return None
         return {'chains': [_minimal_chain(chain)]}
 
-    if args.chains:
-        return {
+    if args.chains or getattr(args, 'all', False):
+        result = {
             'chains': [_minimal_chain(chain) for chain in prompt_loader.get_chains()]
         }
+        # For --all mode, also include independent prompts
+        if getattr(args, 'all', False):
+            independent: dict[str, list[dict[str, Any]]] = {}
+            for prompt in benchmark_runner.get_used_independent_prompts():
+                mode = prompt.get('mode')
+                if not mode:
+                    continue
+                independent.setdefault(mode, []).append(_minimal_prompt(prompt))
+            if independent:
+                result['independent'] = independent
+        return result
 
     if args.independent or prompt_loader.data.get('independent'):
         independent: dict[str, list[dict[str, Any]]] = {}
@@ -176,19 +187,24 @@ def persist_model_result(
     if save_mode == SAVE_MODE_DISABLED or not results_file or not benchmark_result:
         return
 
-    if save_mode == SAVE_MODE_MERGE:
-        merge_results(
-            results_file, benchmark_result,
-            prompts_config=prompts_config, run_config=run_config
+    try:
+        if save_mode == SAVE_MODE_MERGE:
+            merge_results(
+                results_file, benchmark_result,
+                prompts_config=prompts_config, run_config=run_config
+            )
+        else:
+            save_results_file(
+                results_file, all_results,
+                prompts_config=prompts_config, run_config=run_config
+            )
+        print(
+            f"   💾 Results saved atomically after model: {benchmark_result.model.name}"
         )
-    else:
-        save_results_file(
-            results_file, all_results,
-            prompts_config=prompts_config, run_config=run_config
-        )
-    print(
-        f"   💾 Results saved atomically after model: {benchmark_result.model.name}"
-    )
+    except Exception as e:
+        print(f"   ⚠️  Warning: Failed to save results for {benchmark_result.model.name}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def make_model_info(model_data: dict[str, Any]) -> ModelInfo:

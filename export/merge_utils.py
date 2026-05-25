@@ -142,16 +142,23 @@ def merge_results(existing_file: str, new_result: BenchmarkResult, prompts_confi
         new_result: New BenchmarkResult to merge.
         prompts_config: Optional prompts configuration to save.
     """
-    existing_results, existing_prompts = load_results_file(existing_file)
-    existing_run_config = load_run_config(existing_file)
+    import traceback
+    
+    try:
+        existing_results, existing_prompts = load_results_file(existing_file)
+        existing_run_config = load_run_config(existing_file)
 
-    if prompts_config is None:
-        prompts_config = existing_prompts
-    if run_config is None:
-        run_config = existing_run_config
+        if prompts_config is None:
+            prompts_config = existing_prompts
+        if run_config is None:
+            run_config = existing_run_config
 
-    updated_results = merge_single_result(existing_results, new_result)
-    save_results_file(existing_file, updated_results, prompts_config, run_config)
+        updated_results = merge_single_result(existing_results, new_result)
+        save_results_file(existing_file, updated_results, prompts_config, run_config)
+    except Exception as e:
+        print(f"Error during merge: {e}")
+        traceback.print_exc()
+        raise
 
 
 def load_run_config(file_path: str) -> dict[str, Any]:
