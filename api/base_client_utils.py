@@ -92,11 +92,9 @@ class BaseApiClientUtils:
                 pass
 
         # Check if any found value matches expected
-        matched_key = None
         actual_value = None
         for key, val in found_values.items():
             if val == expected_ctx:
-                matched_key = key
                 actual_value = val
                 break
 
@@ -104,7 +102,6 @@ class BaseApiClientUtils:
         if not actual_value:
             for key, val in found_values.items():
                 if val >= expected_ctx:
-                    matched_key = key
                     actual_value = val
                     break
 
@@ -158,7 +155,7 @@ class BaseApiClientUtils:
                 return False, 0, 0.0, f"   \U0001f9ea Generation test failed: HTTP {response.status_code}"
 
             data = response.json()
-            eval_count = data.get("eval_count", 0)
+            _eval_count = data.get("eval_count", 0)
             prompt_eval_count = data.get("prompt_eval_count", 0)
             total_duration = data.get("total_duration", 0) / 1e9
 

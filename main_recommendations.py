@@ -1,5 +1,7 @@
 """Expert-guided recommendation system for roo_bench."""
 
+from typing import Any
+
 from benchmark.result import BenchmarkMetrics, BenchmarkResult
 from i18n import get_text
 
@@ -33,8 +35,6 @@ def _build_mode_recommendations(
     test_models: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
     """Build top model recommendations per Roo mode."""
-    from typing import Any
-
     model_lookup: dict[str, dict[str, Any]] = {m['name']: m for m in test_models}
     best_by_mode_and_model: dict[str, dict[str, BenchmarkMetrics]] = {
         'architect': {},

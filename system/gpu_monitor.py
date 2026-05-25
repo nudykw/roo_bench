@@ -3,7 +3,6 @@
 import os
 import subprocess
 import time
-from typing import Optional
 
 
 def check_gpu_available() -> bool:
@@ -32,7 +31,7 @@ def check_gpu_available() -> bool:
     return False
 
 
-def get_vram_usage() -> Optional[int]:
+def get_vram_usage() -> int | None:
     """Get current VRAM usage in bytes.
 
     Returns:
@@ -81,7 +80,7 @@ def get_vram_usage() -> Optional[int]:
     return None
 
 
-def get_vram_stats(samples: int = 10, interval: float = 0.5) -> Optional[dict[str, int | float]]:
+def get_vram_stats(samples: int = 10, interval: float = 0.5) -> dict[str, int | float] | None:
     """Get comprehensive VRAM statistics with min/max/avg values.
 
     Args:
@@ -96,7 +95,7 @@ def get_vram_stats(samples: int = 10, interval: float = 0.5) -> Optional[dict[st
         return None
 
     usages: list[int] = []
-    total_vram: Optional[float] = None
+    total_vram: float | None = None
 
     # Collect samples
     for _ in range(samples):
@@ -168,7 +167,7 @@ def get_vram_usage_history(samples: int = 10, interval: float = 0.5) -> list[int
     return usages
 
 
-def get_vram_total() -> Optional[int]:
+def get_vram_total() -> int | None:
     """Get total VRAM capacity.
 
     Returns:
@@ -190,7 +189,7 @@ def get_vram_total() -> Optional[int]:
     return None
 
 
-def get_gpu_utilization() -> Optional[float]:
+def get_gpu_utilization() -> float | None:
     """Get current GPU utilization percentage.
 
     Returns:
@@ -212,7 +211,7 @@ def get_gpu_utilization() -> Optional[float]:
     return None
 
 
-def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> Optional[dict[str, int | float | None]]:
+def get_gpu_stats(samples: int = 10, interval: float = 0.5) -> dict[str, int | float | None] | None:
     """Get comprehensive GPU statistics with min/max/avg values.
 
     Args:

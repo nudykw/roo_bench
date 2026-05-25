@@ -2,19 +2,18 @@
 
 import json
 import os
+import shutil
+import sys
 import tempfile
 import unittest
-import shutil
-from unittest import mock
 
-import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from prompts.generate_md import (
-    strip_jsonc_comments,
-    generate_prompts_md,
+    generate_all_markdown,
     generate_analysis_prompt_md,
-    generate_all_markdown
+    generate_prompts_md,
+    strip_jsonc_comments,
 )
 
 

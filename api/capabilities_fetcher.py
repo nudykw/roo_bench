@@ -7,7 +7,6 @@ This module provides comprehensive model metadata caching including:
 """
 
 import urllib.parse
-from typing import Any
 
 from api.capabilities_api import CapabilitiesApi
 from api.capabilities_html import CapabilitiesHtml

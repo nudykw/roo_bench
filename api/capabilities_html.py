@@ -6,7 +6,7 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-from api.capabilities_defaults import SIZE_PATTERN, COLOR_PATTERN
+from api.capabilities_defaults import COLOR_PATTERN, SIZE_PATTERN
 
 
 class CapabilitiesHtml:

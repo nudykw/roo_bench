@@ -95,8 +95,19 @@ def run_chain(
                 print(f"         Running chain [{mode}]: {prompt_name} (ID: {prompt_id})")
 
                 # Create token update callback for this chain
-                def chain_token_callback(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
-                    update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="         ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
+                def chain_token_callback(
+                    prompt_tokens, response_tokens, estimated_response_tokens=0,
+                    response_len=0, is_done=False, current_tps=0.0,
+                    cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0,
+                    gpu_percent=0.0,
+                ):
+                    update_tokens_display(
+                        prompt_tokens, response_tokens, estimated_response_tokens,
+                        response_len, indent="         ", is_done=is_done,
+                        current_tps=current_tps, cpu_percent=cpu_percent,
+                        ram_percent=ram_percent, vram_percent=vram_percent,
+                        gpu_percent=gpu_percent,
+                    )
 
                 try:
                     result = self.ollama_client.run_generation(  # type: ignore[attr-defined]
@@ -145,7 +156,12 @@ def run_chain(
                         if 'vram' in resource_stats:
                             vram_data = resource_stats['vram']
                             if vram_data.get('total', 0) > 0:
-                                print(f"            VRAM: {vram_data.get('percent_current', 0):.1f}% (avg: {vram_data.get('avg_percent', 0):.1f}%, max: {vram_data.get('max_percent', 0):.1f}%) — {vram_data.get('used_current', 0) / 1024 / 1024:.1f} MiB / {vram_data.get('total', 0) / 1024 / 1024:.1f} MiB")
+                                vram_used = vram_data.get('used_current', 0) / 1024 / 1024
+                                vram_total = vram_data.get('total', 0) / 1024 / 1024
+                                print(f"            VRAM: {vram_data.get('percent_current', 0):.1f}% "
+                                      f"(avg: {vram_data.get('avg_percent', 0):.1f}%, "
+                                      f"max: {vram_data.get('max_percent', 0):.1f}%) — "
+                                      f"{vram_used:.1f} MiB / {vram_total:.1f} MiB")
                             else:
                                 print(f"            VRAM: {vram_data.get('percent_current', 0):.1f}% (avg: {vram_data.get('avg_percent', 0):.1f}%, max: {vram_data.get('max_percent', 0):.1f}%)")
                         if 'gpu' in resource_stats:
@@ -307,8 +323,19 @@ def run_all_chains(
                     print(f"            [{mode}] {prompt_name}")
 
                     # Create token update callback for this chain
-                    def chain_token_callback_2(prompt_tokens, response_tokens, estimated_response_tokens=0, response_len=0, is_done=False, current_tps=0.0, cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0, gpu_percent=0.0):
-                        update_tokens_display(prompt_tokens, response_tokens, estimated_response_tokens, response_len, indent="            ", is_done=is_done, current_tps=current_tps, cpu_percent=cpu_percent, ram_percent=ram_percent, vram_percent=vram_percent, gpu_percent=gpu_percent)
+                    def chain_token_callback_2(
+                        prompt_tokens, response_tokens, estimated_response_tokens=0,
+                        response_len=0, is_done=False, current_tps=0.0,
+                        cpu_percent=0.0, ram_percent=0.0, vram_percent=0.0,
+                        gpu_percent=0.0,
+                    ):
+                        update_tokens_display(
+                            prompt_tokens, response_tokens, estimated_response_tokens,
+                            response_len, indent="            ", is_done=is_done,
+                            current_tps=current_tps, cpu_percent=cpu_percent,
+                            ram_percent=ram_percent, vram_percent=vram_percent,
+                            gpu_percent=gpu_percent,
+                        )
 
                     try:
                         avg_tps, vram, tps_list, error, _, used_temp, resource_stats = self.ollama_client.run_generation(  # type: ignore[attr-defined]

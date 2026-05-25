@@ -54,7 +54,7 @@ class ExpertResultsManager:
         current_entry: dict[str, Any] = {}
 
         try:
-            with open(self.output_file, 'r', encoding='utf-8') as f:
+            with open(self.output_file, encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
 
@@ -112,7 +112,7 @@ class ExpertResultsManager:
                             entries.append(current_entry)
                         current_entry = {}
 
-        except (IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             print(f"Warning: Could not load existing entries: {e}")
             return []
 

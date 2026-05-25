@@ -1,6 +1,5 @@
 """API client factory for creating local or remote clients based on configuration."""
 
-from typing import Optional
 
 from api.llama_cpp_client import LlamaCppApiClient, LlamaCppRemoteApiClient
 from api.local_client import LocalApiClient
@@ -12,7 +11,7 @@ class ApiClientFactory:
     """Factory for creating appropriate API client based on configuration."""
 
     @staticmethod
-    def is_remote_config(ssh_host: Optional[str] = None) -> bool:
+    def is_remote_config(ssh_host: str | None = None) -> bool:
         """Check if SSH configuration indicates remote mode.
 
         Args:
@@ -26,13 +25,13 @@ class ApiClientFactory:
     @staticmethod
     def create_client(
         base_url: str,
-        headers: Optional[dict] = None,
+        headers: dict | None = None,
         timeout: int = 300,
         backend_type: str = "ollama",
-        ssh_host: Optional[str] = None,
-        ssh_user: Optional[str] = None,
+        ssh_host: str | None = None,
+        ssh_user: str | None = None,
         ssh_port: int = 22,
-        ssh_key: Optional[str] = None,
+        ssh_key: str | None = None,
     ):
         """Create the appropriate API client based on backend type and SSH config.
 

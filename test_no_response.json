@@ -1,0 +1,59 @@
+{
+  "run_config": {
+    "context_sizes": [
+      8192
+    ],
+    "temperature_test_values": [
+      0.0,
+      0.66,
+      1.0
+    ],
+    "used_prompt_ids": [],
+    "used_chain_ids": [
+      "chain_rest_api"
+    ]
+  },
+  "prompts_config": {
+    "chains": [
+      {
+        "id": "chain_rest_api",
+        "name": "REST API Server",
+        "prompts": {
+          "architect": {
+            "id": null,
+            "name": null,
+            "prompt": "Create a detailed plan for a REST API server on Python using asyncio. Requirements: RESTful endpoints - GET/POST/PUT/DELETE for /users and /items resources. Middleware system for: Authentication (JWT), Rate limiting (100 req/min per IP), Request/Response logging, CORS handling. Health check endpoint (/health). In-memory storage with ability to replace with database. Graceful shutdown waiting for request completion. Describe: 1) Project structure (files and modules), 2) Middleware pipeline diagram, 3) JWT token format and authentication flow, 4) Rate limiting strategy (token bucket algorithm), 5) Error handling (custom exception hierarchy)."
+          },
+          "code": {
+            "id": null,
+            "name": null,
+            "prompt": "Implement a REST API server based on the following architect plan: [ARCHITECT_PLAN]. Requirements: Use asyncio and aiohttp, implement all described middleware, include JWT authentication, implement rate limiting via token bucket, add health check, implement graceful shutdown, add type hints and docstrings, write curl examples for each endpoint."
+          },
+          "debug": {
+            "id": null,
+            "name": null,
+            "prompt": "Analyze and fix problems in this REST API server: [CODE_FROM_CODE]. Check for: 1) Race conditions with in-memory storage, 2) Resource leaks (unclosed connections, sessions), 3) Rate limiting logic errors, 4) JWT validation issues, 5) Graceful shutdown correctness, 6) Edge case handling."
+          }
+        }
+      }
+    ]
+  },
+  "results": [
+    {
+      "model": {
+        "name": "nomic-embed-text:latest",
+        "size_gb": 0.3,
+        "params": "137M",
+        "quant": "F16",
+        "architecture": "nomic-bert",
+        "max_ctx": 2048,
+        "moe": null,
+        "vision": "tools",
+        "tools": "thinking",
+        "thinking": "audio",
+        "audio": "audio"
+      },
+      "results": []
+    }
+  ]
+}

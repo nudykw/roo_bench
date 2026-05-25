@@ -3,8 +3,8 @@
 import unittest
 from unittest.mock import patch
 
-from cli import parse_args
 from benchmark.runner import BenchmarkRunner
+from cli import parse_args
 
 
 class TestChunksTopCLI(unittest.TestCase):

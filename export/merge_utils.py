@@ -3,7 +3,6 @@
 import json
 import os
 import tempfile
-
 from typing import Any
 
 from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo

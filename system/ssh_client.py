@@ -2,14 +2,13 @@
 
 import os
 import subprocess
-from typing import Optional
 
 
 class SSHClient:
     """Centralized SSH client for all remote operations."""
 
-    def __init__(self, host: Optional[str] = None, user: Optional[str] = None,
-                 port: int = 22, key_path: Optional[str] = None):
+    def __init__(self, host: str | None = None, user: str | None = None,
+                 port: int = 22, key_path: str | None = None):
         """Initialize SSH client.
 
         Args:
@@ -18,10 +17,10 @@ class SSHClient:
             port: SSH port
             key_path: Path to SSH private key (auto-detected if not specified)
         """
-        self.ssh_host: Optional[str] = host
-        self.ssh_user: Optional[str] = user
+        self.ssh_host: str | None = host
+        self.ssh_user: str | None = user
         self.ssh_port: int = port
-        self.ssh_key: Optional[str] = key_path
+        self.ssh_key: str | None = key_path
 
     @property
     def is_configured(self) -> bool:
@@ -118,7 +117,7 @@ class SSHClient:
             timeout=timeout
         )
 
-    def get_vram_usage(self, timeout: int = 30) -> Optional[int]:
+    def get_vram_usage(self, timeout: int = 30) -> int | None:
         """Get VRAM usage from remote GPU via SSH.
 
         Returns:
@@ -155,7 +154,7 @@ class SSHClient:
             pass  # print(f"DEBUG: SSH VRAM exception")
         return None
 
-    def get_cpu_usage_remote(self, timeout: int = 30) -> Optional[float]:
+    def get_cpu_usage_remote(self, timeout: int = 30) -> float | None:
         """Get CPU usage from remote machine via SSH.
 
         Args:
@@ -188,7 +187,7 @@ class SSHClient:
             pass
         return None
 
-    def get_ram_usage_remote(self, timeout: int = 30) -> Optional[dict[str, int | float]]:
+    def get_ram_usage_remote(self, timeout: int = 30) -> dict[str, int | float] | None:
         """Get RAM usage from remote machine via SSH.
 
         Args:
@@ -228,7 +227,7 @@ class SSHClient:
             pass
         return None
 
-    def get_vram_total_remote(self, timeout: int = 30) -> Optional[int]:
+    def get_vram_total_remote(self, timeout: int = 30) -> int | None:
         """Get total VRAM capacity from remote machine via SSH.
 
         Args:

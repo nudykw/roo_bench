@@ -337,13 +337,13 @@ class BaseApiClientGenerate:
             # Calculate average TPS and cleanup (always runs)
             if tps_list:
                 avg_tps = sum(r['tps'] for r in tps_list) / len(tps_list)
-                # Calculate standard deviation
+                # Calculate standard deviation (for potential future use)
                 if len(tps_list) > 1:
                     mean = avg_tps
                     variance = sum((float(r['tps']) - mean) ** 2 for r in tps_list) / len(tps_list)
-                    std_dev = math.sqrt(variance)
+                    _std_dev = math.sqrt(variance)
                 else:
-                    std_dev = 0.0
+                    _std_dev = 0.0
 
                 # Return VRAM from the last successful run
                 vram = tps_list[-1]['vram'] if tps_list else None

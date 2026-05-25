@@ -3,7 +3,6 @@
 import subprocess
 import time
 from enum import Enum
-from typing import Optional
 
 from i18n import get_text
 from system.ssh_client import SSHClient
@@ -22,7 +21,7 @@ class RestartManager:
     """Manages Ollama service restart operations."""
 
     def __init__(self, method: RestartMethod = RestartMethod.MANUAL, no_restart: bool = False,
-                 ssh_client: Optional[SSHClient] = None):
+                 ssh_client: SSHClient | None = None):
         """Initialize restart manager.
 
         Args:
@@ -135,10 +134,10 @@ class RestartManager:
 
 
 def restart_ollama(method: RestartMethod = RestartMethod.MANUAL, no_restart: bool = False,
-                   ssh_client: Optional[SSHClient] = None,
+                   ssh_client: SSHClient | None = None,
                    # Deprecated parameters for backward compatibility
-                   ssh_host: Optional[str] = None, ssh_user: Optional[str] = None,
-                   ssh_port: int = 22, ssh_key: Optional[str] = None) -> None:
+                   ssh_host: str | None = None, ssh_user: str | None = None,
+                   ssh_port: int = 22, ssh_key: str | None = None) -> None:
     """Convenience function to restart Ollama.
 
     Args:

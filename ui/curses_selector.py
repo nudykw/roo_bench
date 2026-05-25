@@ -2,7 +2,7 @@
 
 import curses
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from i18n import _current_language, get_text
 
@@ -147,7 +147,12 @@ def interactive_model_select(stdscr: Any, models: list[dict[str, Any]], single_s
 
             # Format line with index
             select_marker = "[x]" if is_selected else "[ ]"
-            line_fmt = f"{select_marker} {{name:<25}} | {{params:<5}} | Size: {{size_gb:4.1f}} GB | MoE: {{moe_str:>8}} | MaxCtx: {{max_ctx_str:>4}} | Vision: {{vision}} | Tools: {{tools}} | Think: {{thinking}}"
+            line_fmt = (
+                f"{select_marker} {{name:<25}} | {{params:<5}} | "
+                f"Size: {{size_gb:4.1f}} GB | MoE: {{moe_str:>8}} | "
+                f"MaxCtx: {{max_ctx_str:>4}} | Vision: {{vision}} | "
+                f"Tools: {{tools}} | Think: {{thinking}}"
+            )
 
             try:
                 # Create a clean dict without size_gb to avoid string/float conflict

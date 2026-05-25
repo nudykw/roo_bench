@@ -280,8 +280,9 @@ class BenchmarkRunner:
         Args:
             model_name: Name of the model being tested.
         """
-        from system.system_monitor import ResourceMonitor
         import time
+
+        from system.system_monitor import ResourceMonitor
 
         print(f"\n   📊 System Resource Statistics for {model_name}:")
 

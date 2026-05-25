@@ -1,6 +1,7 @@
 """Input validation module for user prompts with retry logic."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from i18n import get_text
 

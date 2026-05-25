@@ -14,10 +14,10 @@ from default test runs. To run them manually:
     .venv/bin/python -m pytest tests/ -m integration -v
 """
 
-import json
 import os
 import tempfile
 import unittest
+
 import pytest
 
 # Default model for integration tests - must be available in local Ollama
@@ -97,8 +97,9 @@ class TestChainsPromptsConfig(unittest.TestCase):
 
     def test_chains_saved_with_all_mode(self):
         """Verify both chains and independent prompts are saved with --all."""
-        from main_helpers import build_used_prompts_config
         from types import SimpleNamespace
+
+        from main_helpers import build_used_prompts_config
 
         config = build_used_prompts_config(
             FakePromptLoader(),
@@ -112,8 +113,9 @@ class TestChainsPromptsConfig(unittest.TestCase):
 
     def test_chains_saved_with_chains_flag(self):
         """Verify only chains are saved when using --chains."""
-        from main_helpers import build_used_prompts_config
         from types import SimpleNamespace
+
+        from main_helpers import build_used_prompts_config
 
         config = build_used_prompts_config(
             FakePromptLoader(),
@@ -127,8 +129,9 @@ class TestChainsPromptsConfig(unittest.TestCase):
 
     def test_single_chain_saved(self):
         """Verify single chain is saved when using --chain."""
-        from main_helpers import build_used_prompts_config
         from types import SimpleNamespace
+
+        from main_helpers import build_used_prompts_config
 
         loader = FakePromptLoader()
         loader.data = {
@@ -395,8 +398,8 @@ class TestMergeErrorHandling(unittest.TestCase):
 
     def test_merge_handles_corrupted_json(self):
         """Verify merge handles corrupted JSON file gracefully (creates new file)."""
-        from export.merge_utils import merge_results, load_results_file
         from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
+        from export.merge_utils import load_results_file, merge_results
 
         with tempfile.TemporaryDirectory() as tmpdir:
             corrupt_file = os.path.join(tmpdir, "corrupt.json")
@@ -430,8 +433,8 @@ class TestMergeErrorHandling(unittest.TestCase):
 
     def test_merge_handles_empty_file(self):
         """Verify merge handles empty JSON file gracefully (creates new file)."""
-        from export.merge_utils import merge_results, load_results_file
         from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
+        from export.merge_utils import load_results_file, merge_results
 
         with tempfile.TemporaryDirectory() as tmpdir:
             empty_file = os.path.join(tmpdir, "empty.json")
@@ -464,8 +467,8 @@ class TestMergeErrorHandling(unittest.TestCase):
 
     def test_persist_model_result_handles_disabled_mode(self):
         """Verify persist_model_result handles disabled mode gracefully."""
-        from main_helpers import persist_model_result
         from benchmark.result import BenchmarkMetrics, BenchmarkResult, ModelInfo
+        from main_helpers import persist_model_result
 
         model = ModelInfo(name="test-model", size_gb=1.0)
         benchmark_result = BenchmarkResult(

@@ -204,7 +204,7 @@ class AnalysisPromptLoader:
                 f"Analysis prompts file not found: {self.prompts_file}"
             )
         
-        with open(self.prompts_file, 'r', encoding='utf-8') as f:
+        with open(self.prompts_file, encoding='utf-8') as f:
             content = f.read()
         
         if self.prompts_file.endswith('.md'):

@@ -7,16 +7,14 @@ import os
 import signal
 import sys
 from argparse import Namespace
-from typing import Any, Callable, Optional, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 from benchmark.result import BenchmarkResult, ModelInfo
 from benchmark.runner import BenchmarkRunner
 from config import OllamaConfig
 from export.expert_results import ExpertResultsManager
 from i18n import get_text
-from prompts.loader import PromptLoader
-from ui.input_validator import InputValidator
-
 from main_helpers import (
     DEFAULT_OUTPUT_FILE,
     SAVE_MODE_DISABLED,
@@ -27,6 +25,9 @@ from main_helpers import (
     persist_model_result,
     prepare_results_output_file,
 )
+from prompts.loader import PromptLoader
+from ui.input_validator import InputValidator
+
 logger = logging.getLogger('roo_bench')
 
 
@@ -55,10 +56,10 @@ def _run_benchmark_workflow_impl(config: OllamaConfig, args: Namespace) -> None:
         headers=config.get_headers(),
         timeout=config.timeout,
         backend_type=config.backend_type,
-        ssh_host=cast(Optional[str], getattr(args, 'ssh_host', None)),
-        ssh_user=cast(Optional[str], getattr(args, 'ssh_user', None)),
+        ssh_host=cast(str | None, getattr(args, 'ssh_host', None)),
+        ssh_user=cast(str | None, getattr(args, 'ssh_user', None)),
         ssh_port=getattr(args, 'ssh_port', 22),
-        ssh_key=cast(Optional[str], getattr(args, 'ssh_key', None))
+        ssh_key=cast(str | None, getattr(args, 'ssh_key', None))
     )
 
     # Fetch models

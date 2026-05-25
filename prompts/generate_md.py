@@ -10,7 +10,7 @@ The generated files are independent and can be edited manually.
 
 import json
 import os
-from typing import Any, Dict
+from typing import Any
 
 
 def strip_jsonc_comments(jsonc: str) -> str:
@@ -78,7 +78,7 @@ def strip_jsonc_comments(jsonc: str) -> str:
     return ''.join(result)
 
 
-def generate_prompts_md(data: Dict[str, Any]) -> str:
+def generate_prompts_md(data: dict[str, Any]) -> str:
     """Convert prompts.jsonc data to Markdown format.
     
     Args:
@@ -163,7 +163,7 @@ def generate_prompts_md(data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def generate_analysis_prompt_md(data: Dict[str, Any]) -> str:
+def generate_analysis_prompt_md(data: dict[str, Any]) -> str:
     """Convert analysis_prompt.jsonc data to Markdown format.
     
     Args:
@@ -241,7 +241,7 @@ def generate_all_markdown() -> bool:
         print(f"Error: {prompts_jsonc_path} not found")
         return False
     
-    with open(prompts_jsonc_path, "r", encoding="utf-8") as f:
+    with open(prompts_jsonc_path, encoding="utf-8") as f:
         jsonc_content = f.read()
     
     json_content = strip_jsonc_comments(jsonc_content)
@@ -261,7 +261,7 @@ def generate_all_markdown() -> bool:
     if not os.path.exists(analysis_jsonc_path):
         print(f"Warning: {analysis_jsonc_path} not found, skipping analysis_prompt.md")
     else:
-        with open(analysis_jsonc_path, "r", encoding="utf-8") as f:
+        with open(analysis_jsonc_path, encoding="utf-8") as f:
             analysis_jsonc_content = f.read()
         
         analysis_json_content = strip_jsonc_comments(analysis_jsonc_content)
